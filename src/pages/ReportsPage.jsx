@@ -2,11 +2,48 @@ import { useEffect, useState, useMemo } from 'react';
 import { fetchReports, getImageUrl } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
+import { AUTHORITIES } from '../utils/authorities';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } from 'date-fns';
 import {
   Search, Filter, RefreshCw, Image as ImageIcon, MapPin,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X, Building2,
 } from 'lucide-react';
+
+// Get dept id from role
+function getDeptId(role) {
+  if (!role) return null;
+  if (role.startsWith('authority_')) return role.split('_').slice(1).join('_');
+  if (role.startsWith('worker_')) return role.split('_').slice(1).join('_');
+  return null;
+}
+
+// Check if a report belongs to a dept
+function reportMatchesDept(report, deptId) {
+  if (!deptId) return true;
+  const assigned = (report.assigned_department || '').toLowerCase();
+  const authority = AUTHORITIES.find(a => a.id === deptId);
+  if (!authority) return assigned.includes(deptId);
+  return (
+    assigned.includes(authority.abbr.toLowerCase()) ||
+    assigned.includes(authority.id.toLowerCase()) ||
+    authority.name.split(' ').some(w => w.length > 3 && assigned.includes(w.toLowerCase()))
+  );
+}
+
+// Dept tag
+function DeptTag({ department }) {
+  if (!department) return <span className="text-slate-300 text-xs">—</span>;
+  const auth = AUTHORITIES.find(a =>
+    department.toLowerCase().includes(a.abbr.toLowerCase()) ||
+    department.toLowerCase().includes(a.id.toLowerCase())
+  );
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-teal-50 border-teal-200 text-teal-800">
+      <Building2 size={10} />
+      {auth?.abbr || department.slice(0, 8)}
+    </span>
+  );
+}
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
@@ -36,6 +73,9 @@ export function ReportsPage() {
   const [datePreset, setDatePreset] = useState('all');
   const [minConfidence, setMinConfidence] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [myDeptOnly, setMyDeptOnly] = useState(false);
+
+  const deptId = getDeptId(currentRole);
 
   // Selected report for modal
   const [selectedReport, setSelectedReport] = useState(null);
@@ -83,6 +123,7 @@ export function ReportsPage() {
     statusFilter !== 'All',
     datePreset !== 'all',
     minConfidence > 0,
+    myDeptOnly,
   ].filter(Boolean).length;
 
   const processedReports = useMemo(() => {
@@ -141,48 +182,13 @@ export function ReportsPage() {
       return 0;
     });
 
-    // Role-based overall filtering
-    if (currentRole?.startsWith('authority')) {
-      const deptId = currentRole.split('_')[1]; // e.g. 'mbmb' or 'samb'
-      result = result.filter(r => {
-        if (r.status === 'Pending') return false;
-        if (!deptId) return true; // generic authority sees all non-pending
-        // We need to check if the assigned_department matches the deptName from AUTHORITIES list, or the id itself
-        // e.g. 'Majlis Bandaraya Melaka Bersejarah' includes 'Melaka' or we just do a simple check.
-        // But assigned_department stores the name. Let's do a case-insensitive includes for 'mbmb' or 'samb', 
-        // or check against hardcoded strings.
-        const assigned = (r.assigned_department || '').toLowerCase();
-        if (deptId === 'mbmb' && (assigned.includes('mbmb') || assigned.includes('bersejarah'))) return true;
-        if (deptId === 'samb' && (assigned.includes('samb') || assigned.includes('air'))) return true;
-        return false;
-      });
-    } else if (currentRole?.startsWith('worker')) {
-      const deptId = currentRole.split('_')[1];
-      result = result.filter(r => {
-        if (!r.status || r.status === 'Pending' || r.status === 'In Review') return false;
-        if (!deptId) return true; // generic worker sees all non-pending/in-review
-        const assigned = (r.assigned_department || '').toLowerCase();
-        if (deptId === 'mbmb' && (assigned.includes('mbmb') || assigned.includes('bersejarah'))) return true;
-        if (deptId === 'samb' && (assigned.includes('samb') || assigned.includes('air'))) return true;
-        
-        // For other departments, do a simple includes match on abbreviation
-        const deptAbbr = deptId.toLowerCase();
-        if (assigned.includes(deptAbbr)) return true;
-        
-        // Special case fallback mapping
-        if (deptId === 'jkr' && (assigned.includes('jkr') || assigned.includes('kerja raya'))) return true;
-        if (deptId === 'jps' && (assigned.includes('jps') || assigned.includes('pengairan'))) return true;
-        if (deptId === 'mphtj' && assigned.includes('tuah jaya')) return true;
-        if (deptId === 'mpag' && assigned.includes('alor gajah')) return true;
-        if (deptId === 'mpj' && assigned.includes('jasin')) return true;
-        if (deptId === 'jas' && assigned.includes('alam sekitar')) return true;
-        
-        return false;
-      });
+    // "My Dept Only" toggle — show only reports assigned to user's dept
+    if (myDeptOnly && deptId) {
+      result = result.filter(r => reportMatchesDept(r, deptId));
     }
 
     return result;
-  }, [reports, statusFilter, datePreset, minConfidence, searchTerm, sortField, sortOrder, currentRole]);
+  }, [reports, statusFilter, datePreset, minConfidence, searchTerm, sortField, sortOrder, currentRole, myDeptOnly, deptId]);
 
   const totalPages = Math.max(1, Math.ceil(processedReports.length / pageSize));
   const paginatedReports = processedReports.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -210,7 +216,7 @@ export function ReportsPage() {
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">Reports Management</h1>
-          <p className="text-slate-500 mb-3">View, track, and update citizen issues.</p>
+          <p className="text-slate-500 mb-3">All city reports — every role can view. Dept tags show admin assignment.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -258,6 +264,21 @@ export function ReportsPage() {
             )}
           </button>
 
+          {/* My Dept toggle — only shown to non-admin users */}
+          {deptId && (
+            <button
+              onClick={() => setMyDeptOnly(v => !v)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold shadow-sm transition-colors ${
+                myDeptOnly
+                  ? 'bg-teal-500 border-teal-500 text-white'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Building2 size={15} />
+              My Dept Only
+            </button>
+          )}
+
           {/* Refresh */}
           <button
             onClick={loadReports}
@@ -268,6 +289,18 @@ export function ReportsPage() {
           </button>
         </div>
       </div>
+
+      {/* Dept info banner for non-admin */}
+      {deptId && (
+        <div className="mb-4 flex items-center gap-3 p-3 bg-teal-50 border border-teal-200 rounded-xl">
+          <Building2 size={16} className="text-teal-600 shrink-0" />
+          <p className="text-sm text-teal-800">
+            You are viewing <strong>all city reports</strong>. Reports assigned to your department 
+            (<strong>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()}</strong>) are highlighted. 
+            Use <strong>"My Dept Only"</strong> to filter.
+          </p>
+        </div>
+      )}
 
       {/* Advanced Filters Panel */}
       {showFilters && (
@@ -345,6 +378,7 @@ export function ReportsPage() {
                   <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100" onClick={() => toggleSort('ai_prediction')}>
                     <div className="flex items-center gap-1">AI Prediction <SortIcon field="ai_prediction" /></div>
                   </th>
+                  <th className="px-6 py-4">Assigned To</th>
                   <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100" onClick={() => toggleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                   </th>
@@ -369,65 +403,77 @@ export function ReportsPage() {
                       No reports found matching your criteria.
                     </td>
                   </tr>
-                ) : paginatedReports.map(report => (
-                  <tr
-                    key={report.id}
-                    onClick={() => setSelectedReport(report)}
-                    className="hover:bg-slate-50 cursor-pointer transition-colors group"
-                  >
-                    <td className="px-6 py-4 text-slate-500 font-mono">#{report.id}</td>
-                    <td className="px-6 py-4">
-                      {report.image_path ? (
-                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200">
-                          <img
-                            src={getImageUrl(report.image_path)}
-                            alt="thumbnail"
-                            className="w-full h-full object-cover"
-                            onError={e => e.target.style.display = 'none'}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200">
-                          <ImageIcon size={16} className="text-slate-400" />
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 font-bold text-slate-800">{report.categories || '-'}</td>
-                    <td className="px-6 py-4 text-slate-600 max-w-[200px] truncate">
-                      <div className="flex items-center gap-1.5">
-                        <MapPin size={14} className="text-slate-400 shrink-0" />
-                        <span className="truncate">{report.address || 'Unknown'}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {report.ai_prediction ? (
-                        <div>
-                          <p className="font-semibold text-slate-800">{report.ai_prediction}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-primary-500 rounded-full"
-                                style={{ width: report.confidence || '0%' }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-500">{report.confidence}</span>
+                ) : paginatedReports.map(report => {
+                  const isMyDept = deptId ? reportMatchesDept(report, deptId) : false;
+                  return (
+                    <tr
+                      key={report.id}
+                      onClick={() => setSelectedReport(report)}
+                      className={`cursor-pointer transition-colors group ${
+                        isMyDept ? 'bg-teal-50/50 hover:bg-teal-50' : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <td className="px-6 py-4 text-slate-500 font-mono">#{report.id}</td>
+                      <td className="px-6 py-4">
+                        {report.image_path ? (
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200">
+                            <img
+                              src={getImageUrl(report.image_path)}
+                              alt="thumbnail"
+                              className="w-full h-full object-cover"
+                              onError={e => e.target.style.display = 'none'}
+                            />
                           </div>
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200">
+                            <ImageIcon size={16} className="text-slate-400" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="font-bold text-slate-800">{report.categories || '-'}</p>
+                        {isMyDept && deptId && (
+                          <span className="text-[10px] font-bold text-teal-700 bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded-full mt-1 inline-block">
+                            YOUR DEPT
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 max-w-[180px] truncate">
+                        <div className="flex items-center gap-1.5">
+                          <MapPin size={14} className="text-slate-400 shrink-0" />
+                          <span className="truncate">{report.address || 'Unknown'}</span>
                         </div>
-                      ) : <span className="text-slate-400">-</span>}
-                    </td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={report.status} />
-                    </td>
-                    <td className="px-6 py-4 text-slate-600 text-sm">
-                      {(() => {
-                        if (!report.timestamp) return '-';
-                        const d = new Date(report.timestamp);
-                        if (isNaN(d.getTime())) return String(report.timestamp);
-                        return format(d, 'MMM d, yyyy HH:mm');
-                      })()}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        {report.ai_prediction ? (
+                          <div>
+                            <p className="font-semibold text-slate-800">{report.ai_prediction}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-primary-500 rounded-full" style={{ width: report.confidence || '0%' }} />
+                              </div>
+                              <span className="text-xs text-slate-500">{report.confidence}</span>
+                            </div>
+                          </div>
+                        ) : <span className="text-slate-400">-</span>}
+                      </td>
+                      <td className="px-6 py-4">
+                        <DeptTag department={report.assigned_department} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={report.status} />
+                      </td>
+                      <td className="px-6 py-4 text-slate-600 text-sm">
+                        {(() => {
+                          if (!report.timestamp) return '-';
+                          const d = new Date(report.timestamp);
+                          if (isNaN(d.getTime())) return String(report.timestamp);
+                          return format(d, 'MMM d, yyyy HH:mm');
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -442,7 +488,7 @@ export function ReportsPage() {
                 </span>{' '}
                 of <span className="font-bold text-slate-700">{processedReports.length}</span> results
                 {processedReports.length !== reports.length && (
-                  <span className="ml-1 text-slate-400">({reports.length} total)</span>
+                  <span className="ml-1 text-slate-400">({reports.length} total city-wide)</span>
                 )}
               </span>
 

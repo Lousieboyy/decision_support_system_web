@@ -1,74 +1,51 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Building2, Wrench, MapPin, Zap, BarChart3, Users, Mail, Lock, UserPlus, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { AUTHORITIES } from '../utils/authorities';
+import {
+  Shield, Building2, Wrench, MapPin, Zap, BarChart3, Users,
+  Mail, Lock, LogIn, AlertCircle, CheckCircle2, UserPlus, Send,
+} from 'lucide-react';
 
 export function LoginPage() {
-  const { login } = useAuth();
-  
-  const [isLogin, setIsLogin] = useState(true);
+  const { login, requestAccount } = useAuth();
+
+  const [mode, setMode] = useState('login'); // 'login' | 'request'
+
+  // Login fields
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  
-  // Signup specific state
-  const [roleType, setRoleType] = useState('authority'); // admin, authority, worker
-  const [department, setDepartment] = useState('mbmb');
-  
-  const [error, setError] = useState('');
+
+  // Request-access fields
+  const [reqUsername, setReqUsername] = useState('');
+  const [reqPassword, setReqPassword] = useState('');
+  const [reqDisplayName, setReqDisplayName] = useState('');
+  const [reqRoleType, setReqRoleType] = useState('authority');
+  const [reqDept, setReqDept] = useState('mbmb');
+
+  const [error, setError]   = useState('');
   const [success, setSuccess] = useState('');
 
-  // Pre-populate some demo accounts if empty
-  useEffect(() => {
-    const existing = localStorage.getItem('smart_city_accounts');
-    if (!existing) {
-      const demoAccounts = [
-        { username: 'admin', password: 'password', role: 'admin' },
-        { username: 'mbmb', password: 'password', role: 'authority_mbmb' },
-        { username: 'worker', password: 'password', role: 'worker_mbmb' }
-      ];
-      localStorage.setItem('smart_city_accounts', JSON.stringify(demoAccounts));
-    }
-  }, []);
-
-  const handleSubmit = (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
-    setError('');
-    setSuccess('');
-    
-    if (!username || !password) {
-      setError('Please fill in all fields');
-      return;
-    }
+    setError(''); setSuccess('');
+    if (!username || !password) { setError('Please fill in all fields.'); return; }
+    const result = login(username, password);
+    if (!result.ok) setError(result.error);
+  };
 
-    const accounts = JSON.parse(localStorage.getItem('smart_city_accounts') || '[]');
-
-    if (isLogin) {
-      const user = accounts.find(a => a.username.toLowerCase() === username.toLowerCase() && a.password === password);
-      if (user) {
-        login(user.role);
-      } else {
-        setError('Invalid username or password');
-      }
-    } else {
-      // Signup
-      const exists = accounts.find(a => a.username.toLowerCase() === username.toLowerCase());
-      if (exists) {
-        setError('Username already exists');
-        return;
-      }
-      
-      let finalRole = roleType;
-      if (roleType !== 'admin') {
-        finalRole = `${roleType}_${department}`;
-      }
-      
-      const newUser = { username, password, role: finalRole };
-      localStorage.setItem('smart_city_accounts', JSON.stringify([...accounts, newUser]));
-      
-      setSuccess('Account created successfully! You can now log in.');
-      setIsLogin(true);
-      setPassword('');
+  const handleRequest = (e) => {
+    e.preventDefault();
+    setError(''); setSuccess('');
+    if (!reqUsername || !reqPassword || !reqDisplayName) {
+      setError('Please fill in all fields.'); return;
     }
+    const finalRole = reqRoleType === 'authority' ? `authority_${reqDept}` : `worker_${reqDept}`;
+    const displayName = reqDisplayName || `${reqRoleType === 'authority' ? 'Authority' : 'Worker'} (${reqDept.toUpperCase()})`;
+    const result = requestAccount(reqUsername, reqPassword, finalRole, displayName);
+    if (!result.ok) { setError(result.error); return; }
+    setSuccess('Request sent! An admin will review and approve your access.');
+    setMode('login');
+    setReqUsername(''); setReqPassword(''); setReqDisplayName('');
   };
 
   const features = [
@@ -80,21 +57,13 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      {/* Animated Background */}
-      <div className="login-bg">
-        <div className="login-bg-orb login-bg-orb-1" />
-        <div className="login-bg-orb login-bg-orb-2" />
-        <div className="login-bg-orb login-bg-orb-3" />
-        <div className="login-bg-grid" />
-      </div>
-
       <div className="login-container">
-        {/* Left Panel — Branding */}
+        {/* Left branding panel */}
         <div className="login-brand">
           <div className="login-brand-inner">
             <div className="login-logo">
               <div className="login-logo-icon">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
                   <path d="M16 2L28 9V23L16 30L4 23V9L16 2Z" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.15"/>
                   <path d="M16 8L22 11.5V18.5L16 22L10 18.5V11.5L16 8Z" fill="currentColor"/>
                 </svg>
@@ -128,113 +97,162 @@ export function LoginPage() {
           </div>
         </div>
 
-        {/* Right Panel — Auth Form */}
+        {/* Right form panel */}
         <div className="login-form-panel">
           <div className="login-form-inner">
+            {/* Tab toggle */}
+            <div className="login-tab-bar">
+              <button
+                className={`login-tab ${mode === 'login' ? 'active' : ''}`}
+                onClick={() => { setMode('login'); setError(''); setSuccess(''); }}
+              >
+                <LogIn size={15} /> Sign In
+              </button>
+              <button
+                className={`login-tab ${mode === 'request' ? 'active' : ''}`}
+                onClick={() => { setMode('request'); setError(''); setSuccess(''); }}
+              >
+                <UserPlus size={15} /> Request Access
+              </button>
+            </div>
+
             <div className="login-form-header">
-              <h2>{isLogin ? 'Welcome back' : 'Create Account'}</h2>
-              <p>{isLogin ? 'Enter your credentials to access the portal' : 'Register your secure departmental access'}</p>
+              <h2>{mode === 'login' ? 'Welcome back' : 'Request Account Access'}</h2>
+              <p>{mode === 'login'
+                ? 'Enter your credentials to access the portal.'
+                : 'Submit a request — an admin will review and activate your account.'
+              }</p>
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium animate-pulse">
-                <AlertCircle size={16} />
-                {error}
+              <div className="login-alert login-alert-error">
+                <AlertCircle size={15} /> {error}
               </div>
             )}
-            
             {success && (
-              <div className="flex items-center gap-2 p-3 mb-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium">
-                <CheckCircle2 size={16} />
-                {success}
+              <div className="login-alert login-alert-success">
+                <CheckCircle2 size={15} /> {success}
               </div>
             )}
 
-            <form onSubmit={handleSubmit} className="auth-form space-y-4">
-              <div className="input-group">
-                <label>Username / ID</label>
-                <div className="input-wrapper">
-                  <Mail size={18} className="input-icon" />
-                  <input 
-                    type="text" 
-                    placeholder="e.g. mbmb_admin" 
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label>Password</label>
-                <div className="input-wrapper">
-                  <Lock size={18} className="input-icon" />
-                  <input 
-                    type="password" 
-                    placeholder="••••••••" 
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {!isLogin && (
-                <>
-                  <div className="input-group">
-                    <label>Role Type</label>
-                    <div className="role-selector">
-                      <button type="button" className={`role-btn ${roleType === 'admin' ? 'active admin' : ''}`} onClick={() => setRoleType('admin')}>
-                        <Shield size={16} /> Admin
-                      </button>
-                      <button type="button" className={`role-btn ${roleType === 'authority' ? 'active authority' : ''}`} onClick={() => setRoleType('authority')}>
-                        <Building2 size={16} /> Authority
-                      </button>
-                      <button type="button" className={`role-btn ${roleType === 'worker' ? 'active worker' : ''}`} onClick={() => setRoleType('worker')}>
-                        <Wrench size={16} /> Worker
-                      </button>
-                    </div>
+            {mode === 'login' ? (
+              <form onSubmit={handleLogin} className="auth-form">
+                <div className="input-group">
+                  <label>Username</label>
+                  <div className="input-wrapper">
+                    <Mail size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      placeholder="e.g. admin"
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                    />
                   </div>
+                </div>
 
-                  {roleType !== 'admin' && (
-                    <div className="input-group animate-slide-down">
-                      <label>Select Department</label>
-                      <select 
-                        className="custom-select"
-                        value={department}
-                        onChange={e => setDepartment(e.target.value)}
-                      >
-                        {AUTHORITIES.map(a => (
-                          <option key={a.id} value={a.id}>{a.abbr} — {a.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </>
-              )}
+                <div className="input-group">
+                  <label>Password</label>
+                  <div className="input-wrapper">
+                    <Lock size={16} className="input-icon" />
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                    />
+                  </div>
+                </div>
 
-              <button type="submit" className="submit-btn mt-6">
-                {isLogin ? (
-                  <><LogIn size={18} /> Sign In to Portal</>
-                ) : (
-                  <><UserPlus size={18} /> Register Account</>
-                )}
-              </button>
-            </form>
-
-            <div className="auth-toggle">
-              <p>
-                {isLogin ? "Don't have an account?" : "Already have an account?"}
-                <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setSuccess(''); }}>
-                  {isLogin ? 'Register here' : 'Sign in'}
+                <button type="submit" className="submit-btn">
+                  <LogIn size={17} /> Sign In to Portal
                 </button>
-              </p>
-            </div>
 
-            {isLogin && (
-              <p className="login-disclaimer" style={{ marginTop: '2rem' }}>
-                For demo purposes, you can use: <br/>
-                <span className="text-white font-medium">username:</span> admin / mbmb / worker <br/>
-                <span className="text-white font-medium">password:</span> password
-              </p>
+                <p className="login-hint">
+                  Demo — <strong>admin</strong> / <strong>mbmb</strong> / <strong>worker1</strong> (password: <strong>password</strong>)
+                </p>
+              </form>
+            ) : (
+              <form onSubmit={handleRequest} className="auth-form">
+                <div className="input-group">
+                  <label>Full Name / Display Name</label>
+                  <div className="input-wrapper">
+                    <Users size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      placeholder="e.g. Ahmad bin Razak"
+                      value={reqDisplayName}
+                      onChange={e => setReqDisplayName(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label>Desired Username</label>
+                  <div className="input-wrapper">
+                    <Mail size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      placeholder="e.g. ahmad_mbmb"
+                      value={reqUsername}
+                      onChange={e => setReqUsername(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label>Password</label>
+                  <div className="input-wrapper">
+                    <Lock size={16} className="input-icon" />
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={reqPassword}
+                      onChange={e => setReqPassword(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="input-group">
+                  <label>Role Type</label>
+                  <div className="role-selector">
+                    <button
+                      type="button"
+                      className={`role-btn ${reqRoleType === 'authority' ? 'active authority' : ''}`}
+                      onClick={() => setReqRoleType('authority')}
+                    >
+                      <Building2 size={14} /> Authority
+                    </button>
+                    <button
+                      type="button"
+                      className={`role-btn ${reqRoleType === 'worker' ? 'active worker' : ''}`}
+                      onClick={() => setReqRoleType('worker')}
+                    >
+                      <Wrench size={14} /> Worker
+                    </button>
+                  </div>
+                </div>
+
+                <div className="input-group animate-slide-down">
+                  <label>Department</label>
+                  <select
+                    className="custom-select"
+                    value={reqDept}
+                    onChange={e => setReqDept(e.target.value)}
+                  >
+                    {AUTHORITIES.map(a => (
+                      <option key={a.id} value={a.id}>{a.abbr} — {a.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button type="submit" className="submit-btn">
+                  <Send size={16} /> Submit Request to Admin
+                </button>
+
+                <p className="login-hint">
+                  Your request will be reviewed by the system admin before you can log in.
+                </p>
+              </form>
             )}
           </div>
         </div>
