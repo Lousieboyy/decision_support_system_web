@@ -5,6 +5,7 @@ import { MapPage } from './pages/MapPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
 import { UserManagementPage } from './pages/UserManagementPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import 'leaflet/dist/leaflet.css';
 
@@ -30,6 +31,14 @@ function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="map" element={<MapPage />} />
           <Route path="reports" element={<ReportsPage />} />
+          <Route
+            path="analytics"
+            element={
+              <ProtectedRoute>
+                <AnalyticsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="users"
             element={

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
-  Shield, Building2, Wrench, MapPin, Zap, BarChart3, Users,
+  Shield, Building2, Wrench, MapPin, Sparkles, BarChart3, Users,
   Mail, Lock, LogIn, AlertCircle, CheckCircle2, UserPlus, Send,
 } from 'lucide-react';
 
@@ -25,12 +25,16 @@ export function LoginPage() {
   const [error, setError]   = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
     if (!username || !password) { setError('Please fill in all fields.'); return; }
-    const result = login(username, password);
-    if (!result.ok) setError(result.error);
+    try {
+      const result = await login(username, password);
+      if (!result.ok) setError(result.error);
+    } catch (err) {
+      setError('An error occurred during login. Please try again.');
+    }
   };
 
   const handleRequest = (e) => {
@@ -50,7 +54,7 @@ export function LoginPage() {
 
   const features = [
     { icon: <MapPin size={18} />, label: 'Live Map Tracking' },
-    { icon: <Zap size={18} />, label: 'AI-Powered Analysis' },
+    { icon: <Sparkles size={18} />, label: 'AI-Powered Analysis' },
     { icon: <BarChart3 size={18} />, label: 'Real-time Analytics' },
     { icon: <Users size={18} />, label: 'Multi-Agency Workflow' },
   ];
@@ -69,8 +73,8 @@ export function LoginPage() {
                 </svg>
               </div>
               <div>
-                <h1 className="login-brand-title">Smart City</h1>
-                <p className="login-brand-sub">Melaka Decision Support</p>
+                <h1 className="login-brand-title" style={{ fontSize: '1.05rem', lineHeight: '1.2' }}>DECISION SUPPORT SYSTEM</h1>
+                <p className="login-brand-sub" style={{ fontSize: '0.65rem' }}>FOR INFRASTRUCTURE COMPLAINT REPORTS</p>
               </div>
             </div>
 
@@ -92,7 +96,7 @@ export function LoginPage() {
             </div>
 
             <div className="login-brand-footer">
-              <p>© 2026 Smart City Melaka · Secure Access</p>
+              <p>© 2026 Decision Support System · Secure Access</p>
             </div>
           </div>
         </div>
@@ -168,7 +172,8 @@ export function LoginPage() {
                 </button>
 
                 <p className="login-hint">
-                  Demo — <strong>admin</strong> / <strong>mbmb</strong> / <strong>worker1</strong> (password: <strong>password</strong>)
+                  Demo — <strong>admin</strong> / <strong>mbmb</strong> / <strong>worker1</strong> (password: <strong>password</strong>)<br />
+                  <em>Or log in with your newly created account.</em>
                 </p>
               </form>
             ) : (
@@ -239,7 +244,7 @@ export function LoginPage() {
                     value={reqDept}
                     onChange={e => setReqDept(e.target.value)}
                   >
-                    {AUTHORITIES.map(a => (
+                    {AUTHORITIES.filter(a => ['mbmb', 'jkr', 'swcorp'].includes(a.id)).map(a => (
                       <option key={a.id} value={a.id}>{a.abbr} — {a.name}</option>
                     ))}
                   </select>

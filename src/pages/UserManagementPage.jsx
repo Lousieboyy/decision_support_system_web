@@ -3,13 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
   Users, Shield, Building2, Wrench, CheckCircle2, XCircle,
-  Trash2, Plus, AlertTriangle, Clock, RefreshCw, UserCheck, UserX,
+  Trash2, Plus, AlertTriangle, Clock, RefreshCw, UserCheck, UserX, Activity,
 } from 'lucide-react';
 
 const ROLE_COLORS = {
-  admin: 'bg-purple-100 text-purple-800 border-purple-200',
-  authority: 'bg-amber-100 text-amber-800 border-amber-200',
-  worker: 'bg-blue-100 text-blue-800 border-blue-200',
+  admin: 'bg-zinc-800 text-zinc-200 border-zinc-700',
+  authority: 'bg-zinc-700/20 text-zinc-300 border-zinc-700/30',
+  worker: 'bg-zinc-700/40 text-zinc-200 border-zinc-650/40',
 };
 
 function parseRole(role) {
@@ -21,12 +21,16 @@ function parseRole(role) {
 
 function RoleBadge({ role }) {
   const { type, dept } = parseRole(role);
-  const cls = ROLE_COLORS[type] || 'bg-slate-100 text-slate-700 border-slate-200';
-  const icon = type === 'admin' ? <Shield size={11} /> : type === 'authority' ? <Building2 size={11} /> : <Wrench size={11} />;
-  const deptAbbr = dept ? AUTHORITIES.find(a => a.id === dept)?.abbr || dept.toUpperCase() : null;
+  const authority = dept ? AUTHORITIES.find(a => a.id === dept) : null;
+  
+  const cls = (type === 'authority' || type === 'worker') && authority?.color 
+    ? authority.color 
+    : ROLE_COLORS[type] || 'bg-slate-100 text-slate-700 border-slate-200';
+    
+  const deptAbbr = authority ? authority.abbr : dept ? dept.toUpperCase() : null;
+  
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${cls}`}>
-      {icon}
       {type.charAt(0).toUpperCase() + type.slice(1)}
       {deptAbbr && <span className="opacity-70">· {deptAbbr}</span>}
     </span>
@@ -34,11 +38,12 @@ function RoleBadge({ role }) {
 }
 
 export function UserManagementPage() {
-  const { getPendingRequests, getAllAccounts, resolveRequest, deleteAccount, createAccount } = useAuth();
+  const { getPendingRequests, getAllAccounts, resolveRequest, deleteAccount, createAccount, getAuditLog } = useAuth();
 
-  const [tab, setTab] = useState('pending'); // pending | all | create
+  const [tab, setTab] = useState('pending'); // pending | all | create | audit
   const [accounts, setAccounts] = useState([]);
   const [pending, setPending] = useState([]);
+  const [auditLog, setAuditLog] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Create form
@@ -53,8 +58,9 @@ export function UserManagementPage() {
   const refresh = useCallback(() => {
     setPending(getPendingRequests());
     setAccounts(getAllAccounts());
+    if (getAuditLog) setAuditLog(getAuditLog());
     setRefreshKey(k => k + 1);
-  }, [getPendingRequests, getAllAccounts]);
+  }, [getPendingRequests, getAllAccounts, getAuditLog]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -92,12 +98,12 @@ export function UserManagementPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">User Management</h1>
-          <p className="text-slate-500">Manage accounts, approve requests, and control access.</p>
+          <h1 className="page-header-title">User Management</h1>
+          <p className="page-header-sub">Manage accounts, approve requests, and review system activity.</p>
         </div>
         <button
           onClick={refresh}
-          className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm text-sm font-medium text-slate-600 hover:text-primary-600 hover:border-primary-200 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(203,213,225,0.85)' }}
         >
           <RefreshCw size={15} /> Refresh
         </button>
@@ -105,17 +111,16 @@ export function UserManagementPage() {
 
       {/* Pending notification banner */}
       {pending.length > 0 && (
-        <div className="mb-6 flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-          <Clock size={20} className="text-amber-500 shrink-0" />
+        <div className="mb-6 flex items-center gap-3 p-4 rounded-2xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
           <div>
-            <p className="font-bold text-amber-800">
+            <p className="font-bold text-white">
               {pending.length} pending registration{pending.length > 1 ? 's' : ''} awaiting review
             </p>
-            <p className="text-sm text-amber-600">Approve or reject them in the "Pending Requests" tab.</p>
+            <p className="text-sm text-slate-400">Approve or reject them in the "Pending Requests" tab.</p>
           </div>
           <button
             onClick={() => setTab('pending')}
-            className="ml-auto px-4 py-2 bg-amber-500 text-white text-sm font-bold rounded-xl hover:bg-amber-600 transition-colors"
+            className="ml-auto px-4 py-2 bg-white text-black text-sm font-bold rounded-xl hover:bg-zinc-200 transition-colors border border-white"
           >
             Review Now
           </button>
@@ -123,29 +128,30 @@ export function UserManagementPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-slate-100 p-1 rounded-xl w-fit">
+      <div className="flex flex-wrap gap-2 mb-6 border-b border-white/5 pb-3">
         {[
-          { id: 'pending', label: `Pending Requests (${pending.length})`, icon: <Clock size={15} /> },
-          { id: 'all', label: `All Accounts (${activeAccounts.length})`, icon: <Users size={15} /> },
-          { id: 'create', label: 'Create Account', icon: <Plus size={15} /> },
+          { id: 'pending', label: `Pending Requests (${pending.length})` },
+          { id: 'all', label: `All Accounts (${accounts.length})` },
+          { id: 'create', label: 'Create Account' },
+          { id: 'audit', label: 'Audit Log' },
         ].map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
               tab === t.id
-                ? 'bg-white text-primary-700 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
+                ? 'text-white shadow-sm'
+                : 'hover:text-slate-300'
+            }`} style={tab === t.id ? { background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' } : { color: 'rgba(148,163,184,0.7)' }}
           >
-            {t.icon} {t.label}
+            {t.label}
           </button>
         ))}
       </div>
 
       {/* PENDING REQUESTS TAB */}
       {tab === 'pending' && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.055)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.09)' }}>
           {pending.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400">
               <CheckCircle2 size={40} className="mb-3 opacity-40" />
@@ -154,7 +160,7 @@ export function UserManagementPage() {
             </div>
           ) : (
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase text-xs font-bold tracking-wider">
+              <thead className="text-xs font-bold tracking-wider uppercase" style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)', color: 'rgba(148,163,184,0.65)' }}>
                 <tr>
                   <th className="px-6 py-4">Username</th>
                   <th className="px-6 py-4">Display Name</th>
@@ -164,23 +170,23 @@ export function UserManagementPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {pending.map(acc => (
-                  <tr key={acc.username} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-mono text-slate-700 font-medium">{acc.username}</td>
-                    <td className="px-6 py-4 text-slate-800 font-semibold">{acc.displayName}</td>
+                   <tr key={acc.username} className="transition-colors hover:bg-white/5">
+                     <td className="px-6 py-4 font-mono font-medium" style={{ color: 'rgba(148,163,184,0.8)' }}>{acc.username}</td>
+                     <td className="px-6 py-4 font-semibold" style={{ color: '#e2e8f0' }}>{acc.displayName}</td>
                     <td className="px-6 py-4"><RoleBadge role={acc.role} /></td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleResolve(acc.username, 'active')}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-green-500 text-white text-xs font-bold rounded-xl hover:bg-green-600 transition-colors"
+                          className="flex items-center gap-1.5 px-4 py-2 bg-white text-black text-xs font-bold rounded-xl hover:bg-zinc-200 transition-colors border border-white"
                         >
-                          <UserCheck size={13} /> Approve
+                          Approve
                         </button>
                         <button
                           onClick={() => handleResolve(acc.username, 'rejected')}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-red-500 text-white text-xs font-bold rounded-xl hover:bg-red-600 transition-colors"
+                          className="flex items-center gap-1.5 px-4 py-2 bg-zinc-800 text-zinc-300 text-xs font-bold rounded-xl hover:bg-zinc-700 transition-colors border border-zinc-700"
                         >
-                          <UserX size={13} /> Reject
+                          Reject
                         </button>
                       </div>
                     </td>
@@ -194,9 +200,9 @@ export function UserManagementPage() {
 
       {/* ALL ACCOUNTS TAB */}
       {tab === 'all' && (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.055)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.09)' }}>
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase text-xs font-bold tracking-wider">
+            <thead className="text-xs font-bold tracking-wider uppercase" style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)', color: 'rgba(148,163,184,0.65)' }}>
               <tr>
                 <th className="px-6 py-4">Username</th>
                 <th className="px-6 py-4">Display Name</th>
@@ -207,17 +213,17 @@ export function UserManagementPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {accounts.map(acc => (
-                <tr key={acc.username} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-mono text-slate-700 font-medium">{acc.username}</td>
-                  <td className="px-6 py-4 text-slate-800 font-semibold">{acc.displayName}</td>
+                <tr key={acc.username} className="transition-colors hover:bg-white/5">
+                  <td className="px-6 py-4 font-mono font-medium" style={{ color: 'rgba(148,163,184,0.8)' }}>{acc.username}</td>
+                  <td className="px-6 py-4 font-semibold" style={{ color: '#e2e8f0' }}>{acc.displayName}</td>
                   <td className="px-6 py-4"><RoleBadge role={acc.role} /></td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                      acc.status === 'active' ? 'bg-green-100 text-green-800' :
-                      acc.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                      'bg-red-100 text-red-800'
+                      acc.status === 'active'  ? 'bg-white text-black border border-white'  :
+                     acc.status === 'pending' ? 'bg-zinc-800/40 border border-zinc-700/30 text-zinc-350'  :
+                     'bg-transparent border border-zinc-850 text-zinc-500 line-through'
                     }`}>
-                      {acc.status === 'active' ? '✓ Active' : acc.status === 'pending' ? '⏳ Pending' : '✗ Rejected'}
+                      {acc.status === 'active' ? 'Active' : acc.status === 'pending' ? 'Pending' : 'Rejected'}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -225,24 +231,24 @@ export function UserManagementPage() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleResolve(acc.username, 'active')}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-bold rounded-lg hover:bg-green-200 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-white text-black text-xs font-bold rounded-lg hover:bg-zinc-200 transition-colors border border-white"
                         >
-                          <CheckCircle2 size={12} /> Approve
+                          Approve
                         </button>
                         <button
                           onClick={() => handleResolve(acc.username, 'rejected')}
-                          className="flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 text-xs font-bold rounded-lg hover:bg-red-200 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 text-zinc-300 text-xs font-bold rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700"
                         >
-                          <XCircle size={12} /> Reject
+                          Reject
                         </button>
                       </div>
                     )}
                     {acc.status !== 'pending' && acc.username !== 'admin' && (
                       <button
                         onClick={() => handleDelete(acc.username)}
-                        className="flex items-center gap-1 px-3 py-1.5 text-red-500 hover:bg-red-50 text-xs font-medium rounded-lg transition-colors"
+                        className="flex items-center gap-1 px-3 py-1.5 text-zinc-400 hover:bg-white/5 text-xs font-medium rounded-lg transition-colors border border-transparent"
                       >
-                        <Trash2 size={12} /> Delete
+                        Delete
                       </button>
                     )}
                   </td>
@@ -256,59 +262,59 @@ export function UserManagementPage() {
       {/* CREATE ACCOUNT TAB */}
       {tab === 'create' && (
         <div className="max-w-lg">
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
-            <h2 className="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
-              <Plus size={18} className="text-primary-500" /> Create New Account
+          <div className="rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.055)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.09)' }}>
+            <h2 className="text-lg font-bold mb-1" style={{ color: '#f1f5f9' }}>
+              Create New Account
             </h2>
-            <p className="text-sm text-slate-500 mb-6">Accounts created here are immediately active.</p>
+            <p className="text-sm mb-6" style={{ color: 'rgba(148,163,184,0.6)' }}>Accounts created here are immediately active.</p>
 
             {createError && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm font-medium">
-                <AlertTriangle size={15} /> {createError}
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-xl text-sm font-medium" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#cbd5e1' }}>
+                {createError}
               </div>
             )}
             {createSuccess && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm font-medium">
-                <CheckCircle2 size={15} /> {createSuccess}
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-xl text-sm font-medium" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', color: '#ffffff' }}>
+                {createSuccess}
               </div>
             )}
 
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Display Name</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(148,163,184,0.75)' }}>Display Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Ahmad bin Razak"
                   value={newDisplayName}
                   onChange={e => setNewDisplayName(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#f1f5f9' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Username</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(148,163,184,0.75)' }}>Username</label>
                 <input
                   type="text"
                   placeholder="e.g. ahmad_mbmb"
                   value={newUsername}
                   onChange={e => setNewUsername(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#f1f5f9' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Password</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(148,163,184,0.75)' }}>Password</label>
                 <input
                   type="password"
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#f1f5f9' }}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Role Type</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(148,163,184,0.75)' }}>Role Type</label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { id: 'admin', label: 'Admin', icon: <Shield size={13} /> },
@@ -321,10 +327,10 @@ export function UserManagementPage() {
                       onClick={() => setNewRoleType(r.id)}
                       className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-bold border transition-all ${
                         newRoleType === r.id
-                          ? r.id === 'admin' ? 'bg-purple-500 text-white border-purple-500'
-                          : r.id === 'authority' ? 'bg-amber-500 text-white border-amber-500'
-                          : 'bg-blue-500 text-white border-blue-500'
-                          : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                          ? r.id === 'admin' ? 'bg-white text-black border-white'
+                          : r.id === 'authority' ? 'bg-zinc-200 text-black border-zinc-200'
+                          : 'bg-zinc-400 text-black border-zinc-400'
+                          : 'bg-white/6 text-slate-300 border-white/10 hover:border-white/20'
                       }`}
                     >
                       {r.icon} {r.label}
@@ -335,13 +341,13 @@ export function UserManagementPage() {
 
               {newRoleType !== 'admin' && (
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Department</label>
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'rgba(148,163,184,0.75)' }}>Department</label>
                   <select
                     value={newDept}
                     onChange={e => setNewDept(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none appearance-none bg-white cursor-pointer"
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none appearance-none cursor-pointer" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#f1f5f9' }}
                   >
-                    {AUTHORITIES.map(a => (
+                    {AUTHORITIES.filter(a => ['mbmb', 'jkr', 'swcorp'].includes(a.id)).map(a => (
                       <option key={a.id} value={a.id}>{a.abbr} — {a.name}</option>
                     ))}
                   </select>
@@ -350,12 +356,51 @@ export function UserManagementPage() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-primary-500 text-white font-bold text-sm rounded-xl hover:bg-primary-600 transition-colors shadow-sm flex items-center justify-center gap-2"
+                className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-slate-200 transition-colors shadow-sm flex items-center justify-center gap-2"
               >
                 <Plus size={16} /> Create Account
               </button>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* AUDIT LOG TAB */}
+      {tab === 'audit' && (
+        <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.055)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.09)' }}>
+          {auditLog.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+              <Activity size={40} className="mb-3 opacity-40" />
+              <p className="font-medium">No activity recorded yet</p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs font-bold tracking-wider uppercase" style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)', color: 'rgba(148,163,184,0.65)' }}>
+                <tr>
+                  <th className="px-6 py-4">Time</th>
+                  <th className="px-6 py-4">Actor</th>
+                  <th className="px-6 py-4">Action</th>
+                  <th className="px-6 py-4">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {auditLog.map(log => (
+                   <tr key={log.id} className="transition-colors hover:bg-white/5">
+                     <td className="px-6 py-4 text-xs" style={{ color: 'rgba(148,163,184,0.6)' }}>
+                      {new Date(log.timestamp).toLocaleString()}
+                    </td>
+                     <td className="px-6 py-4 font-mono font-medium" style={{ color: 'rgba(148,163,184,0.8)' }}>{log.actor}</td>
+                    <td className="px-6 py-4">
+                       <span className="px-2 py-1 rounded-md text-xs font-bold uppercase" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(148,163,184,0.8)' }}>
+                        {log.action}
+                      </span>
+                    </td>
+                     <td className="px-6 py-4" style={{ color: '#e2e8f0' }}>{log.detail}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

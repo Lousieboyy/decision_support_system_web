@@ -4,16 +4,28 @@ import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
 import { AUTHORITIES } from '../utils/authorities';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } from 'date-fns';
+import jsPDF from 'jspdf';
 import {
   Search, Filter, RefreshCw, Image as ImageIcon, MapPin,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X, Building2,
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X, Building2, Download, FileText
 } from 'lucide-react';
 
 // Get dept id from role
-function getDeptId(role) {
+function getDeptId(role, username) {
   if (!role) return null;
-  if (role.startsWith('authority_')) return role.split('_').slice(1).join('_');
-  if (role.startsWith('worker_')) return role.split('_').slice(1).join('_');
+  if (role.includes('_')) {
+    return role.split('_').slice(1).join('_');
+  }
+  if (role === 'authority' && username) {
+    return username.toLowerCase();
+  }
+  if (role === 'worker' && username) {
+    const name = username.toLowerCase();
+    if (name.includes('mbmb') || name === 'worker1' || name === 'worker') return 'mbmb';
+    if (name.includes('jkr') || name === 'worker2') return 'jkr';
+    if (name.includes('swcorp')) return 'swcorp';
+    if (name.includes('mphtj')) return 'mphtj';
+  }
   return null;
 }
 
@@ -26,19 +38,23 @@ function reportMatchesDept(report, deptId) {
   return (
     assigned.includes(authority.abbr.toLowerCase()) ||
     assigned.includes(authority.id.toLowerCase()) ||
-    authority.name.split(' ').some(w => w.length > 3 && assigned.includes(w.toLowerCase()))
+    assigned.includes(authority.name.toLowerCase())
   );
 }
 
 // Dept tag
 function DeptTag({ department }) {
   if (!department) return <span className="text-slate-300 text-xs">—</span>;
+  const lowerDept = department.toLowerCase();
   const auth = AUTHORITIES.find(a =>
-    department.toLowerCase().includes(a.abbr.toLowerCase()) ||
-    department.toLowerCase().includes(a.id.toLowerCase())
+    lowerDept.includes(a.abbr.toLowerCase()) ||
+    lowerDept.includes(a.id.toLowerCase()) ||
+    (a.name && lowerDept.includes(a.name.toLowerCase()))
   );
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-teal-50 border-teal-200 text-teal-800">
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+      auth?.color || 'bg-slate-100 border-slate-200 text-slate-600'
+    }`}>
       <Building2 size={10} />
       {auth?.abbr || department.slice(0, 8)}
     </span>
@@ -54,6 +70,8 @@ const DATE_PRESETS = [
   { label: 'Last 30 days', value: '30d' },
 ];
 
+const STATUS_TABS = ['All', 'Pending', 'In Review', 'In Process', 'In Maintenance', 'Resolved', 'Rejected'];
+
 function parseConfidence(conf) {
   if (!conf) return 0;
   return parseFloat(conf.replace('%', '')) || 0;
@@ -65,7 +83,7 @@ export function ReportsPage() {
   const [error, setError] = useState(null);
   
   // Role
-  const { role: currentRole } = useAuth();
+  const { role: currentRole, user } = useAuth();
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,15 +91,30 @@ export function ReportsPage() {
   const [datePreset, setDatePreset] = useState('all');
   const [minConfidence, setMinConfidence] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
-  const [myDeptOnly, setMyDeptOnly] = useState(false);
+  const [myDeptOnly, setMyDeptOnly] = useState(true);
 
-  const deptId = getDeptId(currentRole);
+  const deptId = getDeptId(currentRole, user?.username);
+
+  // Compute status counts for the tabs
+  const statusCounts = useMemo(() => {
+    const counts = { All: 0, Pending: 0, 'In Review': 0, 'In Process': 0, 'In Maintenance': 0, Resolved: 0, Rejected: 0 };
+    let visibleReports = reports;
+    if (myDeptOnly && deptId) {
+      visibleReports = reports.filter(r => reportMatchesDept(r, deptId));
+    }
+    visibleReports.forEach(r => {
+      const s = r.status || 'Pending';
+      counts.All++;
+      if (counts[s] !== undefined) counts[s]++;
+    });
+    return counts;
+  }, [reports, myDeptOnly, deptId]);
 
   // Selected report for modal
   const [selectedReport, setSelectedReport] = useState(null);
 
   // Sorting
-  const [sortField, setSortField] = useState('timestamp');
+  const [sortField, setSortField] = useState('upvotes');
   const [sortOrder, setSortOrder] = useState('desc');
 
   // Pagination
@@ -171,12 +204,20 @@ export function ReportsPage() {
 
     // Sort
     result.sort((a, b) => {
-      let valA = a[sortField] ?? '';
-      let valB = b[sortField] ?? '';
+      let valA = a[sortField];
+      let valB = b[sortField];
+      
       if (sortField === 'timestamp') {
-        valA = new Date(valA).getTime();
-        valB = new Date(valB).getTime();
+        valA = valA ? new Date(valA).getTime() : 0;
+        valB = valB ? new Date(valB).getTime() : 0;
+      } else if (sortField === 'upvotes' || sortField === 'id') {
+        valA = Number(valA) || 0;
+        valB = Number(valB) || 0;
+      } else {
+        valA = String(valA ?? '').toLowerCase();
+        valB = String(valB ?? '').toLowerCase();
       }
+      
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
@@ -194,12 +235,13 @@ export function ReportsPage() {
   const paginatedReports = processedReports.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const StatusBadge = ({ status }) => {
-    let cls = 'bg-slate-100 text-slate-700';
-    if (status === 'Pending')        cls = 'bg-orange-100 text-orange-800';
-    if (status === 'In Review')      cls = 'bg-amber-100 text-amber-800';
-    if (status === 'In Process')     cls = 'bg-blue-100 text-blue-800';
-    if (status === 'In Maintenance') cls = 'bg-purple-100 text-purple-800';
-    if (status === 'Resolved')       cls = 'bg-green-100 text-green-800';
+    let cls = 'bg-slate-800 text-slate-300';
+    if (status === 'Pending')        cls = 'bg-amber-500/15 border border-amber-500/30 text-amber-300';
+    if (status === 'In Review')      cls = 'bg-blue-500/15 border border-blue-500/30 text-blue-300';
+    if (status === 'In Process')     cls = 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-300';
+    if (status === 'In Maintenance') cls = 'bg-purple-500/15 border border-purple-500/30 text-purple-300';
+    if (status === 'Resolved')       cls = 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-extrabold';
+    if (status === 'Rejected')       cls = 'bg-red-500/15 border border-red-500/30 text-red-400 line-through';
     return <span className={`px-2.5 py-1 text-xs font-bold rounded-lg ${cls}`}>{status || 'Pending'}</span>;
   };
 
@@ -210,13 +252,70 @@ export function ReportsPage() {
       : <ChevronDown size={14} className="text-primary-500" />;
   };
 
+  const handleExportCSV = () => {
+    const headers = ['ID', 'Category', 'Location', 'AI Prediction', 'Confidence', 'Assigned Dept', 'Status', 'Reported At'];
+    const rows = processedReports.map(r => [
+      r.id,
+      r.categories || '',
+      r.address || '',
+      r.ai_prediction || '',
+      r.confidence || '',
+      r.assigned_department || '',
+      r.status || 'Pending',
+      r.timestamp ? new Date(r.timestamp).toLocaleString() : '',
+    ]);
+    const csv = [headers, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `smart_city_reports_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('Smart City Reports', 14, 20);
+    doc.setFontSize(10);
+    
+    let y = 30;
+    processedReports.forEach(r => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      const dateStr = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'Unknown';
+      doc.setFont(undefined, 'bold');
+      doc.text(`ID: #${r.id} | Status: ${r.status || 'Pending'}`, 14, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Dept: ${r.assigned_department || 'Unassigned'} | Date: ${dateStr}`, 90, y);
+      y += 6;
+      doc.text(`Location: ${r.address || 'Unknown'}`, 14, y);
+      y += 6;
+      doc.text(`Category: ${r.categories || 'N/A'} | AI: ${r.ai_prediction || 'None'} (${r.confidence || '0%'})`, 14, y);
+      y += 10;
+    });
+    
+    doc.save(`smart_city_reports_${new Date().toISOString().slice(0,10)}.pdf`);
+  };
+
   return (
     <div className="p-8 pb-20">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">Reports Management</h1>
-          <p className="text-slate-500 mb-3">All city reports — every role can view. Dept tags show admin assignment.</p>
+          <h1 className="page-header-title">Reports Management</h1>
+          <div className="page-header-sub mt-1">
+            {deptId ? (
+              <span className="flex items-center gap-2">
+                <span className="font-semibold" style={{ color: 'rgba(148,163,184,0.9)' }}>{user?.displayName}</span>
+                <span style={{ color: 'rgba(255,255,255,0.15)' }}>|</span>
+                <span>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()} Department</span>
+              </span>
+            ) : 'All city reports — every role can view. Dept tags show admin assignment.'}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -228,37 +327,24 @@ export function ReportsPage() {
               placeholder="Search ID, category, location..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="pl-9 pr-4 py-2 w-60 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 shadow-sm"
+              className="pl-9 pr-4 py-2 w-60 rounded-lg text-sm focus:ring-2 focus:ring-white/20" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#f1f5f9' }}
             />
           </div>
 
-          {/* Status filter */}
-          <div className="relative">
-            <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-primary-500 appearance-none shadow-sm cursor-pointer"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="In Review">In Review</option>
-              <option value="In Process">In Process</option>
-              <option value="In Maintenance">In Maintenance</option>
-              <option value="Resolved">Resolved</option>
-            </select>
-          </div>
+          {/* Status filter dropdown removed in favor of status tab bar below */}
 
           {/* Advanced filters toggle */}
           <button
             onClick={() => setShowFilters(v => !v)}
-            className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium shadow-sm transition-colors
-              ${showFilters ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            className={`relative flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors
+              ${showFilters
+                ? 'bg-white/10 border-white/20 text-white'
+                : 'bg-white/6 border-white/10 text-slate-300 hover:bg-white/10'}`}
           >
             <SlidersHorizontal size={16} />
             Filters
             {activeFilterCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-slate-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {activeFilterCount}
               </span>
             )}
@@ -268,46 +354,43 @@ export function ReportsPage() {
           {deptId && (
             <button
               onClick={() => setMyDeptOnly(v => !v)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold shadow-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-semibold transition-colors ${
                 myDeptOnly
-                  ? 'bg-teal-500 border-teal-500 text-white'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  ? 'bg-white border-white text-black shadow-md shadow-white/10'
+                  : 'bg-white/6 border-white/10 text-slate-300 hover:bg-white/10'
               }`}
             >
-              <Building2 size={15} />
               My Dept Only
             </button>
           )}
 
+          {/* Export CSV & PDF */}
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportCSV} className="export-btn" title="Export filtered results as CSV">
+              <Download size={15} /> CSV
+            </button>
+            <button onClick={handleExportPDF} className="export-btn" title="Export filtered results as PDF">
+              <FileText size={15} /> PDF
+            </button>
+          </div>
+
           {/* Refresh */}
           <button
             onClick={loadReports}
-            className="p-2.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:text-primary-500 hover:bg-slate-50 shadow-sm transition-colors"
+            className="p-2.5 rounded-lg border transition-colors" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(148,163,184,0.7)' }}
             title="Refresh"
           >
-            <RefreshCw size={18} className={loading ? 'animate-spin text-primary-500' : ''} />
+            <RefreshCw size={18} className={loading ? 'animate-spin text-slate-400' : ''} />
           </button>
         </div>
       </div>
 
-      {/* Dept info banner for non-admin */}
-      {deptId && (
-        <div className="mb-4 flex items-center gap-3 p-3 bg-teal-50 border border-teal-200 rounded-xl">
-          <Building2 size={16} className="text-teal-600 shrink-0" />
-          <p className="text-sm text-teal-800">
-            You are viewing <strong>all city reports</strong>. Reports assigned to your department 
-            (<strong>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()}</strong>) are highlighted. 
-            Use <strong>"My Dept Only"</strong> to filter.
-          </p>
-        </div>
-      )}
-
       {/* Advanced Filters Panel */}
       {showFilters && (
-        <div className="mb-6 p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-wrap gap-6 items-end">
+        <div className="mb-6 p-5 rounded-2xl flex flex-wrap gap-6 items-end" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(16px)' }}>
           {/* Date Range Preset */}
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1" style={{ color: 'rgba(148,163,184,0.75)' }}>
               <Calendar size={12} /> Date Range
             </label>
             <div className="flex gap-2">
@@ -317,8 +400,8 @@ export function ReportsPage() {
                   onClick={() => setDatePreset(p.value)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors
                     ${datePreset === p.value
-                      ? 'bg-primary-500 text-white border-primary-500'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                      ? 'bg-white text-black border-white'
+                      : 'bg-white/6 text-slate-300 border-white/10 hover:border-white/20'}`}
                 >
                   {p.label}
                 </button>
@@ -328,8 +411,8 @@ export function ReportsPage() {
 
           {/* Min Confidence */}
           <div className="min-w-[220px]">
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Min AI Confidence: <span className="text-primary-600">{minConfidence}%</span>
+            <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'rgba(148,163,184,0.75)' }}>
+              Min AI Confidence: <span style={{ color: '#cbd5e1' }}>{minConfidence}%</span>
             </label>
             <input
               type="range"
@@ -338,7 +421,7 @@ export function ReportsPage() {
               step={5}
               value={minConfidence}
               onChange={e => setMinConfidence(Number(e.target.value))}
-              className="w-full accent-primary-500"
+              className="w-full accent-slate-400"
             />
             <div className="flex justify-between text-xs text-slate-400 mt-1">
               <span>0%</span><span>50%</span><span>100%</span>
@@ -349,7 +432,7 @@ export function ReportsPage() {
           {activeFilterCount > 0 && (
             <button
               onClick={() => { setStatusFilter('All'); setDatePreset('all'); setMinConfidence(0); }}
-              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium text-red-500 border border-red-200 bg-red-50 hover:bg-red-100 transition-colors"
+              className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors" style={{ color: '#ffffff', borderColor: 'rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)' }}
             >
               <X size={14} /> Reset Filters
             </button>
@@ -357,49 +440,104 @@ export function ReportsPage() {
         </div>
       )}
 
+      {/* Status Tabs Bar & Sort Selector */}
+      <div className="mb-6 flex flex-wrap items-center justify-between border-b pb-4 gap-4" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div className="flex flex-wrap gap-2">
+          {STATUS_TABS.map(tab => {
+            const isActive = statusFilter === tab;
+            const count = statusCounts[tab];
+            return (
+              <button
+                key={tab}
+                onClick={() => setStatusFilter(tab)}
+                className={`px-4 py-2 text-xs font-bold rounded-lg border transition-all duration-150 flex items-center gap-2 cursor-pointer
+                  ${isActive 
+                    ? 'bg-white text-black border-white shadow-lg shadow-white/5 font-extrabold' 
+                    : 'bg-white/4 border-white/8 text-slate-400 hover:text-slate-200 hover:border-white/15'}`}
+              >
+                <span>{tab}</span>
+                <span className={`px-1.5 py-0.5 text-[9px] rounded font-extrabold ${isActive ? 'bg-black text-white' : 'bg-white/10 text-slate-400'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Quick Sort Selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Sort By:</span>
+          <div className="bg-white/5 border border-white/8 p-0.5 rounded-lg flex">
+            <button
+              onClick={() => { setSortField('timestamp'); setSortOrder('desc'); }}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                sortField === 'timestamp' 
+                  ? 'bg-white text-black font-extrabold shadow-sm' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Date (Newest)
+            </button>
+            <button
+              onClick={() => { setSortField('upvotes'); setSortOrder('desc'); }}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                sortField === 'upvotes' 
+                  ? 'bg-white text-black font-extrabold shadow-sm' 
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Upvotes (Criticality)
+            </button>
+          </div>
+        </div>
+      </div>
+
       {error ? (
-        <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-100">
+        <div className="rounded-xl p-4 border flex items-center" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)', color: '#cbd5e1' }}>
           Failed to load reports: {error}
         </div>
       ) : (
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.055)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.09)' }}>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 uppercase text-xs font-bold tracking-wider">
+              <thead className="text-xs font-bold tracking-wider uppercase" style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)', color: 'rgba(148,163,184,0.65)' }}>
                 <tr>
-                  <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100 transition-colors" onClick={() => toggleSort('id')}>
+                  <th className="px-6 py-4 cursor-pointer group transition-colors" onClick={() => toggleSort('id')}>
                     <div className="flex items-center gap-1">ID <SortIcon field="id" /></div>
                   </th>
                   <th className="px-6 py-4">Image</th>
-                  <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100" onClick={() => toggleSort('categories')}>
+                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('categories')}>
                     <div className="flex items-center gap-1">Category <SortIcon field="categories" /></div>
                   </th>
                   <th className="px-6 py-4">Location</th>
-                  <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100" onClick={() => toggleSort('ai_prediction')}>
+                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('ai_prediction')}>
                     <div className="flex items-center gap-1">AI Prediction <SortIcon field="ai_prediction" /></div>
                   </th>
                   <th className="px-6 py-4">Assigned To</th>
-                  <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100" onClick={() => toggleSort('status')}>
+                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                   </th>
-                  <th className="px-6 py-4 cursor-pointer group hover:bg-slate-100" onClick={() => toggleSort('timestamp')}>
+                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('upvotes')}>
+                    <div className="flex items-center gap-1">Upvotes <SortIcon field="upvotes" /></div>
+                  </th>
+                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('timestamp')}>
                     <div className="flex items-center gap-1">Reported At <SortIcon field="timestamp" /></div>
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody style={{ borderColor: 'rgba(255,255,255,0.05)' }} className="divide-y">
                 {loading && reports.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="9" className="px-6 py-12 text-center" style={{ color: 'rgba(148,163,184,0.6)' }}>
                       <div className="flex flex-col items-center justify-center">
-                        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mb-4" />
+                        <div className="w-8 h-8 border-4 border-slate-400 border-t-transparent rounded-full animate-spin mb-4" />
                         Loading reports...
                       </div>
                     </td>
                   </tr>
                 ) : paginatedReports.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500 font-medium">
+                    <td colSpan="9" className="px-6 py-12 text-center font-medium" style={{ color: 'rgba(148,163,184,0.55)' }}>
                       No reports found matching your criteria.
                     </td>
                   </tr>
@@ -410,13 +548,13 @@ export function ReportsPage() {
                       key={report.id}
                       onClick={() => setSelectedReport(report)}
                       className={`cursor-pointer transition-colors group ${
-                        isMyDept ? 'bg-teal-50/50 hover:bg-teal-50' : 'hover:bg-slate-50'
+                        isMyDept ? 'hover:bg-white/8' : 'hover:bg-white/5'
                       }`}
                     >
-                      <td className="px-6 py-4 text-slate-500 font-mono">#{report.id}</td>
+                      <td className="px-6 py-4 font-mono" style={{ color: 'rgba(148,163,184,0.55)' }}>#{report.id}</td>
                       <td className="px-6 py-4">
                         {report.image_path ? (
-                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.10)' }}>
                             <img
                               src={getImageUrl(report.image_path)}
                               alt="thumbnail"
@@ -425,34 +563,34 @@ export function ReportsPage() {
                             />
                           </div>
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border border-slate-200">
-                            <ImageIcon size={16} className="text-slate-400" />
+                          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)' }}>
+                            <ImageIcon size={16} style={{ color: 'rgba(148,163,184,0.5)' }} />
                           </div>
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <p className="font-bold text-slate-800">{report.categories || '-'}</p>
+                        <p className="font-bold" style={{ color: '#e2e8f0' }}>{report.categories || '-'}</p>
                         {isMyDept && deptId && (
-                          <span className="text-[10px] font-bold text-teal-700 bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded-full mt-1 inline-block">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-1 inline-block" style={{ color: '#cbd5e1', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}>
                             YOUR DEPT
                           </span>
                         )}
                       </td>
                       <td className="px-6 py-4 text-slate-600 max-w-[180px] truncate">
                         <div className="flex items-center gap-1.5">
-                          <MapPin size={14} className="text-slate-400 shrink-0" />
-                          <span className="truncate">{report.address || 'Unknown'}</span>
+                          <MapPin size={14} style={{ color: 'rgba(148,163,184,0.5)' }} className="shrink-0" />
+                          <span className="truncate" style={{ color: 'rgba(148,163,184,0.75)' }}>{report.address || 'Unknown'}</span>
                         </div>
                       </td>
                       <td className="px-6 py-4">
                         {report.ai_prediction ? (
                           <div>
-                            <p className="font-semibold text-slate-800">{report.ai_prediction}</p>
+                            <p className="font-semibold" style={{ color: '#e2e8f0' }}>{report.ai_prediction}</p>
                             <div className="flex items-center gap-2 mt-1">
-                              <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-primary-500 rounded-full" style={{ width: report.confidence || '0%' }} />
+                              <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                                <div className="h-full bg-slate-400 rounded-full" style={{ width: report.confidence || '0%' }} />
                               </div>
-                              <span className="text-xs text-slate-500">{report.confidence}</span>
+                              <span className="text-xs" style={{ color: 'rgba(148,163,184,0.65)' }}>{report.confidence}</span>
                             </div>
                           </div>
                         ) : <span className="text-slate-400">-</span>}
@@ -463,7 +601,14 @@ export function ReportsPage() {
                       <td className="px-6 py-4">
                         <StatusBadge status={report.status} />
                       </td>
-                      <td className="px-6 py-4 text-slate-600 text-sm">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <span className={report.upvotes > 0 ? "text-amber-400" : "text-slate-500"}>
+                            {report.upvotes || 0}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-sm" style={{ color: 'rgba(148,163,184,0.65)' }}>
                         {(() => {
                           if (!report.timestamp) return '-';
                           const d = new Date(report.timestamp);
@@ -479,14 +624,14 @@ export function ReportsPage() {
           </div>
 
           {/* Pagination Footer */}
-          <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+          <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.025)' }}>
+            <div className="flex items-center gap-3 text-xs font-medium" style={{ color: 'rgba(148,163,184,0.6)' }}>
               <span>
                 Showing{' '}
-                <span className="font-bold text-slate-700">
+                <span className="font-bold" style={{ color: '#e2e8f0' }}>
                   {processedReports.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, processedReports.length)}
                 </span>{' '}
-                of <span className="font-bold text-slate-700">{processedReports.length}</span> results
+                of <span className="font-bold" style={{ color: '#e2e8f0' }}>{processedReports.length}</span> results
                 {processedReports.length !== reports.length && (
                   <span className="ml-1 text-slate-400">({reports.length} total city-wide)</span>
                 )}
@@ -495,7 +640,7 @@ export function ReportsPage() {
               <select
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="ml-2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-medium focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                className="ml-2 rounded-lg px-2 py-1 text-xs font-medium focus:ring-2 focus:ring-white/20 cursor-pointer" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#e2e8f0' }}
               >
                 {PAGE_SIZE_OPTIONS.map(s => (
                   <option key={s} value={s}>{s} / page</option>
@@ -507,14 +652,14 @@ export function ReportsPage() {
               <button
                 onClick={() => setCurrentPage(1)}
                 disabled={currentPage === 1}
-                className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.7)' }}
               >
                 «
               </button>
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.7)' }}
               >
                 <ChevronLeft size={16} />
               </button>
@@ -537,8 +682,8 @@ export function ReportsPage() {
                     onClick={() => setCurrentPage(page)}
                     className={`w-8 h-8 rounded-lg text-xs font-bold border transition-colors
                       ${currentPage === page
-                        ? 'bg-primary-500 text-white border-primary-500 shadow-sm'
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+                        ? 'bg-white text-black border-white shadow-sm shadow-white/10'
+                        : 'bg-white/6 text-slate-300 border-white/10 hover:bg-white/10'}`}
                   >
                     {page}
                   </button>
@@ -548,14 +693,14 @@ export function ReportsPage() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="p-1.5 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.7)' }}
               >
                 <ChevronRight size={16} />
               </button>
               <button
                 onClick={() => setCurrentPage(totalPages)}
                 disabled={currentPage === totalPages}
-                className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-2 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.7)' }}
               >
                 »
               </button>
