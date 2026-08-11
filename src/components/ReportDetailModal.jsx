@@ -552,7 +552,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                 onClick={() => setFullScreenImage(displayImage)}
                 onError={e => {
                   e.target.onerror = null;
-                  e.target.src = 'https://images.unsplash.com/photo-1584467735871-8e85353a8413?w=800&q=80';
+                  e.target.src = 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&q=80';
                 }} 
               />
             ) : (
