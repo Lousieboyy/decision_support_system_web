@@ -73,7 +73,7 @@ export function AuthProvider({ children }) {
       const envUrl = import.meta.env.VITE_API_URL;
       const API_URL = (envUrl && envUrl.trim() !== '' && envUrl !== '/api')
         ? envUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
-        : 'https://smart-city-citizen-4v6h5uh64-lousieboyys-projects.vercel.app';
+        : 'https://smart-city-citizen-app-git-main-lousieboyys-projects.vercel.app';
       // Try to authenticate with the FastAPI backend first
       const backendResponse = await fetch(`${API_URL}/login`, {
         method: 'POST',

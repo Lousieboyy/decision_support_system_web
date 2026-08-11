@@ -3,7 +3,7 @@ const getApiUrl = () => {
   if (envUrl && envUrl.trim() !== '' && envUrl !== '/api') {
     return envUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
   }
-  return 'https://smart-city-citizen-4v6h5uh64-lousieboyys-projects.vercel.app';
+  return 'https://smart-city-citizen-app-git-main-lousieboyys-projects.vercel.app';
 };
 const API_URL = getApiUrl();
 
