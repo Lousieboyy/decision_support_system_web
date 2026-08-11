@@ -1,4 +1,11 @@
-const API_URL = import.meta.env.VITE_API_URL || "/api";
+const getApiUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && envUrl.trim() !== '' && envUrl !== '/api') {
+    return envUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+  }
+  return 'https://smart-city-citizen-app.onrender.com';
+};
+const API_URL = getApiUrl();
 
 // Helper to get authorization headers
 function getAuthHeaders() {

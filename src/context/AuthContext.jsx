@@ -70,7 +70,10 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (username, password) => {
     try {
-      const API_URL = import.meta.env.VITE_API_URL || "/api";
+      const envUrl = import.meta.env.VITE_API_URL;
+      const API_URL = (envUrl && envUrl.trim() !== '' && envUrl !== '/api')
+        ? envUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
+        : 'https://smart-city-citizen-app.onrender.com';
       // Try to authenticate with the FastAPI backend first
       const backendResponse = await fetch(`${API_URL}/login`, {
         method: 'POST',
