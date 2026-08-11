@@ -1,5 +1,4 @@
-const rawUrl = import.meta.env.VITE_API_URL || "";
-const API_URL = rawUrl ? rawUrl.replace(/\/api\/?$/, "").replace(/\/$/, "") : "/api";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 // Helper to get authorization headers
 function getAuthHeaders() {
