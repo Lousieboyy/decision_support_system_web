@@ -18,7 +18,7 @@ function getAuthHeaders() {
 }
 
 export const fetchReports = async (role = 'admin') => {
-  const response = await fetch(`${API_URL}/reports/?role=${role}`, {
+  const response = await fetch(`${API_URL}/reports?role=${role}`, {
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error('Failed to fetch reports');
