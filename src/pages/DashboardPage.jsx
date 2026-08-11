@@ -91,17 +91,27 @@ export function DashboardPage() {
     try {
       setLoading(true);
       const [statsData, timelineData, reportsData] = await Promise.all([
-        fetchStats(),
-        fetchTimeline(),
-        fetchReports('admin'),
+        fetchStats().catch(() => null),
+        fetchTimeline().catch(() => []),
+        fetchReports('admin').catch(() => []),
       ]);
-      
-      let finalStats = statsData;
-      let finalTimeline = timelineData;
-      let finalReports = reportsData;
+
+      const validReports = Array.isArray(reportsData) ? reportsData : [];
+      let finalReports = validReports;
+      let finalStats = (statsData && typeof statsData === 'object' && !statsData.detail) ? statsData : {
+        total: validReports.length,
+        pending: validReports.filter(r => r.status === 'Pending').length,
+        in_review: validReports.filter(r => r.status === 'In Review').length,
+        in_process: validReports.filter(r => r.status === 'In Process').length,
+        in_maintenance: validReports.filter(r => r.status === 'In Maintenance').length,
+        resolved: validReports.filter(r => r.status === 'Resolved').length,
+        rejected: validReports.filter(r => r.status === 'Rejected').length,
+        categories: {}
+      };
+      let finalTimeline = Array.isArray(timelineData) ? timelineData : [];
 
       if (role !== 'admin' && deptId) {
-        finalReports = reportsData.filter(r => reportMatchesDept(r, deptId));
+        finalReports = validReports.filter(r => reportMatchesDept(r, deptId));
         
         finalStats = {
           total: finalReports.length,

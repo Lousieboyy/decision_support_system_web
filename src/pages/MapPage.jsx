@@ -321,9 +321,10 @@ export function MapPage() {
     try {
       setLoading(true);
       const data = await fetchReports(currentRole);
+      const safeData = Array.isArray(data) ? data : [];
       
       // Filter out resolved reports that are older than 7 days
-      const activeMapReports = data.filter(r => {
+      const activeMapReports = safeData.filter(r => {
         if (!r.latitude || !r.longitude) return false;
         if (r.status === 'Resolved') {
           const dateField = r.resolved_at || r.timestamp;

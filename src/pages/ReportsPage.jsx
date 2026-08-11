@@ -125,10 +125,11 @@ export function ReportsPage() {
     try {
       setLoading(true);
       const data = await fetchReports(currentRole);
-      setReports(data);
+      setReports(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
       setError(err.message);
+      setReports([]);
     } finally {
       setLoading(false);
     }
