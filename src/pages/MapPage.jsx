@@ -24,11 +24,16 @@ function HeatmapLayer({ points }) {
   return null;
 }
 
-// Fixes the blank grey tiles bug in Leaflet+React: forces size recalculation after mount
+// Fixes the blank grey tiles bug in Leaflet+React: forces size recalculation after mount with unmount safety
 function MapResizer() {
   const map = useMap();
   useEffect(() => {
-    setTimeout(() => map.invalidateSize(), 100);
+    const timer = setTimeout(() => {
+      if (map && map._container) {
+        try { map.invalidateSize(); } catch (_) {}
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [map]);
   return null;
 }
@@ -523,7 +528,11 @@ export function MapPage() {
           zoom={13} 
           style={{ height: '100%', width: '100%' }}
           whenReady={(map) => {
-            setTimeout(() => map.target.invalidateSize(), 200);
+            setTimeout(() => {
+              if (map?.target?._container) {
+                try { map.target.invalidateSize(); } catch (_) {}
+              }
+            }, 200);
           }}
         >
           <MapResizer />
