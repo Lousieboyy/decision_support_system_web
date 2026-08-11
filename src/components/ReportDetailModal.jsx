@@ -550,7 +550,10 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                 alt={showAfter ? 'After fix' : 'Original issue'}
                 className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" 
                 onClick={() => setFullScreenImage(displayImage)}
-                onError={e => { e.target.style.display = 'none'; }} 
+                onError={e => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://images.unsplash.com/photo-1584467735871-8e85353a8413?w=800&q=80';
+                }} 
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400">

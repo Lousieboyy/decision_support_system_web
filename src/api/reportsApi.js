@@ -155,8 +155,9 @@ export const analyzeReportImage = async (reportId) => {
 };
 
 export const getImageUrl = (imagePath) => {
-  if (!imagePath) return null;
-  if (imagePath.startsWith('http')) return imagePath;
+  if (!imagePath) return 'https://images.unsplash.com/photo-1584467735871-8e85353a8413?w=800&q=80';
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
+  if (imagePath.startsWith('data:image')) return imagePath;
   const path = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
   return `${API_URL}${path}`;
 };
