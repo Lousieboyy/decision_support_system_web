@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { fetchStats, fetchTimeline, fetchReports } from '../api/reportsApi';
+import { Link } from 'react-router-dom';
+import { fetchStats, fetchTimeline, fetchReports, fetchTeamWorkload, fetchTransfers } from '../api/reportsApi';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -84,8 +85,28 @@ export function DashboardPage() {
   const [slaMetrics, setSlaMetrics] = useState({ avgDays: 0, bottlenecks: 0 });
   const [error, setError] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [teamLoad, setTeamLoad] = useState([]);
+  const [pendingTransfers, setPendingTransfers] = useState(0);
 
   const deptId = getDeptId(role, user?.username);
+  const canSeeTeams = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+
+  // Team load + release requests. Workers are refused these endpoints by the
+  // backend, so failures are swallowed rather than breaking the dashboard.
+  useEffect(() => {
+    if (!canSeeTeams) return undefined;
+    let cancelled = false;
+    (async () => {
+      const [workload, transfers] = await Promise.all([
+        fetchTeamWorkload().catch(() => null),
+        fetchTransfers('pending').catch(() => []),
+      ]);
+      if (cancelled) return;
+      setTeamLoad(workload?.teams || []);
+      setPendingTransfers(transfers?.length || 0);
+    })();
+    return () => { cancelled = true; };
+  }, [canSeeTeams, lastRefreshed]);
 
   const loadAll = async () => {
     try {
@@ -284,6 +305,43 @@ export function DashboardPage() {
                   <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#f1f5f9' }}>SLA Performance</h3>
                   <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>Average resolution time is {slaMetrics.avgDays} days.</p>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Team load strip — who is drowning, and who can take work */}
+          {canSeeTeams && teamLoad.length > 0 && (
+            <div className="rounded-2xl p-5 mb-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#f1f5f9' }}>Team Load</h3>
+                <Link to="/teams" className="text-xs font-semibold" style={{ color: '#94a3b8' }}>
+                  {pendingTransfers > 0
+                    ? `${pendingTransfers} release request${pendingTransfers === 1 ? '' : 's'} waiting →`
+                    : 'Manage teams →'}
+                </Link>
+              </div>
+              <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                {teamLoad.map(t => {
+                  const tone = t.status === 'bottleneck' ? '#f87171'
+                    : t.status === 'strained' ? '#fbbf24' : '#4ade80';
+                  return (
+                    <div key={t.id} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.04)', borderLeft: `3px solid ${tone}` }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold" style={{ color: '#f1f5f9' }}>{t.name}</span>
+                        <span className="text-[10px] font-bold uppercase" style={{ color: tone }}>{t.status}</span>
+                      </div>
+                      <p className="text-xs" style={{ color: '#94a3b8' }}>
+                        {t.open_count} open · {t.unclaimed_count} unclaimed
+                      </p>
+                      <p className="text-xs" style={{ color: '#64748b' }}>
+                        {t.load_per_worker != null
+                          ? `${t.load_per_worker} per worker (${t.worker_count})`
+                          : `no workers assigned`}
+                        {t.sla_breached_count > 0 && ` · ${t.sla_breached_count} past SLA`}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

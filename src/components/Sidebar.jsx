@@ -1,7 +1,8 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain } from "lucide-react";
+import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat } from "lucide-react";
 import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications } from "../context/AuthContext";
 import { fetchDatasetStats } from "../api/datasetApi";
+import { fetchTransfers } from "../api/reportsApi";
 import { AUTHORITIES } from '../utils/authorities';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -14,6 +15,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
 
   const pendingCount = role === 'admin' ? getPendingRequests().length : 0;
   const [datasetPending, setDatasetPending] = useState(0);
+  const [transferPending, setTransferPending] = useState(0);
 
   // Refresh notifs every 15s
   useEffect(() => {
@@ -41,6 +43,24 @@ export function Sidebar({ isOpen, setIsOpen }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [role]);
 
+  // Badge the Teams link with release requests waiting on this authority.
+  useEffect(() => {
+    const canDecide = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+    if (!canDecide) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const pending = await fetchTransfers('pending');
+        if (!cancelled) setTransferPending(pending?.length || 0);
+      } catch {
+        if (!cancelled) setTransferPending(0);
+      }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [role]);
+
   const unreadCount = notifs.filter(n => !n.read).length;
 
   const handleBellClick = () => {
@@ -61,7 +81,10 @@ export function Sidebar({ isOpen, setIsOpen }) {
     { name: "Map View", path: "/map", icon: <MapIcon size={18} /> },
     { name: "Reports", path: "/reports", icon: <ClipboardList size={18} /> },
     ...(role === 'admin' || role === 'authority' || role?.startsWith('authority_')
-        ? [{ name: "Analytics", path: "/analytics", icon: <BarChart3 size={18} /> }]
+        ? [
+            { name: "Teams", path: "/teams", icon: <HardHat size={18} />, badge: transferPending },
+            { name: "Analytics", path: "/analytics", icon: <BarChart3 size={18} /> },
+          ]
         : []),
     ...(role === 'admin' ? [{ name: "Users", path: "/users", icon: <Users size={18} />, badge: pendingCount }] : []),
     ...(role === 'admin' ? [{ name: "AI Dataset", path: "/ai-dataset", icon: <Brain size={18} />, badge: datasetPending }] : []),

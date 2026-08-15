@@ -8,8 +8,9 @@ import {
 import { format, parseISO } from 'date-fns';
 import { 
   getImageUrl, updateReportStatus, adminReview, adminReject,
-  assignWorker, startMaintenance, completeTask, authorityResolve,
-  fetchReports, analyzeReportImage, rejectProof
+  startMaintenance, completeTask, authorityResolve,
+  fetchReports, analyzeReportImage, rejectProof,
+  fetchTeams, fetchTeamWorkers, dispatchToTeam, transferReport, claimReport
 } from '../api/reportsApi';
 import { describeVerdict } from '../api/datasetApi';
 import { AUTHORITIES } from '../utils/authorities';
@@ -397,10 +398,19 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
   const [selectedDept, setSelectedDept] = useState('mbmb');
   const [dispatchNote, setDispatchNote] = useState('');
   
-  // Authority -> Worker
-  const [workerName, setWorkerName] = useState('');
+  // Authority -> Team (shared pool). Worker is an optional pin; the default is
+  // to leave the job in the team pool for whoever is free to accept first.
+  const [teams, setTeams] = useState([]);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [teamWorkers, setTeamWorkers] = useState([]);
+  const [pinnedWorker, setPinnedWorker] = useState('');
   const [assignNote, setAssignNote] = useState('');
-  
+
+  // Authority -> another team
+  const [transferTeam, setTransferTeam] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [showTransfer, setShowTransfer] = useState(false);
+
   // Worker -> Proof
   const [workerProofNote, setWorkerProofNote] = useState('');
   const [workerFile, setWorkerFile] = useState(null);
@@ -430,8 +440,11 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       setManualStatus(report.status || 'Pending');
       setSelectedDept(suggestDepartment(report));
       setDispatchNote('');
-      setWorkerName('');
+      setPinnedWorker('');
       setAssignNote('');
+      setTransferReason('');
+      setTransferTeam('');
+      setShowTransfer(false);
       setWorkerProofNote('');
       setWorkerFile(null);
       setAuthorityNote('');
@@ -455,6 +468,32 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       }
     }
   }, [report?.id, currentRole]);
+
+  // Load the real team list so the authority picks an existing team instead of
+  // typing a worker name that may match nobody.
+  useEffect(() => {
+    if (!report || isCitizen) return;
+    let cancelled = false;
+    fetchTeams()
+      .then(list => {
+        if (cancelled) return;
+        setTeams(list);
+        const owning = list.find(t => t.id === report.assigned_agency_id);
+        setSelectedTeam(String(owning?.id ?? list[0]?.id ?? ''));
+      })
+      .catch(() => { if (!cancelled) setTeams([]); });
+    return () => { cancelled = true; };
+  }, [report?.id, isCitizen]);
+
+  // Roster for the chosen team, so pinning shows who is actually free.
+  useEffect(() => {
+    if (!selectedTeam) { setTeamWorkers([]); return; }
+    let cancelled = false;
+    fetchTeamWorkers(selectedTeam)
+      .then(list => { if (!cancelled) setTeamWorkers(list); })
+      .catch(() => { if (!cancelled) setTeamWorkers([]); });
+    return () => { cancelled = true; };
+  }, [selectedTeam]);
 
   if (!report) return null;
 
@@ -537,13 +576,36 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
   );
 
   const handleAuthorityAssign = () => {
-    if (!workerName.trim()) return setActionError('Worker name is required.');
+    if (!selectedTeam) return setActionError('Select a team to dispatch this report to.');
+    const team = teams.find(t => String(t.id) === String(selectedTeam));
+    const workerId = pinnedWorker ? Number(pinnedWorker) : null;
+    const who = workerId
+      ? teamWorkers.find(w => w.id === workerId)?.username
+      : null;
     return execAction(
-      () => assignWorker(report.id, workerName, assignNote),
-      'Worker assigned. Task is now In Process.',
+      () => dispatchToTeam(report.id, Number(selectedTeam), workerId, assignNote),
+      who
+        ? `Assigned directly to ${who}. Task is now In Process.`
+        : `Sent to the ${team?.name || 'team'} pool — the first available worker can accept it.`,
       'In Process'
     );
   };
+
+  const handleTransfer = () => {
+    if (!transferTeam) return setActionError('Select the team to hand this over to.');
+    const target = teams.find(t => String(t.id) === String(transferTeam));
+    return execAction(
+      () => transferReport(report.id, Number(transferTeam), transferReason),
+      `Transferred to ${target?.name || 'the selected team'}. It is now in their pool.`,
+      'In Process'
+    );
+  };
+
+  const handleWorkerClaim = () => execAction(
+    () => claimReport(report.id),
+    'Task claimed. It is yours now.',
+    'In Process'
+  );
 
   const handleWorkerStart = () => execAction(
     () => startMaintenance(report.id),
@@ -836,37 +898,128 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
               </div>
             )}
 
-            {/* 2. AUTHORITY PANEL (In Review) - Assign Worker */}
+            {/* 2. AUTHORITY PANEL (In Review) - Dispatch to a team pool */}
             {currentRole?.startsWith('authority') && report.status === 'In Review' && (
               <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <div className="flex items-center gap-2 px-5 py-4 bg-zinc-800">
                   <HardHat size={18} className="text-white" />
-                  <p className="text-sm font-bold text-white">Assign Task to Worker</p>
+                  <p className="text-sm font-bold text-white">Dispatch to Team</p>
                 </div>
                 <div className="p-5 space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Worker / Contractor Name</label>
-                    <input type="text" value={workerName} onChange={e => setWorkerName(e.target.value)} placeholder="e.g. Ali (Team Alpha)" className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }} />
+                    <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Team</label>
+                    <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setPinnedWorker(''); }} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}>
+                      {teams.length === 0 && <option value="">Loading teams...</option>}
+                      {teams.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} — {t.open_count} open, {t.unclaimed_count} unclaimed, {t.worker_count} workers
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Assign to</label>
+                    <select value={pinnedWorker} onChange={e => setPinnedWorker(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}>
+                      <option value="">Leave in team pool — first available worker accepts</option>
+                      {teamWorkers.map(w => (
+                        <option key={w.id} value={w.id}>{w.username} ({w.active_jobs} active)</option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-[11px] text-zinc-500">
+                      Pool is the default: every worker on the team sees it and the first to accept claims it.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Assignment Notes</label>
                     <textarea value={assignNote} onChange={e => setAssignNote(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-xl text-sm resize-none" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }} />
                   </div>
-                  <button onClick={handleAuthorityAssign} disabled={actionLoading || !workerName} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 disabled:opacity-50 border border-white cursor-pointer">
-                    {actionLoading ? 'Assigning...' : 'Assign Task'}
+                  <button onClick={handleAuthorityAssign} disabled={actionLoading || !selectedTeam} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 disabled:opacity-50 border border-white cursor-pointer">
+                    {actionLoading ? 'Dispatching...' : (pinnedWorker ? 'Assign to Worker' : 'Send to Team Pool')}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* 3. WORKER PANEL (In Process) - Start Work */}
+            {/* 2b. AUTHORITY — hand an unfinished job to another team */}
+            {currentRole?.startsWith('authority') && ['In Process', 'In Maintenance'].includes(report.status) && !report.worker_completed && (
+              <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div className="flex items-center justify-between px-5 py-4 bg-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <Send size={18} className="text-white" />
+                    <p className="text-sm font-bold text-white">Team Status</p>
+                  </div>
+                  <button onClick={() => setShowTransfer(v => !v)} className="text-xs font-semibold text-zinc-300 hover:text-white cursor-pointer">
+                    {showTransfer ? 'Cancel' : 'Transfer team'}
+                  </button>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300">
+                      Team: <strong className="text-white">{report.assigned_team || report.assigned_department || 'Unassigned'}</strong>
+                    </span>
+                    <span className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300">
+                      {report.assigned_worker
+                        ? <>Claimed by <strong className="text-white">{report.assigned_worker}</strong></>
+                        : <strong className="text-amber-300">Unclaimed — sitting in the pool</strong>}
+                    </span>
+                    {report.release_count > 0 && (
+                      <span className="px-2 py-1 rounded-lg bg-amber-500/15 text-amber-300">
+                        Released {report.release_count}x
+                      </span>
+                    )}
+                  </div>
+
+                  {showTransfer && (
+                    <div className="space-y-3 pt-2">
+                      <div>
+                        <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Hand over to</label>
+                        <select value={transferTeam} onChange={e => setTransferTeam(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}>
+                          <option value="">Select a team...</option>
+                          {teams.filter(t => t.id !== report.assigned_agency_id).map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} — {t.open_count} open, {t.worker_count} workers
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Reason</label>
+                        <textarea value={transferReason} onChange={e => setTransferReason(e.target.value)} rows={2} placeholder="e.g. team overloaded, outside our scope" className="w-full px-3 py-2 rounded-xl text-sm resize-none" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }} />
+                      </div>
+                      <button onClick={handleTransfer} disabled={actionLoading || !transferTeam} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 disabled:opacity-50 border border-white cursor-pointer">
+                        {actionLoading ? 'Transferring...' : 'Transfer to Team'}
+                      </button>
+                      <p className="text-[11px] text-zinc-500">
+                        The job returns to an unclaimed state in the receiving team's pool.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3. WORKER PANEL (In Process) — claim from the pool, then start */}
             {currentRole?.startsWith('worker') && report.status === 'In Process' && (
               <div className="rounded-2xl p-5 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <h3 className="font-bold text-zinc-100 mb-2">You've been assigned this task</h3>
-                <p className="text-sm text-zinc-400 mb-4">Click below when you have arrived at the location and are starting the maintenance work.</p>
-                <button onClick={handleWorkerStart} disabled={actionLoading} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 border border-white disabled:opacity-50 cursor-pointer">
-                  {actionLoading ? 'Updating...' : 'Accept & Start Work'}
-                </button>
+                {report.in_pool ? (
+                  <>
+                    <h3 className="font-bold text-zinc-100 mb-2">Open job in your team pool</h3>
+                    <p className="text-sm text-zinc-400 mb-4">
+                      Nobody has taken this yet. Accept it to claim it — whoever accepts first gets it.
+                    </p>
+                    <button onClick={handleWorkerClaim} disabled={actionLoading} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 border border-white disabled:opacity-50 cursor-pointer">
+                      {actionLoading ? 'Accepting...' : 'Accept Task'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="font-bold text-zinc-100 mb-2">You've been assigned this task</h3>
+                    <p className="text-sm text-zinc-400 mb-4">Click below when you have arrived at the location and are starting the maintenance work.</p>
+                    <button onClick={handleWorkerStart} disabled={actionLoading} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 border border-white disabled:opacity-50 cursor-pointer">
+                      {actionLoading ? 'Updating...' : 'Start Work'}
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
