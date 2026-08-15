@@ -36,7 +36,7 @@ function AppRoutes() {
           <Route
             path="teams"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute adminOnly>
                 <TeamsPage />
               </ProtectedRoute>
             }

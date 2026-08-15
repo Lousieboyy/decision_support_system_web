@@ -89,7 +89,9 @@ export function DashboardPage() {
   const [pendingTransfers, setPendingTransfers] = useState(0);
 
   const deptId = getDeptId(role, user?.username);
-  const canSeeTeams = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+  // Cross-team comparison (other agencies' load) is admin-only — an
+  // authority manages their own team via dispatch, not by comparing agencies.
+  const canSeeTeams = role === 'admin';
 
   // Team load + release requests. Workers are refused these endpoints by the
   // backend, so failures are swallowed rather than breaking the dashboard.
