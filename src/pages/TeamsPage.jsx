@@ -148,9 +148,10 @@ function CrewManager({ teamId, roster, onChanged }) {
                 <p className="text-xs" style={{ color: '#64748b' }}>No members yet.</p>
               )}
               {crew.members.map(m => (
-                <div key={m.id} className="flex items-center justify-between text-sm py-1 px-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <div key={m.id} className="flex items-center justify-between text-sm py-1 px-2 rounded-lg"
+                  style={{ background: 'rgba(255,255,255,0.03)', opacity: m.on_leave ? 0.45 : 1 }}>
                   <div className="flex items-center gap-2">
-                    <span style={{ color: '#e2e8f0' }}>{m.username}</span>
+                    <span style={{ color: m.on_leave ? '#64748b' : '#e2e8f0', textDecoration: m.on_leave ? 'line-through' : 'none' }}>{m.username}</span>
                     <span className="text-[11px]" style={{ color: m.active_jobs >= 5 ? '#fbbf24' : '#64748b' }}>{m.active_jobs} active</span>
                     {m.on_leave && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>ON LEAVE</span>}
                   </div>
@@ -186,7 +187,11 @@ function CrewManager({ teamId, roster, onChanged }) {
                 >
                   <option value="">Add worker...</option>
                   {roster.filter(w => w.crew_id !== crew.id).map(w => (
-                    <option key={w.id} value={w.id}>{w.username}{w.crew_id ? ' (on another crew)' : ''}</option>
+                    <option key={w.id} value={w.id}>
+                      {w.username}
+                      {w.crew_id ? ' (on another crew)' : ''}
+                      {w.on_leave ? ' — on leave' : ''}
+                    </option>
                   ))}
                 </select>
                 <button
@@ -217,7 +222,13 @@ function CrewManager({ teamId, roster, onChanged }) {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {unassigned.map(w => (
-              <span key={w.id} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)', color: '#cbd5e1' }}>
+              <span key={w.id} className="text-xs px-2 py-1 rounded-lg"
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  color: w.on_leave ? '#64748b' : '#cbd5e1',
+                  opacity: w.on_leave ? 0.45 : 1,
+                  textDecoration: w.on_leave ? 'line-through' : 'none',
+                }}>
                 {w.username}{w.on_leave ? ' · on leave' : ''}
               </span>
             ))}
@@ -282,7 +293,7 @@ export function TeamsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const reloadRoster = async (teamId) => {
+  const reloadRoster = useCallback(async (teamId) => {
     try {
       const roster = await fetchTeamWorkers(teamId);
       setRosters(prev => ({ ...prev, [teamId]: roster }));
@@ -290,7 +301,20 @@ export function TeamsPage() {
       // Keep whatever roster is already cached rather than blanking it on a
       // transient failure.
     }
-  };
+  }, []);
+
+  // An authority only handles their own department by default — the
+  // cross-department comparison grid is an admin ("just monitor") view.
+  // As soon as that one card's id is known, expand it straight away so
+  // the crew-grouped member list is visible without an extra click.
+  useEffect(() => {
+    if (isAdmin || expanded) return;
+    const mine = (data.teams || []).find(t => t.is_mine);
+    if (mine) {
+      setExpanded(mine.id);
+      reloadRoster(mine.id);
+    }
+  }, [isAdmin, data.teams, expanded, reloadRoster]);
 
   const toggleRoster = async (teamId) => {
     if (expanded === teamId) return setExpanded(null);
@@ -321,8 +345,14 @@ export function TeamsPage() {
     return <div className="p-8 text-sm" style={{ color: '#94a3b8' }}>Loading team workload...</div>;
   }
 
+  // `teams` stays the FULL list — the transfer "Send to..." picker below
+  // still needs every agency as a possible destination regardless of who's
+  // allowed to see the comparison grid. Only the rendered cards are scoped:
+  // an authority handles their own department by default and doesn't see
+  // the others; admin is the "just monitor everything" role.
   const teams = data.teams || [];
-  const worstFirst = [...teams].sort((a, b) => {
+  const visibleTeams = isAdmin ? teams : teams.filter(t => t.is_mine);
+  const worstFirst = [...visibleTeams].sort((a, b) => {
     const rank = { bottleneck: 0, strained: 1, healthy: 2 };
     return rank[a.status] - rank[b.status];
   });
@@ -331,7 +361,9 @@ export function TeamsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#f1f5f9' }}>Teams</h1>
+          <h1 className="text-2xl font-bold" style={{ color: '#f1f5f9' }}>
+            {isAdmin ? 'Teams' : (visibleTeams[0]?.name ? `${visibleTeams[0].name} Team` : 'Your Team')}
+          </h1>
           <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>
             Where the work is piling up, and who can take it. SLA threshold: {data.sla_hours}h.
           </p>
@@ -481,38 +513,20 @@ export function TeamsPage() {
 
               {expanded === team.id && (
                 <div className="px-5 pb-5 space-y-4">
-                  {isAdmin || team.is_mine ? (
-                    (rosters[team.id] || []).length === 0 ? (
-                      <p className="text-xs" style={{ color: '#64748b' }}>
-                        No workers on this team{team.open_count > 0 ? ' — work here has nobody to pick it up.' : '.'}
-                      </p>
-                    ) : (
-                      <CrewManager
-                        teamId={team.id}
-                        roster={rosters[team.id] || []}
-                        onChanged={() => reloadRoster(team.id)}
-                      />
-                    )
+                  {/* Every card rendered here already passed the visibility
+                      filter above (admin sees all, an authority only their
+                      own), so whoever is looking at it is always allowed to
+                      manage it — no read-only fallback needed. */}
+                  {(rosters[team.id] || []).length === 0 ? (
+                    <p className="text-xs" style={{ color: '#64748b' }}>
+                      No workers on this team{team.open_count > 0 ? ' — work here has nobody to pick it up.' : '.'}
+                    </p>
                   ) : (
-                    <div className="space-y-2">
-                      <p className="text-[11px]" style={{ color: '#64748b' }}>
-                        Crew membership is managed by {team.name}'s own authority.
-                      </p>
-                      {(rosters[team.id] || []).length === 0 ? (
-                        <p className="text-xs" style={{ color: '#64748b' }}>No workers on this team.</p>
-                      ) : (
-                        rosters[team.id].map(w => (
-                          <div key={w.id} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg"
-                            style={{ background: 'rgba(255,255,255,0.04)' }}>
-                            <span style={{ color: '#e2e8f0' }}>{w.username}</span>
-                            <span className="text-xs font-semibold"
-                              style={{ color: w.active_jobs >= 5 ? '#fbbf24' : '#94a3b8' }}>
-                              {w.active_jobs} active
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                    <CrewManager
+                      teamId={team.id}
+                      roster={rosters[team.id] || []}
+                      onChanged={() => reloadRoster(team.id)}
+                    />
                   )}
                 </div>
               )}
