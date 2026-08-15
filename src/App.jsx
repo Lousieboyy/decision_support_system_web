@@ -6,6 +6,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { LoginPage } from './pages/LoginPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { AiDatasetPage } from './pages/AiDatasetPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import 'leaflet/dist/leaflet.css';
 
@@ -44,6 +45,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute adminOnly>
                 <UserManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="ai-dataset"
+            element={
+              <ProtectedRoute adminOnly>
+                <AiDatasetPage />
               </ProtectedRoute>
             }
           />

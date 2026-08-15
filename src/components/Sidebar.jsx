@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain } from "lucide-react";
 import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications } from "../context/AuthContext";
+import { fetchDatasetStats } from "../api/datasetApi";
 import { AUTHORITIES } from '../utils/authorities';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -12,6 +13,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
   const bellRef = useRef(null);
 
   const pendingCount = role === 'admin' ? getPendingRequests().length : 0;
+  const [datasetPending, setDatasetPending] = useState(0);
 
   // Refresh notifs every 15s
   useEffect(() => {
@@ -20,6 +22,24 @@ export function Sidebar({ isOpen, setIsOpen }) {
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
   }, []);
+
+  // Badge the AI Dataset link with how many samples are waiting on a decision.
+  // Silently ignore failures: an unreachable backend should not break the nav.
+  useEffect(() => {
+    if (role !== 'admin') return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const stats = await fetchDatasetStats();
+        if (!cancelled) setDatasetPending(stats?.by_status?.pending || 0);
+      } catch {
+        if (!cancelled) setDatasetPending(0);
+      }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [role]);
 
   const unreadCount = notifs.filter(n => !n.read).length;
 
@@ -44,6 +64,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
         ? [{ name: "Analytics", path: "/analytics", icon: <BarChart3 size={18} /> }]
         : []),
     ...(role === 'admin' ? [{ name: "Users", path: "/users", icon: <Users size={18} />, badge: pendingCount }] : []),
+    ...(role === 'admin' ? [{ name: "AI Dataset", path: "/ai-dataset", icon: <Brain size={18} />, badge: datasetPending }] : []),
   ];
 
   const getRoleDisplay = () => {

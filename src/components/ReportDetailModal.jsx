@@ -11,6 +11,7 @@ import {
   assignWorker, startMaintenance, completeTask, authorityResolve,
   fetchReports, analyzeReportImage, rejectProof
 } from '../api/reportsApi';
+import { describeVerdict } from '../api/datasetApi';
 import { AUTHORITIES } from '../utils/authorities';
 import { useAuth } from '../context/AuthContext';
 import L from 'leaflet';
@@ -225,6 +226,75 @@ function ReportDirectionsMap({ reportLat, reportLng, reportAddress }) {
 }
 
 // --- Dept Tag helper ---
+/**
+ * Image provenance panel.
+ *
+ * Shows the individual forensic signals rather than a single score, because
+ * "no metadata" and "declares itself AI-generated" are very different findings
+ * and an admin acting on this needs to see which one it is.
+ */
+function ImageAuthenticityCard({ verdict, score, signals }) {
+  const [expanded, setExpanded] = useState(false);
+  const { label, tone, hint } = describeVerdict(verdict);
+
+  const palette = {
+    danger:  { bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.30)',  text: '#fca5a5' },
+    warn:    { bg: 'rgba(234,179,8,0.10)',  border: 'rgba(234,179,8,0.30)',  text: '#fde047' },
+    ok:      { bg: 'rgba(34,197,94,0.10)',  border: 'rgba(34,197,94,0.28)',  text: '#86efac' },
+    neutral: { bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.10)', text: '#cbd5e1' },
+  }[tone];
+
+  const list = Array.isArray(signals) ? signals : [];
+
+  return (
+    <div className="rounded-xl p-4 border" style={{ background: palette.bg, borderColor: palette.border }}>
+      <div className="flex items-start gap-3">
+        <ShieldCheck size={16} className="mt-0.5 shrink-0" style={{ color: palette.text }} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: '#94a3b8' }}>
+            Image Authenticity
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-bold" style={{ color: palette.text }}>{label}</p>
+            {score != null && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(255,255,255,0.07)', color: '#cbd5e1' }}>
+                {score}/100
+              </span>
+            )}
+          </div>
+          <p className="text-xs mt-1" style={{ color: 'rgba(203,213,225,0.7)' }}>{hint}</p>
+
+          {list.length > 0 && (
+            <>
+              <button
+                onClick={() => setExpanded(v => !v)}
+                className="mt-2 text-[11px] font-semibold flex items-center gap-1"
+                style={{ color: 'rgba(148,163,184,0.9)' }}
+              >
+                {expanded ? 'Hide' : 'Show'} {list.length} signal{list.length > 1 ? 's' : ''}
+                <ChevronDown size={12} style={{ transform: expanded ? 'rotate(180deg)' : 'none' }} />
+              </button>
+              {expanded && (
+                <ul className="mt-2 space-y-1.5">
+                  {list.map((signal, i) => (
+                    <li key={i} className="text-[11px] flex items-start gap-2"
+                        style={{ color: 'rgba(203,213,225,0.8)' }}>
+                      <span className="mt-1 w-1 h-1 rounded-full shrink-0"
+                            style={{ background: 'rgba(148,163,184,0.6)' }} />
+                      <span>{signal.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DeptTag({ department }) {
   if (!department) return <span className="text-slate-300 text-xs">—</span>;
   const lowerDept = department.toLowerCase();
@@ -617,6 +687,14 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                   ))}
                 </div>
               </div>
+            )}
+
+            {report.authenticity_verdict && (
+              <ImageAuthenticityCard
+                verdict={report.authenticity_verdict}
+                score={report.authenticity_score}
+                signals={report.authenticity_signals}
+              />
             )}
 
             {report.ai_prediction && (
