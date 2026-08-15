@@ -249,9 +249,11 @@ function CrewManager({ teamId, roster, onChanged }) {
 
 export function TeamsPage() {
   const { role } = useAuth();
-  // This route is admin-only (see App.jsx), so crew management should be
-  // available for every agency here — not gated by team.is_mine, which is
-  // only meaningful for an authority tied to one agency. Admin isn't.
+  // Admin can manage every agency's crews, not just team.is_mine — that flag
+  // is only meaningful for an authority tied to one agency; admin isn't tied
+  // to any (team.is_mine can be true for admin by seed-data coincidence on
+  // one agency, which would otherwise wrongly hide every other agency's
+  // crew management from them).
   const isAdmin = role === 'admin';
   const [data, setData] = useState({ teams: [], sla_hours: 48 });
   const [transfers, setTransfers] = useState([]);
@@ -422,6 +424,10 @@ export function TeamsPage() {
               <div className="flex items-center justify-between px-5 py-4" style={{ background: s.bg }}>
                 <div className="flex items-center gap-2">
                   <p className="text-base font-bold" style={{ color: '#f1f5f9' }}>{team.name}</p>
+                  {!isAdmin && team.is_mine && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ background: 'rgba(255,255,255,0.14)', color: '#e2e8f0' }}>YOUR TEAM</span>
+                  )}
                 </div>
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: s.color, color: '#0f172a' }}>
                   {s.label}
@@ -475,7 +481,7 @@ export function TeamsPage() {
 
               {expanded === team.id && (
                 <div className="px-5 pb-5 space-y-4">
-                  {isAdmin ? (
+                  {isAdmin || team.is_mine ? (
                     (rosters[team.id] || []).length === 0 ? (
                       <p className="text-xs" style={{ color: '#64748b' }}>
                         No workers on this team{team.open_count > 0 ? ' — work here has nobody to pick it up.' : '.'}
@@ -490,7 +496,7 @@ export function TeamsPage() {
                   ) : (
                     <div className="space-y-2">
                       <p className="text-[11px]" style={{ color: '#64748b' }}>
-                        Crew membership is managed by an admin.
+                        Crew membership is managed by {team.name}'s own authority.
                       </p>
                       {(rosters[team.id] || []).length === 0 ? (
                         <p className="text-xs" style={{ color: '#64748b' }}>No workers on this team.</p>

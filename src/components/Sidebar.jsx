@@ -44,9 +44,9 @@ export function Sidebar({ isOpen, setIsOpen }) {
   }, [role]);
 
   // Badge the Teams link with release requests waiting on a decision.
-  // Teams is admin-only now, so only admin needs to poll for the count.
   useEffect(() => {
-    if (role !== 'admin') return undefined;
+    const canDecide = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+    if (!canDecide) return undefined;
     let cancelled = false;
     const load = async () => {
       try {
@@ -81,9 +81,11 @@ export function Sidebar({ isOpen, setIsOpen }) {
     { name: "Map View", path: "/map", icon: <MapIcon size={18} /> },
     { name: "Reports", path: "/reports", icon: <ClipboardList size={18} /> },
     ...(role === 'admin' || role === 'authority' || role?.startsWith('authority_')
-        ? [{ name: "Analytics", path: "/analytics", icon: <BarChart3 size={18} /> }]
+        ? [
+            { name: "Teams", path: "/teams", icon: <HardHat size={18} />, badge: transferPending },
+            { name: "Analytics", path: "/analytics", icon: <BarChart3 size={18} /> },
+          ]
         : []),
-    ...(role === 'admin' ? [{ name: "Teams", path: "/teams", icon: <HardHat size={18} />, badge: transferPending }] : []),
     ...(role === 'admin' ? [{ name: "Users", path: "/users", icon: <Users size={18} />, badge: pendingCount }] : []),
     ...(role === 'admin' ? [{ name: "AI Dataset", path: "/ai-dataset", icon: <Brain size={18} />, badge: datasetPending }] : []),
   ];
