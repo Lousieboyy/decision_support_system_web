@@ -118,14 +118,89 @@ export const fetchTeamWorkload = async () => {
   return response.json();
 };
 
-// STEP 2 — Authority dispatches to a team pool (worker_id optional pin)
-export const dispatchToTeam = async (reportId, agency_id, worker_id = null, note = '') => {
+// STEP 2 — Authority dispatches to a team pool (crew_id/worker_id optional)
+export const dispatchToTeam = async (reportId, agency_id, worker_id = null, note = '', crew_id = null) => {
   const response = await fetch(`${API_URL}/reports/${reportId}/dispatch`, {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ agency_id, worker_id, note }),
+    body: JSON.stringify({ agency_id, crew_id, worker_id, note }),
   });
   if (!response.ok) throw await parseError(response, 'Failed to dispatch report');
+  return response.json();
+};
+
+// Move a report between crews (or back to the general pool) within the same
+// agency. No approval needed — unlike a cross-team transfer, work never
+// leaves the agency.
+export const reassignCrew = async (reportId, crew_id, note = '') => {
+  const response = await fetch(`${API_URL}/reports/${reportId}/reassign-crew`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ crew_id, note }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to reassign crew');
+  return response.json();
+};
+
+// ── CREWS — sub-teams within one agency ─────────────────────
+export const fetchCrews = async (agencyId) => {
+  const response = await fetch(`${API_URL}/agencies/${agencyId}/crews`, { headers: getAuthHeaders() });
+  if (!response.ok) throw await parseError(response, 'Failed to load crews');
+  return response.json();
+};
+
+export const fetchCrewWorkload = async (agencyId) => {
+  const response = await fetch(`${API_URL}/agencies/${agencyId}/crews/workload`, { headers: getAuthHeaders() });
+  if (!response.ok) throw await parseError(response, 'Failed to load crew workload');
+  return response.json();
+};
+
+export const createCrew = async (agencyId, name) => {
+  const response = await fetch(`${API_URL}/agencies/${agencyId}/crews`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ name }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to create crew');
+  return response.json();
+};
+
+export const updateCrew = async (crewId, { name, status } = {}) => {
+  const response = await fetch(`${API_URL}/crews/${crewId}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ name, status }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to update crew');
+  return response.json();
+};
+
+export const addCrewMember = async (crewId, staffId) => {
+  const response = await fetch(`${API_URL}/crews/${crewId}/members`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ staff_id: staffId }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to add crew member');
+  return response.json();
+};
+
+export const removeCrewMember = async (crewId, staffId) => {
+  const response = await fetch(`${API_URL}/crews/${crewId}/members/${staffId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to remove crew member');
+  return response.json();
+};
+
+export const setStaffLeave = async (staffId, onLeave) => {
+  const response = await fetch(`${API_URL}/staff/${staffId}/leave`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ on_leave: onLeave }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to update leave status');
   return response.json();
 };
 

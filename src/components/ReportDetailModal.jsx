@@ -10,7 +10,8 @@ import {
   getImageUrl, updateReportStatus, adminReview, adminReject,
   startMaintenance, completeTask, authorityResolve,
   fetchReports, analyzeReportImage, rejectProof,
-  fetchTeams, fetchTeamWorkers, dispatchToTeam, transferReport, claimReport
+  fetchTeams, fetchTeamWorkers, dispatchToTeam, transferReport, claimReport,
+  fetchCrews, reassignCrew
 } from '../api/reportsApi';
 import { describeVerdict } from '../api/datasetApi';
 import { AUTHORITIES } from '../utils/authorities';
@@ -406,10 +407,20 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
   const [pinnedWorker, setPinnedWorker] = useState('');
   const [assignNote, setAssignNote] = useState('');
 
+  // Authority -> Crew (sub-team within the chosen team, e.g. MBMB "Team A").
+  // Selecting a crew narrows the worker pin list to that crew's members.
+  const [crews, setCrews] = useState([]);
+  const [selectedCrew, setSelectedCrew] = useState('');
+
   // Authority -> another team
   const [transferTeam, setTransferTeam] = useState('');
   const [transferReason, setTransferReason] = useState('');
   const [showTransfer, setShowTransfer] = useState(false);
+
+  // Authority -> another crew, same team (rebalance)
+  const [reassignCrewTarget, setReassignCrewTarget] = useState('');
+  const [reassignNote, setReassignNote] = useState('');
+  const [showReassign, setShowReassign] = useState(false);
 
   // Worker -> Proof
   const [workerProofNote, setWorkerProofNote] = useState('');
@@ -442,9 +453,13 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       setDispatchNote('');
       setPinnedWorker('');
       setAssignNote('');
+      setSelectedCrew('');
       setTransferReason('');
       setTransferTeam('');
       setShowTransfer(false);
+      setReassignCrewTarget('');
+      setReassignNote('');
+      setShowReassign(false);
       setWorkerProofNote('');
       setWorkerFile(null);
       setAuthorityNote('');
@@ -494,6 +509,36 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       .catch(() => { if (!cancelled) setTeamWorkers([]); });
     return () => { cancelled = true; };
   }, [selectedTeam]);
+
+  // Crews (sub-teams) within the chosen team, e.g. MBMB "Team A" vs "Team B".
+  useEffect(() => {
+    if (!selectedTeam) { setCrews([]); return; }
+    let cancelled = false;
+    fetchCrews(selectedTeam)
+      .then(list => {
+        if (cancelled) return;
+        setCrews(list);
+        // Pre-select the crew this report is already with, so reopening the
+        // panel doesn't silently reset a dispatch that's already crew-scoped.
+        if (report?.assigned_crew_id && list.some(c => c.id === report.assigned_crew_id)) {
+          setSelectedCrew(String(report.assigned_crew_id));
+        }
+      })
+      .catch(() => { if (!cancelled) setCrews([]); });
+    return () => { cancelled = true; };
+  }, [selectedTeam, report?.id]);
+
+  // Crews of the report's OWNING team, for the "move to another crew" panel —
+  // independent of whatever team is selected in the dispatch dropdown above.
+  const [ownCrews, setOwnCrews] = useState([]);
+  useEffect(() => {
+    if (!report?.assigned_agency_id) { setOwnCrews([]); return; }
+    let cancelled = false;
+    fetchCrews(report.assigned_agency_id)
+      .then(list => { if (!cancelled) setOwnCrews(list); })
+      .catch(() => { if (!cancelled) setOwnCrews([]); });
+    return () => { cancelled = true; };
+  }, [report?.assigned_agency_id, report?.id]);
 
   if (!report) return null;
 
@@ -578,15 +623,18 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
   const handleAuthorityAssign = () => {
     if (!selectedTeam) return setActionError('Select a team to dispatch this report to.');
     const team = teams.find(t => String(t.id) === String(selectedTeam));
+    const crew = selectedCrew ? crews.find(c => String(c.id) === String(selectedCrew)) : null;
+    const crewId = crew ? crew.id : null;
     const workerId = pinnedWorker ? Number(pinnedWorker) : null;
     const who = workerId
       ? teamWorkers.find(w => w.id === workerId)?.username
       : null;
+    const poolLabel = crew ? `${crew.name} (${team?.name || 'team'})` : (team?.name || 'team');
     return execAction(
-      () => dispatchToTeam(report.id, Number(selectedTeam), workerId, assignNote),
+      () => dispatchToTeam(report.id, Number(selectedTeam), workerId, assignNote, crewId),
       who
         ? `Assigned directly to ${who}. Task is now In Process.`
-        : `Sent to the ${team?.name || 'team'} pool — the first available worker can accept it.`,
+        : `Sent to the ${poolLabel} pool — the first available worker can accept it.`,
       'In Process'
     );
   };
@@ -597,6 +645,20 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
     return execAction(
       () => transferReport(report.id, Number(transferTeam), transferReason),
       `Transferred to ${target?.name || 'the selected team'}. It is now in their pool.`,
+      'In Process'
+    );
+  };
+
+  const handleReassignCrew = () => {
+    // An empty selection means "move to the general (crew-less) pool" — a
+    // legitimate destination, not a missing choice, so nothing to block here.
+    const crewId = reassignCrewTarget ? Number(reassignCrewTarget) : null;
+    const crew = crewId ? ownCrews.find(c => c.id === crewId) : null;
+    return execAction(
+      () => reassignCrew(report.id, crewId, reassignNote),
+      crew
+        ? `Moved to ${crew.name}'s pool.`
+        : 'Moved back to the general team pool.',
       'In Process'
     );
   };
@@ -917,16 +979,38 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                       ))}
                     </select>
                   </div>
+                  {crews.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Crew</label>
+                      <select value={selectedCrew} onChange={e => { setSelectedCrew(e.target.value); setPinnedWorker(''); }} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}>
+                        <option value="">Whole team — any worker can accept</option>
+                        {crews.map(c => (
+                          <option key={c.id} value={c.id} disabled={c.status === 'disabled'}>
+                            {c.name}{c.status === 'disabled' ? ' (disabled)' : ''} — {c.members.length} member{c.members.length === 1 ? '' : 's'}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-2 text-[11px] text-zinc-500">
+                        Pick a crew to scope this to just their pool, e.g. "Team A" — only Team A sees and can accept it.
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Assign to</label>
                     <select value={pinnedWorker} onChange={e => setPinnedWorker(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}>
-                      <option value="">Leave in team pool — first available worker accepts</option>
-                      {teamWorkers.map(w => (
-                        <option key={w.id} value={w.id}>{w.username} ({w.active_jobs} active)</option>
-                      ))}
+                      <option value="">
+                        {selectedCrew ? 'Leave in crew pool — first available member accepts' : 'Leave in team pool — first available worker accepts'}
+                      </option>
+                      {teamWorkers
+                        .filter(w => !selectedCrew || String(w.crew_id) === String(selectedCrew))
+                        .map(w => (
+                          <option key={w.id} value={w.id} disabled={w.on_leave}>
+                            {w.username} ({w.active_jobs} active){w.on_leave ? ' — on leave' : ''}
+                          </option>
+                        ))}
                     </select>
                     <p className="mt-2 text-[11px] text-zinc-500">
-                      Pool is the default: every worker on the team sees it and the first to accept claims it.
+                      Pool is the default: everyone in scope sees it and the first to accept claims it.
                     </p>
                   </div>
                   <div>
@@ -934,7 +1018,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                     <textarea value={assignNote} onChange={e => setAssignNote(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-xl text-sm resize-none" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }} />
                   </div>
                   <button onClick={handleAuthorityAssign} disabled={actionLoading || !selectedTeam} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 disabled:opacity-50 border border-white cursor-pointer">
-                    {actionLoading ? 'Dispatching...' : (pinnedWorker ? 'Assign to Worker' : 'Send to Team Pool')}
+                    {actionLoading ? 'Dispatching...' : (pinnedWorker ? 'Assign to Worker' : 'Send to Pool')}
                   </button>
                 </div>
               </div>
@@ -948,15 +1032,27 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                     <Send size={18} className="text-white" />
                     <p className="text-sm font-bold text-white">Team Status</p>
                   </div>
-                  <button onClick={() => setShowTransfer(v => !v)} className="text-xs font-semibold text-zinc-300 hover:text-white cursor-pointer">
-                    {showTransfer ? 'Cancel' : 'Transfer team'}
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {ownCrews.length > 0 && (
+                      <button onClick={() => setShowReassign(v => !v)} className="text-xs font-semibold text-zinc-300 hover:text-white cursor-pointer">
+                        {showReassign ? 'Cancel' : 'Move crew'}
+                      </button>
+                    )}
+                    <button onClick={() => setShowTransfer(v => !v)} className="text-xs font-semibold text-zinc-300 hover:text-white cursor-pointer">
+                      {showTransfer ? 'Cancel' : 'Transfer team'}
+                    </button>
+                  </div>
                 </div>
                 <div className="p-5 space-y-3">
                   <div className="flex flex-wrap gap-2 text-xs">
                     <span className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300">
                       Team: <strong className="text-white">{report.assigned_team || report.assigned_department || 'Unassigned'}</strong>
                     </span>
+                    {report.assigned_crew && (
+                      <span className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300">
+                        Crew: <strong className="text-white">{report.assigned_crew}</strong>
+                      </span>
+                    )}
                     <span className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-300">
                       {report.assigned_worker
                         ? <>Claimed by <strong className="text-white">{report.assigned_worker}</strong></>
@@ -968,6 +1064,32 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                       </span>
                     )}
                   </div>
+
+                  {showReassign && (
+                    <div className="space-y-3 pt-2">
+                      <div>
+                        <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Move to crew</label>
+                        <select value={reassignCrewTarget} onChange={e => setReassignCrewTarget(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}>
+                          <option value="">General pool — whole team</option>
+                          {ownCrews.filter(c => c.id !== report.assigned_crew_id).map(c => (
+                            <option key={c.id} value={c.id} disabled={c.status === 'disabled'}>
+                              {c.name}{c.status === 'disabled' ? ' (disabled)' : ''} — {c.members.length} member{c.members.length === 1 ? '' : 's'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold mb-2" style={{ color: '#ffffff' }}>Note</label>
+                        <textarea value={reassignNote} onChange={e => setReassignNote(e.target.value)} rows={2} placeholder="e.g. Team A is overloaded, Team B has room" className="w-full px-3 py-2 rounded-xl text-sm resize-none" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }} />
+                      </div>
+                      <button onClick={handleReassignCrew} disabled={actionLoading} className="w-full py-3 bg-white text-black font-bold text-sm rounded-xl hover:bg-zinc-200 disabled:opacity-50 border border-white cursor-pointer">
+                        {actionLoading ? 'Moving...' : 'Move Crew'}
+                      </button>
+                      <p className="text-[11px] text-zinc-500">
+                        Stays within {report.assigned_team || 'this team'} — no approval needed. If the current claimant isn't on the destination crew, the job goes back to unclaimed.
+                      </p>
+                    </div>
+                  )}
 
                   {showTransfer && (
                     <div className="space-y-3 pt-2">

@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Users, AlertTriangle, Clock, TrendingDown, TrendingUp, Send,
-  CheckCircle2, RefreshCw, Inbox, X,
+  CheckCircle2, RefreshCw, Inbox, X, Plus, UserMinus, Coffee, Power,
 } from 'lucide-react';
 import {
   fetchTeamWorkload, fetchTeamWorkers, fetchTransfers,
   approveTransfer, denyTransfer,
+  fetchCrews, fetchCrewWorkload, createCrew, updateCrew,
+  addCrewMember, removeCrewMember, setStaffLeave,
 } from '../api/reportsApi';
 
 // One place decides what a team's colour means; the backend hands us the
@@ -25,6 +27,221 @@ function Metric({ icon, label, value, hint, alert }) {
       </div>
       <p className="text-xl font-bold" style={{ color: alert ? '#fbbf24' : '#f1f5f9' }}>{value}</p>
       {hint && <p className="text-[11px] mt-0.5" style={{ color: '#64748b' }}>{hint}</p>}
+    </div>
+  );
+}
+
+const CREW_STATUS_STYLE = {
+  bottleneck: '#f87171',
+  strained: '#fbbf24',
+  healthy: '#4ade80',
+};
+
+// Crew management for the authority's own team: create crews, move workers
+// between them, take a crew or a single worker offline. Only rendered for
+// team.is_mine — the backend rejects managing another agency's crews anyway,
+// so there's no point showing controls that would just 403.
+function CrewManager({ teamId, roster, onChanged }) {
+  const [crews, setCrews] = useState([]);
+  const [workload, setWorkload] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [newCrewName, setNewCrewName] = useState('');
+  const [addTarget, setAddTarget] = useState({}); // crewId -> staffId being added
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      const [crewList, wl] = await Promise.all([
+        fetchCrews(teamId),
+        fetchCrewWorkload(teamId).catch(() => null),
+      ]);
+      setCrews(crewList);
+      const byId = {};
+      (wl?.crews || []).forEach(c => { byId[c.id ?? 'unassigned'] = c; });
+      setWorkload(byId);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [teamId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (key, fn) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await fn();
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleCreateCrew = () => {
+    const name = newCrewName.trim();
+    if (!name) return;
+    run('create', async () => {
+      await createCrew(teamId, name);
+      setNewCrewName('');
+    });
+  };
+
+  const unassigned = roster.filter(w => !w.crew_id);
+
+  if (loading) {
+    return <p className="text-xs" style={{ color: '#64748b' }}>Loading crews...</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(248,113,113,0.12)', color: '#fca5a5' }}>
+          {error}
+        </div>
+      )}
+
+      {crews.map(crew => {
+        const stats = workload[crew.id];
+        const tone = stats ? CREW_STATUS_STYLE[stats.derived_status] : '#94a3b8';
+        return (
+          <div key={crew.id} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${crew.status === 'disabled' ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
+            <div className="flex items-center justify-between px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold" style={{ color: '#f1f5f9' }}>{crew.name}</span>
+                {stats && (
+                  <span className="text-[10px] font-bold uppercase" style={{ color: tone }}>{stats.derived_status}</span>
+                )}
+                {crew.status === 'disabled' && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(248,113,113,0.15)', color: '#fca5a5' }}>DISABLED</span>
+                )}
+              </div>
+              <button
+                onClick={() => run(`toggle-${crew.id}`, () => updateCrew(crew.id, { status: crew.status === 'disabled' ? 'active' : 'disabled' }))}
+                disabled={busy === `toggle-${crew.id}`}
+                title={crew.status === 'disabled' ? 'Re-enable this crew' : 'Disable this crew (e.g. whole crew on leave)'}
+                className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                style={{ color: crew.status === 'disabled' ? '#4ade80' : '#fca5a5' }}
+              >
+                <Power size={12} /> {crew.status === 'disabled' ? 'Enable' : 'Disable'}
+              </button>
+            </div>
+
+            {stats && (
+              <div className="px-3 py-2 text-[11px] flex flex-wrap gap-x-3 gap-y-1" style={{ color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <span>{stats.open_count} open · {stats.unclaimed_count} unclaimed</span>
+                <span>{stats.load_per_worker != null ? `${stats.load_per_worker} per worker` : 'no active workers'}</span>
+                {stats.on_leave_count > 0 && <span style={{ color: '#fbbf24' }}>{stats.on_leave_count} on leave</span>}
+                {stats.sla_breached_count > 0 && <span style={{ color: '#f87171' }}>{stats.sla_breached_count} past SLA</span>}
+              </div>
+            )}
+
+            <div className="p-3 space-y-1.5">
+              {crew.members.length === 0 && (
+                <p className="text-xs" style={{ color: '#64748b' }}>No members yet.</p>
+              )}
+              {crew.members.map(m => (
+                <div key={m.id} className="flex items-center justify-between text-sm py-1 px-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                  <div className="flex items-center gap-2">
+                    <span style={{ color: '#e2e8f0' }}>{m.username}</span>
+                    <span className="text-[11px]" style={{ color: m.active_jobs >= 5 ? '#fbbf24' : '#64748b' }}>{m.active_jobs} active</span>
+                    {m.on_leave && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>ON LEAVE</span>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => run(`leave-${m.id}`, () => setStaffLeave(m.id, !m.on_leave))}
+                      disabled={busy === `leave-${m.id}`}
+                      title={m.on_leave ? 'Mark back from leave' : 'Mark on leave'}
+                      className="cursor-pointer disabled:opacity-50"
+                      style={{ color: m.on_leave ? '#4ade80' : '#94a3b8' }}
+                    >
+                      <Coffee size={13} />
+                    </button>
+                    <button
+                      onClick={() => run(`rm-${m.id}`, () => removeCrewMember(crew.id, m.id))}
+                      disabled={busy === `rm-${m.id}`}
+                      title="Remove from crew"
+                      className="cursor-pointer disabled:opacity-50"
+                      style={{ color: '#fca5a5' }}
+                    >
+                      <UserMinus size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex items-center gap-2 pt-1">
+                <select
+                  value={addTarget[crew.id] || ''}
+                  onChange={e => setAddTarget(prev => ({ ...prev, [crew.id]: e.target.value }))}
+                  className="flex-1 px-2 py-1.5 rounded-lg text-xs"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }}
+                >
+                  <option value="">Add worker...</option>
+                  {roster.filter(w => w.crew_id !== crew.id).map(w => (
+                    <option key={w.id} value={w.id}>{w.username}{w.crew_id ? ' (on another crew)' : ''}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    const staffId = addTarget[crew.id];
+                    if (!staffId) return;
+                    run(`add-${crew.id}`, async () => {
+                      await addCrewMember(crew.id, Number(staffId));
+                      setAddTarget(prev => ({ ...prev, [crew.id]: '' }));
+                    });
+                  }}
+                  disabled={!addTarget[crew.id] || busy === `add-${crew.id}`}
+                  className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30"
+                  style={{ background: 'rgba(255,255,255,0.08)', color: '#e2e8f0' }}
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {unassigned.length > 0 && (
+        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)' }}>
+          <p className="text-[11px] font-semibold mb-1.5" style={{ color: '#64748b' }}>
+            Not on a crew — visible in the general pool
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {unassigned.map(w => (
+              <span key={w.id} className="text-xs px-2 py-1 rounded-lg" style={{ background: 'rgba(255,255,255,0.05)', color: '#cbd5e1' }}>
+                {w.username}{w.on_leave ? ' · on leave' : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <input
+          value={newCrewName}
+          onChange={e => setNewCrewName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleCreateCrew()}
+          placeholder="New crew name, e.g. Team C"
+          className="flex-1 px-3 py-2 rounded-xl text-sm"
+          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}
+        />
+        <button
+          onClick={handleCreateCrew}
+          disabled={!newCrewName.trim() || busy === 'create'}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
+          style={{ background: '#f1f5f9', color: '#0f172a' }}
+        >
+          <Plus size={14} /> Crew
+        </button>
+      </div>
     </div>
   );
 }
@@ -57,17 +274,20 @@ export function TeamsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const reloadRoster = async (teamId) => {
+    try {
+      const roster = await fetchTeamWorkers(teamId);
+      setRosters(prev => ({ ...prev, [teamId]: roster }));
+    } catch {
+      // Keep whatever roster is already cached rather than blanking it on a
+      // transient failure.
+    }
+  };
+
   const toggleRoster = async (teamId) => {
     if (expanded === teamId) return setExpanded(null);
     setExpanded(teamId);
-    if (!rosters[teamId]) {
-      try {
-        const roster = await fetchTeamWorkers(teamId);
-        setRosters(prev => ({ ...prev, [teamId]: roster }));
-      } catch {
-        setRosters(prev => ({ ...prev, [teamId]: [] }));
-      }
-    }
+    if (!rosters[teamId]) await reloadRoster(teamId);
   };
 
   const decide = async (transfer, approve) => {
@@ -252,22 +472,39 @@ export function TeamsPage() {
               </button>
 
               {expanded === team.id && (
-                <div className="px-5 pb-5 space-y-2">
-                  {(rosters[team.id] || []).length === 0 ? (
-                    <p className="text-xs" style={{ color: '#64748b' }}>
-                      No workers on this team{team.open_count > 0 ? ' — work here has nobody to pick it up.' : '.'}
-                    </p>
+                <div className="px-5 pb-5 space-y-4">
+                  {team.is_mine ? (
+                    (rosters[team.id] || []).length === 0 ? (
+                      <p className="text-xs" style={{ color: '#64748b' }}>
+                        No workers on this team{team.open_count > 0 ? ' — work here has nobody to pick it up.' : '.'}
+                      </p>
+                    ) : (
+                      <CrewManager
+                        teamId={team.id}
+                        roster={rosters[team.id] || []}
+                        onChanged={() => reloadRoster(team.id)}
+                      />
+                    )
                   ) : (
-                    rosters[team.id].map(w => (
-                      <div key={w.id} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg"
-                        style={{ background: 'rgba(255,255,255,0.04)' }}>
-                        <span style={{ color: '#e2e8f0' }}>{w.username}</span>
-                        <span className="text-xs font-semibold"
-                          style={{ color: w.active_jobs >= 5 ? '#fbbf24' : '#94a3b8' }}>
-                          {w.active_jobs} active
-                        </span>
-                      </div>
-                    ))
+                    <div className="space-y-2">
+                      <p className="text-[11px]" style={{ color: '#64748b' }}>
+                        Crew membership is managed by {team.name}'s own authority.
+                      </p>
+                      {(rosters[team.id] || []).length === 0 ? (
+                        <p className="text-xs" style={{ color: '#64748b' }}>No workers on this team.</p>
+                      ) : (
+                        rosters[team.id].map(w => (
+                          <div key={w.id} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg"
+                            style={{ background: 'rgba(255,255,255,0.04)' }}>
+                            <span style={{ color: '#e2e8f0' }}>{w.username}</span>
+                            <span className="text-xs font-semibold"
+                              style={{ color: w.active_jobs >= 5 ? '#fbbf24' : '#94a3b8' }}>
+                              {w.active_jobs} active
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
               )}
