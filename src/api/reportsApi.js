@@ -274,6 +274,31 @@ export const fetchTransfers = async (status = 'pending') => {
   return response.json();
 };
 
+/**
+ * Workflow audit trail, if this backend serves it.
+ *
+ * Returns `null` when the endpoint is absent or the caller may not read it, and
+ * `[]` when it exists but has no rows. The distinction matters: the page must be
+ * able to tell "no data" from "no endpoint", because they warrant different
+ * captions. Every audit-derived figure has a scalar-timestamp equivalent, so a
+ * missing endpoint degrades the detail rather than blanking the panel.
+ */
+export const fetchAuthorityActions = async ({ reportId, since, limit = 5000 } = {}) => {
+  const qs = new URLSearchParams();
+  if (reportId != null) qs.set('report_id', String(reportId));
+  if (since) qs.set('since', since);
+  qs.set('limit', String(limit));
+
+  const response = await fetch(`${API_URL}/reports/actions?${qs}`, {
+    headers: getAuthHeaders(),
+  });
+
+  // 404/405 → backend predates the endpoint. 403 → present but not for this role.
+  if ([403, 404, 405, 501].includes(response.status)) return null;
+  if (!response.ok) throw await parseError(response, 'Failed to load audit trail');
+  return response.json();
+};
+
 export const approveTransfer = async (transferId, to_agency_id = null, note = '') => {
   const response = await fetch(`${API_URL}/transfers/${transferId}/approve`, {
     method: 'POST',

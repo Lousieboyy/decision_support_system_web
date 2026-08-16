@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { fetchAllReports } from '../api/reportsApi';
+import { fetchAllReports, fetchAuthorityActions } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
@@ -14,11 +14,11 @@ import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity
+  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck
 } from 'lucide-react';
-import { format, parseISO, subDays, startOfWeek } from 'date-fns';
+import { format, parseISO, subDays } from 'date-fns';
 import {
-  SLA_END_TO_END_DAYS, CLUSTER, REINCIDENCE, INSIGHT, MIN_N_FOR_SCORE, gradeFor,
+  SLA_END_TO_END_DAYS, CLUSTER, REINCIDENCE, INSIGHT, MIN_N_FOR_SCORE, CRITICALITY, gradeFor,
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
@@ -27,6 +27,7 @@ import {
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
+import { DispatchAudit } from '../components/DispatchAudit';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 
@@ -171,12 +172,11 @@ export function AnalyticsPage() {
   }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
+  // null = endpoint absent or forbidden; [] = present but empty. The two mean
+  // different things to the UI, so they must stay distinguishable.
+  const [auditActions, setAuditActions] = useState(null);
   const [activeTab, setActiveTab] = useState('single');
   const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'dispatch'
-  const [upvoteWeight, setUpvoteWeight] = useState(1.0);
-  const [priorityWeight, setPriorityWeight] = useState(1.0);
-  const [agingWeight, setAgingWeight] = useState(1.0);
-  const [trustWeight, setTrustWeight] = useState(1.0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -191,6 +191,14 @@ export function AnalyticsPage() {
       // Pass the user role to fetchAllReports to ensure secure data fetching.
       // Paginated so analytics cover the whole dataset, not just the newest page.
       const data = await fetchAllReports(role || 'admin');
+
+      // Optional enrichment. Held as null-when-absent so the UI can distinguish
+      // "no audit rows" from "no audit endpoint", and never allowed to block the
+      // page — every panel works from the scalar timestamps without it.
+      fetchAuthorityActions({ since: subDays(new Date(), 90).toISOString() })
+        .then(setAuditActions)
+        .catch(() => setAuditActions(null));
+
       const reportsWithPriority = data.map(r => ({
         ...r,
         priority: getPriority(r.status, r.categories)
@@ -447,28 +455,41 @@ export function AnalyticsPage() {
       }
     });
 
-    // Run distance check to find repeat complaints in proximity of resolved ones (within 50m and 60 days)
+    // A repeat incident is an unresolved report that reappeared near a previously
+    // resolved one of the same category. Each such report counts ONCE, attributed
+    // to the department that did the earlier repair. Counting every matching
+    // (unresolved, resolved) pair — the original behaviour — multiplied a single
+    // recurrence by the number of past fixes at that spot.
     unresolvedReports.forEach(unres => {
       // Submission time is `timestamp`; there is no `created_at` on the API payload.
       // Undated records are skipped rather than defaulted to now(), which would
       // force daysDiff to ~0 and make every undated pair look co-incident.
       const unresTime = unres.timestamp ? new Date(unres.timestamp).getTime() : null;
       if (!unresTime) return;
+
+      let nearest = null;
+      let nearestDist = Infinity;
       resolvedReports.forEach(res => {
         const resTime = res.timestamp ? new Date(res.timestamp).getTime() : null;
         if (!resTime) return;
         const daysDiff = Math.abs(unresTime - resTime) / (1000 * 60 * 60 * 24);
+        if (daysDiff > REINCIDENCE.windowDays) return;
+        if (canonicalizeCategory(unres.categories || unres.ai_prediction) !==
+            canonicalizeCategory(res.categories || res.ai_prediction)) return;
 
-        if (daysDiff <= REINCIDENCE.windowDays && canonicalizeCategory(unres.categories || unres.ai_prediction) === canonicalizeCategory(res.categories || res.ai_prediction)) {
-          const dist = calculateDistance(unres.latitude, unres.longitude, res.latitude, res.longitude);
-          if (dist <= REINCIDENCE.radiusM) { // Same spot repeat complaint
-            const dept = res.assigned_department || '';
-            if (dept.toLowerCase().includes('jkr')) reIncidenceCount.JKR++;
-            else if (dept.toLowerCase().includes('mbmb')) reIncidenceCount.MBMB++;
-            else if (dept.toLowerCase().includes('swcorp')) reIncidenceCount.SWCorp++;
-          }
+        const dist = calculateDistance(unres.latitude, unres.longitude, res.latitude, res.longitude);
+        if (dist <= REINCIDENCE.radiusM && dist < nearestDist) {
+          nearestDist = dist;
+          nearest = res;
         }
       });
+
+      if (nearest) {
+        const dept = (nearest.assigned_department || '').toLowerCase();
+        if (dept.includes('jkr')) reIncidenceCount.JKR++;
+        else if (dept.includes('mbmb')) reIncidenceCount.MBMB++;
+        else if (dept.includes('swcorp')) reIncidenceCount.SWCorp++;
+      }
     });
 
     // Actual SLA resolution rates (resolved within the target), measured from
@@ -507,22 +528,16 @@ export function AnalyticsPage() {
       SWCorp: calculateSLARate(onTimeResolved.SWCorp, datedResolved.SWCorp),
     };
 
-    // A null rate means "not measured", which is not the same as failing —
-    // grading an unmeasured department F would be as misleading as the old
-    // 92% default. Phase 1 replaces this with the shared GRADE_SCALE.
-    const getGrade = (rate) => {
-      if (rate == null) return null;
-      if (rate >= 90) return 'A (Optimal)';
-      if (rate >= 80) return 'B (Good)';
-      if (rate >= 70) return 'C (Satisfactory)';
-      return 'F (Audit Warning)';
-    };
-
-    return [
-      { name: 'JKR (Road Works)', rate: rates.JKR, grade: getGrade(rates.JKR), color: '#3b82f6' },
-      { name: 'MBMB (Municipal Lighting)', rate: rates.MBMB, grade: getGrade(rates.MBMB), color: '#10b981' },
-      { name: 'SWCorp (Sewerage & Waste)', rate: rates.SWCorp, grade: getGrade(rates.SWCorp), color: '#ef4444' },
-    ];
+    // Names come from the authority table rather than the invented role labels
+    // ("JKR (Road Works)") this used to carry. Grading is left to the shared
+    // rubric in the render layer, so a null rate reads as unmeasured, not F.
+    return ['JKR', 'MBMB', 'SWCorp'].map((key) => ({
+      key,
+      name: AUTHORITIES.find((a) => a.abbr === key)?.name || key,
+      rate: rates[key],
+      reIncidence: reIncidenceCount[key],
+      resolvedCount: datedResolved[key],
+    }));
   }, [filteredReports]);
 
   // 1c.5. Reporter Trust Map calculation based on reports
@@ -574,14 +589,16 @@ export function AnalyticsPage() {
         r => getPriority(r.status, r.categories || r.ai_prediction) === 'High'
       ).length;
 
-      // Criticality Score Equation
-      let rawScore = (item.size * 8) + 
-                      (item.upvotes * upvoteWeight * 1.5) + 
-                      (highPriorityCount * 15 * priorityWeight) + 
-                      (avgElapsed * 4 * agingWeight);
+      // Criticality score. The tunable terms live in CRITICALITY so each one can
+      // be explained; they were previously multiplied by four state values that
+      // had no UI and were permanently 1.0.
+      let rawScore = (item.size * CRITICALITY.size) +
+                      (item.upvotes * CRITICALITY.upvote) +
+                      (highPriorityCount * CRITICALITY.highPriority) +
+                      (avgElapsed * CRITICALITY.agingPerDay);
 
       if (item.isSystemic) {
-        rawScore += 15;
+        rawScore += CRITICALITY.systemicBonus;
       }
 
       // Normalize score between 0 and 100
@@ -604,14 +621,14 @@ export function AnalyticsPage() {
       const avgTrust = Math.round(avgTrustFraction * 100);
 
       // Unified Priority Score combining criticality, trust weight, and compactness confidence
-      const trustTerm = 1.0 - (1.0 - avgTrustFraction) * (trustWeight / 3.0);
+      const trustTerm = 1.0 - (1.0 - avgTrustFraction) / CRITICALITY.trustDamping;
       const priorityScore = Math.min(100, Math.max(0, Math.round(score * trustTerm * confidenceFraction)));
 
       // Determine the primary driving risk factor
       let primaryRisk = 'Density Threshold';
-      const upvoteVal = item.upvotes * upvoteWeight * 1.5;
-      const priorityVal = highPriorityCount * 15 * priorityWeight;
-      const agingVal = avgElapsed * 4 * agingWeight;
+      const upvoteVal = item.upvotes * CRITICALITY.upvote;
+      const priorityVal = highPriorityCount * CRITICALITY.highPriority;
+      const agingVal = avgElapsed * CRITICALITY.agingPerDay;
 
       if (upvoteVal > priorityVal && upvoteVal > agingVal) {
         primaryRisk = 'Citizen Urgency';
@@ -644,7 +661,7 @@ export function AnalyticsPage() {
 
     // Sort by priority score descending
     return computed.sort((a, b) => b.priorityScore - a.priorityScore);
-  }, [hotspots, rootCauseAdvisories, upvoteWeight, priorityWeight, agingWeight, reporterTrustMap, trustWeight, proximityRadius]);
+  }, [hotspots, rootCauseAdvisories, reporterTrustMap, proximityRadius]);
 
   // Department scopes offered by the filter, derived from the data rather than a
   // hardcoded list of three. Declared before deptSLAMetrics, which consumes it.
@@ -1325,6 +1342,17 @@ export function AnalyticsPage() {
         >
           <Activity size={15} />
           City Health
+        </button>
+        <button
+          onClick={() => setActiveViewTab('dispatch')}
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeViewTab === 'dispatch'
+              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
+              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
+          }`}
+        >
+          <Truck size={15} />
+          Dispatch &amp; Audit
         </button>
       </div>
 
@@ -2070,6 +2098,18 @@ export function AnalyticsPage() {
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* ==================== DISPATCH & AUDIT TAB ==================== */}
+        {activeViewTab === 'dispatch' && (
+          <div className="space-y-6 animate-fade-in">
+            {filterBar}
+            <DispatchAudit
+              dispatchQueue={prioritizedDispatchQueue}
+              contractorAudit={contractorAudit}
+              auditActions={auditActions}
+            />
           </div>
         )}
 
