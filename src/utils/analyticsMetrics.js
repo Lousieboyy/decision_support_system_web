@@ -12,6 +12,7 @@ import {
   ZONE_UNMAPPED,
   ZONE_UNASSIGNED,
 } from './analyticsConstants';
+import { AUTHORITIES } from './authorities';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -117,6 +118,36 @@ export function deriveZone(report) {
   // mistakes it for a surveyed area name.
   const postcode = String(report?.location || report?.address || '').match(/\b\d{5}\b/);
   return postcode ? `Postcode ${postcode[0]}` : ZONE_UNASSIGNED;
+}
+
+/**
+ * Builds the department option list from the reports actually present.
+ *
+ * The filter previously offered exactly three hardcoded departments, so reports
+ * belonging to the other ten authorities could not be isolated at all. Listing
+ * every authority would mostly show empty scopes; listing the ones with data
+ * keeps the control honest. Falls back to the raw department string so a
+ * department outside the AUTHORITIES table is still selectable.
+ */
+export function deriveDepartmentOptions(reports) {
+  const counts = new Map();
+
+  for (const report of reports || []) {
+    const assigned = (report?.assigned_department || '').trim();
+    if (!assigned) continue;
+
+    const lower = assigned.toLowerCase();
+    const match = AUTHORITIES.find(
+      (a) => lower.includes(a.abbr.toLowerCase()) || lower.includes(a.id.toLowerCase())
+    );
+
+    const key = match ? match.abbr : assigned;
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { key, label: match ? `${match.abbr} — ${match.name}` : assigned, count: 1 });
+  }
+
+  return [...counts.values()].sort((a, b) => b.count - a.count);
 }
 
 // ── Stage durations ──────────────────────────────────────────────────────────

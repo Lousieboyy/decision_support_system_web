@@ -1,6 +1,7 @@
 import {
   toDate, mean, median, percentile, canonicalizeCategory, deriveZone,
   stageDurations, endToEndDays, buildFunnel, buildComposition, STAGES,
+  deriveDepartmentOptions,
 } from './analyticsMetrics';
 import { gradeFor, SPI_WEIGHTS, UCI_WEIGHTS, SLA_TARGET_DAYS, SLA_END_TO_END_DAYS } from './analyticsConstants';
 
@@ -183,6 +184,32 @@ describe('analyticsMetrics', () => {
       expect(gradeFor(59).grade).to.equal('F');
       expect(gradeFor(0).grade).to.equal('F');
       expect(gradeFor(null)).to.equal(null);
+    });
+  });
+
+  describe('deriveDepartmentOptions', () => {
+    it('surfaces authorities beyond the three that used to be hardcoded', () => {
+      const opts = deriveDepartmentOptions([
+        { assigned_department: 'MBMB' },
+        { assigned_department: 'MBMB' },
+        { assigned_department: 'JPS (Jabatan Pengairan dan Saliran Melaka)' },
+        { assigned_department: 'IWK' },
+      ]);
+      const keys = opts.map((o) => o.key);
+      expect(keys).to.include('JPS');
+      expect(keys).to.include('IWK');
+      expect(opts[0]).to.deep.include({ key: 'MBMB', count: 2 }); // busiest first
+    });
+
+    it('keeps an unrecognised department selectable rather than dropping it', () => {
+      const opts = deriveDepartmentOptions([{ assigned_department: 'Some New Agency' }]);
+      expect(opts).to.have.length(1);
+      expect(opts[0].key).to.equal('Some New Agency');
+    });
+
+    it('ignores reports with no department', () => {
+      expect(deriveDepartmentOptions([{ assigned_department: '' }, {}])).to.have.length(0);
+      expect(deriveDepartmentOptions([])).to.have.length(0);
     });
   });
 

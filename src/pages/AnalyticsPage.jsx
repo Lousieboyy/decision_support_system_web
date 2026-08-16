@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, Legend,
+  BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { MapContainer, TileLayer, useMap, Circle } from 'react-leaflet';
@@ -13,18 +13,19 @@ import 'leaflet.heat';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import {
-  TrendingUp, Clock, AlertTriangle, AlertCircle, Sparkles, Download, Info,
-  MapPin, RefreshCw, BarChart2, ShieldAlert, CheckCircle2, ChevronRight,
-  SlidersHorizontal, ChevronLeft, Eye, Trash2, Workflow, Award, Truck, Sliders,
-  Lightbulb, Heart, Activity
+  AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
+  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity
 } from 'lucide-react';
 import { format, parseISO, subDays, startOfWeek } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, CLUSTER, REINCIDENCE, INSIGHT, MIN_N_FOR_SCORE, gradeFor,
 } from '../utils/analyticsConstants';
 import {
-  calculateDistance, canonicalizeCategory, deriveZone,
+  calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
 } from '../utils/analyticsMetrics';
+import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
+
+const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 
 // Helper to compute priority on the fly matching the mobile app logic
 const getPriority = (status, categories) => {
@@ -146,10 +147,25 @@ export function AnalyticsPage() {
   // Hotspot Parameters
   const [proximityRadius, setProximityRadius] = useState(CLUSTER.radiusM);
   const [minClusterSize, setMinClusterSize] = useState(CLUSTER.minSize);
-  const [showParams, setShowParams] = useState(false);
 
-  // Hotspot overrides and exclusions state
-  const [customOverrides, setCustomOverrides] = useState({});
+  // Hotspot overrides and exclusions. Persisted, because renaming a hotspot and
+  // rewriting its recommendation is real analyst work that used to be discarded
+  // on the next refresh.
+  const [customOverrides, setCustomOverrides] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(HOTSPOT_OVERRIDES_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(HOTSPOT_OVERRIDES_KEY, JSON.stringify(customOverrides));
+    } catch {
+      // A full or unavailable localStorage must not break the page.
+    }
+  }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   const [activeTab, setActiveTab] = useState('single');
@@ -627,10 +643,18 @@ export function AnalyticsPage() {
     return computed.sort((a, b) => b.priorityScore - a.priorityScore);
   }, [hotspots, rootCauseAdvisories, upvoteWeight, priorityWeight, agingWeight, reporterTrustMap, trustWeight, proximityRadius]);
 
+  // Department scopes offered by the filter, derived from the data rather than a
+  // hardcoded list of three. Declared before deptSLAMetrics, which consumes it.
+  const departmentOptions = useMemo(() => deriveDepartmentOptions(reports), [reports]);
+
   // 2. Department SLA Performance calculation
   const deptSLAMetrics = useMemo(() => {
     const metrics = {};
-    const filteredAuthorities = AUTHORITIES.filter(a => ['mbmb', 'jkr', 'swcorp'].includes(a.id));
+    // Every authority that actually appears in the data, not a hardcoded three.
+    // Reports belonging to the other ten were previously dropped from all SLA
+    // and backlog arithmetic without any indication on screen.
+    const presentAbbrs = new Set(departmentOptions.map((d) => d.key));
+    const filteredAuthorities = AUTHORITIES.filter((a) => presentAbbrs.has(a.abbr));
     filteredAuthorities.forEach((a) => {
       metrics[a.abbr] = {
         name: a.abbr,
@@ -690,7 +714,7 @@ export function AnalyticsPage() {
 
       return { ...m, avgResponseDays, avgResolveDays };
     });
-  }, [filteredReports]);
+  }, [filteredReports, departmentOptions]);
 
   // Only departments with a measurable resolve time reach the SLA chart, so a
   // department that has never closed a ticket contributes no bar at all rather
@@ -1337,6 +1361,20 @@ export function AnalyticsPage() {
     ? (hotspots.find(h => h.id === activeClusterId) || rootCauseAdvisories.find(a => a.id === activeClusterId))
     : null;
 
+  // One instance rendered on every tab. City Health previously had no filter UI
+  // at all despite being filter-sensitive, so it silently reflected whatever had
+  // been selected on another tab.
+  const filterBar = (
+    <AnalyticsFilterBar
+      dateFilter={dateFilter}
+      onDateFilterChange={setDateFilter}
+      selectedDept={selectedDept}
+      onDeptChange={setSelectedDept}
+      departments={departmentOptions}
+      canChooseDept={role === 'admin'}
+    />
+  );
+
   return (
     <div className="p-6 md:p-8 space-y-6">
       {/* Top action header bar */}
@@ -1409,46 +1447,7 @@ export function AnalyticsPage() {
         {/* ==================== OVERVIEW & TRENDS TAB ==================== */}
         {activeViewTab === 'overview' && (
           <div className="space-y-6 animate-fade-in">
-            {/* Control Panel / Filter Bar */}
-            <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-5">
-              <div className="flex flex-wrap items-center gap-6 text-left">
-                {/* Date Filter */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Time Interval</label>
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[150px]"
-                  >
-                    <option value="all">All Time</option>
-                    <option value="7d">Last 7 Days</option>
-                    <option value="30d">Last 30 Days</option>
-                  </select>
-                </div>
-
-                {/* Department Filter */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Department Scope</label>
-                  {role === 'admin' ? (
-                    <select
-                      value={selectedDept}
-                      onChange={(e) => setSelectedDept(e.target.value)}
-                      className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[180px]"
-                    >
-                      <option value="all">All Departments</option>
-                      <option value="JKR">JKR (Public Works)</option>
-                      <option value="MBMB">MBMB (City Council)</option>
-                      <option value="SWCorp">SWCorp (Waste Management)</option>
-                    </select>
-                  ) : (
-                    <div className="bg-[#f5f1e6] border border-[#1f1e1a]/8 text-[#4b473d] px-4 py-2 rounded-xl text-xs font-bold min-w-[180px] flex items-center gap-1.5 h-[34px]">
-                      <span className="w-2 h-2 rounded-full bg-[#8a8477]" />
-                      {selectedDept === 'all' ? 'All Departments' : `${selectedDept}`}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+            {filterBar}
 
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
@@ -1674,48 +1673,7 @@ export function AnalyticsPage() {
         {/* ==================== PREDICTIVE HOTSPOTS TAB ==================== */}
         {activeViewTab === 'hotspots' && (
           <div className="space-y-6 animate-fade-in">
-            {/* Control Panel / Filter Bar */}
-            <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-5">
-              <div className="flex flex-wrap items-center justify-between gap-4 text-left">
-                <div className="flex flex-wrap items-center gap-4">
-                  {/* Date Filter */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Time Interval</label>
-                    <select
-                      value={dateFilter}
-                      onChange={(e) => setDateFilter(e.target.value)}
-                      className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[130px]"
-                    >
-                      <option value="all">All Time</option>
-                      <option value="7d">Last 7 Days</option>
-                      <option value="30d">Last 30 Days</option>
-                    </select>
-                  </div>
-
-                  {/* Department Filter */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Department Scope</label>
-                    {role === 'admin' ? (
-                      <select
-                        value={selectedDept}
-                        onChange={(e) => setSelectedDept(e.target.value)}
-                        className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[150px]"
-                      >
-                        <option value="all">All Departments</option>
-                        <option value="JKR">JKR (Public Works)</option>
-                        <option value="MBMB">MBMB (City Council)</option>
-                        <option value="SWCorp">SWCorp (Waste Management)</option>
-                      </select>
-                    ) : (
-                      <div className="bg-[#f5f1e6] border border-[#1f1e1a]/8 text-[#4b473d] px-4 py-2 rounded-xl text-xs font-bold min-w-[150px] flex items-center gap-1.5 h-[34px]">
-                        <span className="w-2 h-2 rounded-full bg-[#8a8477]" />
-                        {selectedDept === 'all' ? 'All Departments' : `${selectedDept}`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+            {filterBar}
 
             {/* Focused Map & List Workspace */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -2075,6 +2033,8 @@ export function AnalyticsPage() {
         {/* ==================== CITY HEALTH & WELLNESS TAB ==================== */}
         {activeViewTab === 'cityhealth' && (
           <div className="space-y-6 animate-fade-in">
+
+            {filterBar}
 
             {/* Row 1: CWI Gauge Hero + 6 Domain Health Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
