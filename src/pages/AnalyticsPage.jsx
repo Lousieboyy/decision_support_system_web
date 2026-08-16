@@ -19,10 +19,12 @@ import {
   Lightbulb, Heart, Activity
 } from 'lucide-react';
 import { format, parseISO, subDays, startOfWeek } from 'date-fns';
-
-// End-to-end resolution target, in days. Phase 1 relocates this (and the other
-// scattered thresholds) into src/utils/analyticsConstants.js.
-const SLA_TARGET_DAYS = 3;
+import {
+  SLA_END_TO_END_DAYS, CLUSTER, REINCIDENCE, INSIGHT, MIN_N_FOR_SCORE, gradeFor,
+} from '../utils/analyticsConstants';
+import {
+  calculateDistance, canonicalizeCategory, deriveZone,
+} from '../utils/analyticsMetrics';
 
 // Helper to compute priority on the fly matching the mobile app logic
 const getPriority = (status, categories) => {
@@ -106,42 +108,6 @@ function MapController({ focus }) {
   return null;
 }
 
-// Distance helper for geographic clustering (Haversine formula in meters)
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c * 1000; // meters
-}
-
-// Maps category names to canonical groups for better clustering
-function canonicalizeCategory(catName) {
-  const name = (catName || '').toLowerCase();
-  if (name.includes('road') || name.includes('pothole') || name.includes('sidewalk') || name.includes('pavement')) {
-    return 'Road Damage';
-  }
-  if (name.includes('light') || name.includes('lamp') || name.includes('lighting')) {
-    return 'Street Lighting';
-  }
-  if (name.includes('waste') || name.includes('garbage') || name.includes('dumping') || name.includes('trash') || name.includes('burning')) {
-    return 'Waste Management';
-  }
-  if (name.includes('drain') || name.includes('water') || name.includes('drainage') || name.includes('flood')) {
-    return 'Drainage System';
-  }
-  if (name.includes('vandal') || name.includes('graffiti') || name.includes('damage') || name.includes('property')) {
-    return 'Vandalism';
-  }
-  return 'Other Infrastructure';
-}
-
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
 export function AnalyticsPage() {
@@ -178,8 +144,8 @@ export function AnalyticsPage() {
   }, [initialDept]);
 
   // Hotspot Parameters
-  const [proximityRadius, setProximityRadius] = useState(250);
-  const [minClusterSize, setMinClusterSize] = useState(2);
+  const [proximityRadius, setProximityRadius] = useState(CLUSTER.radiusM);
+  const [minClusterSize, setMinClusterSize] = useState(CLUSTER.minSize);
   const [showParams, setShowParams] = useState(false);
 
   // Hotspot overrides and exclusions state
@@ -474,9 +440,9 @@ export function AnalyticsPage() {
         if (!resTime) return;
         const daysDiff = Math.abs(unresTime - resTime) / (1000 * 60 * 60 * 24);
 
-        if (daysDiff <= 60 && canonicalizeCategory(unres.categories || unres.ai_prediction) === canonicalizeCategory(res.categories || res.ai_prediction)) {
+        if (daysDiff <= REINCIDENCE.windowDays && canonicalizeCategory(unres.categories || unres.ai_prediction) === canonicalizeCategory(res.categories || res.ai_prediction)) {
           const dist = calculateDistance(unres.latitude, unres.longitude, res.latitude, res.longitude);
-          if (dist <= 50) { // Same spot repeat complaint
+          if (dist <= REINCIDENCE.radiusM) { // Same spot repeat complaint
             const dept = res.assigned_department || '';
             if (dept.toLowerCase().includes('jkr')) reIncidenceCount.JKR++;
             else if (dept.toLowerCase().includes('mbmb')) reIncidenceCount.MBMB++;
@@ -507,7 +473,7 @@ export function AnalyticsPage() {
       const end = r.resolved_at ? new Date(r.resolved_at).getTime() : null;
       if (!start || !end || isNaN(start) || isNaN(end)) return;
       datedResolved[key]++;
-      if ((end - start) / (1000 * 60 * 60 * 24) <= SLA_TARGET_DAYS) onTimeResolved[key]++;
+      if ((end - start) / (1000 * 60 * 60 * 24) <= SLA_END_TO_END_DAYS) onTimeResolved[key]++;
     });
 
     // null (not a number) when there is nothing to measure — the render layer
@@ -776,7 +742,7 @@ export function AnalyticsPage() {
       let healthStatus = 'Optimal';
       let recommendation = `Resources are currently balanced for ${selectedDept}.`;
       
-      if (backlog > 5) {
+      if (backlog > INSIGHT.backlogAlertTickets) {
         healthStatus = 'Backlog Warning';
         recommendation = `High backlog detected in ${selectedDept} (${backlog} active tickets). We recommend prioritizing outstanding tasks and allocating emergency budget to accelerate crew operations.`;
       }
@@ -806,7 +772,7 @@ export function AnalyticsPage() {
     let healthStatus = 'Optimal';
     let recommendation = 'Resources are currently balanced across departments.';
     
-    if (maxBacklog > 5) {
+    if (maxBacklog > INSIGHT.backlogAlertTickets) {
       healthStatus = 'Resource Overload';
       const helperDept = deptSLAMetrics.find((d) => d.name !== worstBacklogDept && d.backlog <= 2);
       recommendation = `Backlog detected in ${worstBacklogDept} (${maxBacklog} tickets). Suggest reallocating 15% labor capacity from ${
@@ -934,7 +900,7 @@ export function AnalyticsPage() {
     resolvedWithDates.forEach(r => {
       const start = new Date(r.timestamp).getTime();
       const end = new Date(r.resolved_at).getTime();
-      if (!isNaN(start) && !isNaN(end) && (end - start) / (1000 * 60 * 60 * 24) <= SLA_TARGET_DAYS) onTimeCount++;
+      if (!isNaN(start) && !isNaN(end) && (end - start) / (1000 * 60 * 60 * 24) <= SLA_END_TO_END_DAYS) onTimeCount++;
     });
     const efficiencyScore = resolvedWithDates.length > 0
       ? Math.round((onTimeCount / resolvedWithDates.length) * 100)
@@ -982,11 +948,9 @@ export function AnalyticsPage() {
       ? Math.round(included.reduce((s, k) => s + scoreByDomain[k] * CWI_WEIGHTS[k], 0) / weightSum)
       : null;
 
-    const getGrade = (s) => {
-      if (s == null) return null;
-      if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C';
-      if (s >= 60) return 'D'; return 'F';
-    };
+    // Shared rubric — see GRADE_SCALE. Previously this file carried three
+    // different scales that looked identical to anyone comparing their outputs.
+    const getGrade = (s) => gradeFor(s)?.grade ?? null;
 
     const domains = {
       infrastructure: { name: 'Infrastructure', score: infraScore, activeIssues: infraActive, totalReports: infraReports.length },
@@ -1004,7 +968,11 @@ export function AnalyticsPage() {
   const zoneScorecard = useMemo(() => {
     const zones = {};
     filteredReports.forEach(r => {
-      const zone = r.zone || r.location || (r.address ? r.address.split(',').pop()?.trim() : null) || 'Unknown';
+      // Reports have no zone field; deriveZone assigns a real Melaka locality by
+      // proximity. The old chain fell through to `location` (a postcode string)
+      // or the last part of the address (usually "Malaysia"), so the whole
+      // scorecard collapsed into one row.
+      const zone = deriveZone(r);
       if (!zones[zone]) zones[zone] = { name: zone, total: 0, active: 0, resolved: 0, rejected: 0, totalResDays: 0, resWithDates: 0 };
       zones[zone].total++;
       if (r.status === 'Resolved') {
@@ -1017,13 +985,21 @@ export function AnalyticsPage() {
       else { zones[zone].active++; }
     });
 
-    const getGrade = (rate) => { if (rate >= 90) return 'A'; if (rate >= 75) return 'B'; if (rate >= 60) return 'C'; if (rate >= 45) return 'D'; return 'F'; };
-
-    return Object.values(zones).filter(z => z.total >= 1).map(z => {
-      const validTotal = z.total - z.rejected || 1;
-      const resolutionRate = Math.round((z.resolved / validTotal) * 100);
-      const avgDays = z.resWithDates > 0 ? parseFloat((z.totalResDays / z.resWithDates).toFixed(1)) : 0;
-      return { ...z, resolutionRate, avgDays, grade: getGrade(resolutionRate) };
+    return Object.values(zones).map(z => {
+      const validTotal = z.total - z.rejected;
+      const resolutionRate = validTotal > 0 ? Math.round((z.resolved / validTotal) * 100) : null;
+      const avgDays = z.resWithDates > 0 ? parseFloat((z.totalResDays / z.resWithDates).toFixed(1)) : null;
+      // Counts are facts and are always shown, but a zone with only a couple of
+      // reports gets no grade rather than a grade built on almost nothing.
+      // Graded on the shared rubric, which the zone table used to disagree with.
+      const sufficient = validTotal >= MIN_N_FOR_SCORE;
+      return {
+        ...z,
+        resolutionRate,
+        avgDays,
+        sufficient,
+        grade: sufficient ? (gradeFor(resolutionRate)?.grade ?? null) : null,
+      };
     }).sort((a, b) => b.total - a.total);
   }, [filteredReports]);
 
@@ -1083,22 +1059,22 @@ export function AnalyticsPage() {
       }
     });
 
-    // 2. Top performing zone
-    const topZone = zoneScorecard.find(z => z.resolutionRate >= 80 && z.total >= 3);
+    // 2. Top performing zone — only among zones with enough reports to grade.
+    const topZone = zoneScorecard.find(z => z.sufficient && z.resolutionRate >= 80);
     if (topZone) {
       insights.push({ id: 'top-zone', type: 'success', title: `${topZone.name} — Top Performing Zone`,
         description: `${topZone.resolutionRate}% resolution rate across ${topZone.total} reports. Average resolution time: ${topZone.avgDays} days.`,
         zone: topZone.name, action: `Recognize this zone's performance and adopt its practices as a model for underperforming areas.` });
     }
 
-    // 3. Neglected zones (aged unresolved reports > 14 days)
+    // 3. Neglected zones (aged unresolved reports)
     const agedReports = filteredReports.filter(r => {
       if (r.status === 'Resolved' || r.status === 'Rejected' || !r.timestamp) return false;
-      return (now - new Date(r.timestamp)) / (1000 * 60 * 60 * 24) > 14;
+      return (now - new Date(r.timestamp)) / (1000 * 60 * 60 * 24) > INSIGHT.agedReportDays;
     });
     if (agedReports.length > 0) {
       const zoneAged = {};
-      agedReports.forEach(r => { const z = r.zone || r.location || 'Unknown'; zoneAged[z] = (zoneAged[z] || 0) + 1; });
+      agedReports.forEach(r => { const z = deriveZone(r); zoneAged[z] = (zoneAged[z] || 0) + 1; });
       const worstZone = Object.entries(zoneAged).sort((a, b) => b[1] - a[1])[0];
       if (worstZone) {
         insights.push({ id: 'neglected-zone', type: 'critical', title: `Neglected Zone: ${worstZone[0]}`,
@@ -1109,7 +1085,7 @@ export function AnalyticsPage() {
 
     // 4. Overloaded department
     deptSLAMetrics.forEach(dept => {
-      if (dept.backlog > 5) {
+      if (dept.backlog > INSIGHT.backlogAlertTickets) {
         insights.push({ id: `dept-overload-${dept.name}`, type: 'warning', title: `${dept.name} Department Overloaded`,
           description: `${dept.name} has ${dept.backlog} active backlog tickets with an average resolution time of ${dept.avgResolveDays} days. This exceeds the 3-day SLA target.`,
           zone: 'Department-wide', action: `Reallocate 15–20% crew capacity from lower-backlog departments to ${dept.name} for the next sprint cycle.` });
@@ -1119,7 +1095,7 @@ export function AnalyticsPage() {
     // 5. Report volume spike detection (week-over-week)
     const last7 = filteredReports.filter(r => r.timestamp && (now - new Date(r.timestamp)) / (1000 * 60 * 60 * 24) <= 7).length;
     const prev7 = filteredReports.filter(r => { if (!r.timestamp) return false; const d = (now - new Date(r.timestamp)) / (1000 * 60 * 60 * 24); return d > 7 && d <= 14; }).length;
-    if (prev7 > 0 && last7 > prev7 * 1.25) {
+    if (prev7 > 0 && last7 > prev7 * INSIGHT.volumeSpikeRatio) {
       const pctIncrease = Math.round(((last7 - prev7) / prev7) * 100);
       const catCounts = {};
       filteredReports.filter(r => r.timestamp && (now - new Date(r.timestamp)) / (1000 * 60 * 60 * 24) <= 7).forEach(r => {
@@ -1148,7 +1124,7 @@ export function AnalyticsPage() {
     }
 
     // 8. High citizen engagement
-    const highUpvoteReports = filteredReports.filter(r => (r.upvotes || 0) >= 5 && r.status !== 'Resolved' && r.status !== 'Rejected');
+    const highUpvoteReports = filteredReports.filter(r => (r.upvotes || 0) >= INSIGHT.highEngagementUpvotes && r.status !== 'Resolved' && r.status !== 'Rejected');
     if (highUpvoteReports.length > 0) {
       const totalHighUpvotes = highUpvoteReports.reduce((sum, r) => sum + (r.upvotes || 0), 0);
       insights.push({ id: 'citizen-engagement', type: 'info', title: `High Citizen Engagement Detected`,
@@ -1609,10 +1585,10 @@ export function AnalyticsPage() {
                           <XAxis dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} />
                           <YAxis stroke="#8a8477" fontSize={11} tickLine={false} label={{ value: 'Days', angle: -90, position: 'insideLeft', stroke: '#8a8477', fontSize: 10 }} />
                           <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                          <ReferenceLine y={SLA_TARGET_DAYS} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Target SLA', fill: '#ef4444', fontSize: 9, position: 'top' }} />
+                          <ReferenceLine y={SLA_END_TO_END_DAYS} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Target SLA', fill: '#ef4444', fontSize: 9, position: 'top' }} />
                           <Bar dataKey="avgResolveDays" radius={[6, 6, 0, 0]} maxBarSize={45}>
                             {measurableSLAMetrics.map((entry, index) => {
-                              const exceedsSLA = entry.avgResolveDays > SLA_TARGET_DAYS;
+                              const exceedsSLA = entry.avgResolveDays > SLA_END_TO_END_DAYS;
                               return <Cell key={`cell-${index}`} fill={exceedsSLA ? '#ef4444' : '#10b981'} />;
                             })}
                           </Bar>
@@ -2345,24 +2321,35 @@ export function AnalyticsPage() {
                             </td>
                             <td className="text-[#3d4d34]">{zone.resolved}</td>
                             <td>
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1.5 bg-[#1f1e1a]/8 rounded-full overflow-hidden max-w-[60px]">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      width: `${zone.resolutionRate}%`,
-                                      backgroundColor: zone.resolutionRate >= 80 ? '#15803d' : zone.resolutionRate >= 60 ? '#b45309' : '#b91c1c'
-                                    }}
-                                  />
+                              {zone.resolutionRate == null ? (
+                                <span className="text-[10px] text-[#8a8477]">—</span>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-1.5 bg-[#1f1e1a]/8 rounded-full overflow-hidden max-w-[60px]">
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width: `${zone.resolutionRate}%`,
+                                        backgroundColor: zone.resolutionRate >= 80 ? '#15803d' : zone.resolutionRate >= 60 ? '#b45309' : '#b91c1c'
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold">{zone.resolutionRate}%</span>
                                 </div>
-                                <span className="text-[10px] font-bold">{zone.resolutionRate}%</span>
-                              </div>
+                              )}
                             </td>
-                            <td className={zone.avgDays > 3 ? 'text-red-700 font-bold' : 'text-[#4b473d]'}>
-                              {zone.avgDays || '—'}
+                            <td className={zone.avgDays != null && zone.avgDays > SLA_END_TO_END_DAYS ? 'text-red-700 font-bold' : 'text-[#4b473d]'}>
+                              {zone.avgDays ?? '—'}
                             </td>
                             <td>
-                              <span className={`wellness-grade grade-${zone.grade}`}>{zone.grade}</span>
+                              {zone.grade ? (
+                                <span className={`wellness-grade grade-${zone.grade}`}>{zone.grade}</span>
+                              ) : (
+                                <span
+                                  className="wellness-grade grade-NA"
+                                  title={`Needs at least ${MIN_N_FOR_SCORE} non-rejected reports to grade`}
+                                >—</span>
+                              )}
                             </td>
                           </tr>
                         ))

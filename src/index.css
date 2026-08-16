@@ -984,6 +984,8 @@ select option {
 .wellness-grade.grade-C { background: rgba(217, 119, 87, 0.14); color: #c1613f; border-color: rgba(217, 119, 87, 0.3); }
 .wellness-grade.grade-D { background: rgba(249, 115, 22, 0.14); color: #c2410c; border-color: rgba(249, 115, 22, 0.3); }
 .wellness-grade.grade-F { background: rgba(239, 68, 68, 0.14); color: #b91c1c; border-color: rgba(239, 68, 68, 0.3); }
+/* Unmeasured — deliberately neutral so it never reads as a passing or failing grade. */
+.wellness-grade.grade-NA { background: rgba(31,30,26,0.05); color: #8a8477; border-color: rgba(31,30,26,0.12); }
 
 /* Zone Scorecard Table */
 .scorecard-table {
@@ -1035,3 +1037,4 @@ select option {
 .cwi-grade-C { color: #c1613f; }
 .cwi-grade-D { color: #c2410c; }
 .cwi-grade-F { color: #b91c1c; }
+.cwi-grade-NA { color: #8a8477; }
