@@ -22,9 +22,11 @@ import {
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
+  buildServicePerformance, buildUrbanCondition, buildBacklogFlow,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
+import { CityHealthBands } from '../components/CityHealthBands';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 
@@ -864,130 +866,21 @@ export function AnalyticsPage() {
 
   // ==================== CITY HEALTH & WELLNESS COMPUTATIONS ====================
 
-  // 5.5. City Wellness Index — Composite Score (0–100)
-  const cityWellnessData = useMemo(() => {
-    const total = filteredReports.length;
-    // No data means no score. The previous early-return invented a healthy
-    // grade-B city, so an empty dataset — or a failed fetch — rendered as good news.
-    if (total === 0) return { cwi: null, domains: {
-      infrastructure: { name: 'Infrastructure', score: null, activeIssues: 0, totalReports: 0 },
-      environment: { name: 'Environment', score: null, activeIssues: 0, totalReports: 0 },
-      publicSafety: { name: 'Public Safety', score: null, activeIssues: 0, totalReports: 0 },
-      efficiency: { name: 'Service Efficiency', score: null, activeIssues: 0, totalReports: 0 },
-      satisfaction: { name: 'Citizen Satisfaction', score: null, activeIssues: 0, totalReports: 0 },
-      responsiveness: { name: 'Responsiveness', score: null, activeIssues: 0, totalReports: 0 },
-    }, grade: null };
+  // Service Performance — how well the council responds. Derives from the same
+  // buildFunnel output the funnel chart renders, so the two panels cannot
+  // disagree about how long a stage takes.
+  const servicePerformance = useMemo(
+    () => buildServicePerformance(filteredReports),
+    [filteredReports]
+  );
 
-    const resolved = filteredReports.filter(r => r.status === 'Resolved').length;
-    const rejected = filteredReports.filter(r => r.status === 'Rejected').length;
-
-    // Helper: match report category against keywords
-    const getCatReports = (keywords) => filteredReports.filter(r => {
-      const cat = (r.categories || r.ai_prediction || '').toLowerCase();
-      return keywords.some(kw => cat.includes(kw));
-    });
-
-    // INFRASTRUCTURE — roads, sidewalks, streetlights, signs
-    const infraReports = getCatReports(['road', 'pothole', 'sidewalk', 'pavement', 'light', 'lamp', 'lighting', 'sign', 'bridge']);
-    const infraResolved = infraReports.filter(r => r.status === 'Resolved').length;
-    const infraActive = infraReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected').length;
-    // null when the domain has no reports. The old defaults (80/82/85/75) meant
-    // a domain with ZERO data outscored most domains with real data.
-    const infraScore = infraReports.length > 0
-      ? Math.round(Math.max(15, Math.min(100, (infraResolved / infraReports.length) * 100 - (infraActive * 3))))
-      : null;
-
-    // ENVIRONMENT — waste, dumping, pollution, vegetation
-    const envReports = getCatReports(['waste', 'garbage', 'dumping', 'trash', 'burning', 'vegetation', 'overgrown', 'pollution', 'smoke']);
-    const envResolved = envReports.filter(r => r.status === 'Resolved').length;
-    const envActive = envReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected').length;
-    const envScore = envReports.length > 0
-      ? Math.round(Math.max(15, Math.min(100, (envResolved / envReports.length) * 100 - (envActive * 4))))
-      : null;
-
-    // PUBLIC SAFETY — vandalism, fallen trees, fire hazards
-    const safetyReports = getCatReports(['vandal', 'graffiti', 'tree', 'fallen', 'fire', 'hazard', 'manhole', 'stray', 'electrical']);
-    const safetyResolved = safetyReports.filter(r => r.status === 'Resolved').length;
-    const safetyActive = safetyReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected').length;
-    // Derived directly rather than via the `priority` field loadData attaches,
-    // so this score does not silently break if that mapping changes.
-    const safetyHighPriority = safetyReports.filter(r =>
-      getPriority(r.status, r.categories || r.ai_prediction) === 'High' &&
-      r.status !== 'Resolved' && r.status !== 'Rejected'
-    ).length;
-    const safetyScore = safetyReports.length > 0
-      ? Math.round(Math.max(10, Math.min(100, (safetyResolved / safetyReports.length) * 100 - (safetyHighPriority * 10) - (safetyActive * 3))))
-      : null;
-
-    // SERVICE EFFICIENCY — % resolved within 3-day SLA
-    const resolvedWithDates = filteredReports.filter(r => r.status === 'Resolved' && r.timestamp && r.resolved_at);
-    let onTimeCount = 0;
-    resolvedWithDates.forEach(r => {
-      const start = new Date(r.timestamp).getTime();
-      const end = new Date(r.resolved_at).getTime();
-      if (!isNaN(start) && !isNaN(end) && (end - start) / (1000 * 60 * 60 * 24) <= SLA_END_TO_END_DAYS) onTimeCount++;
-    });
-    const efficiencyScore = resolvedWithDates.length > 0
-      ? Math.round((onTimeCount / resolvedWithDates.length) * 100)
-      : null;
-
-    // CITIZEN SATISFACTION — upvote engagement + resolution rate
-    const totalUpvotes = filteredReports.reduce((sum, r) => sum + (r.upvotes || 0), 0);
-    const avgUpvotes = total > 0 ? totalUpvotes / total : 0;
-    const resolutionRate = total > 0 ? (resolved / (total - rejected || 1)) : 0.5;
-    const satisfactionScore = Math.round(Math.max(20, Math.min(100, resolutionRate * 70 + Math.min(avgUpvotes * 5, 30))));
-
-    // RESPONSIVENESS — avg days to first response (lower is better)
-    const withResponse = filteredReports.filter(r => r.timestamp && (r.reviewed_at || r.forwarded_at || r.in_process_at));
-    let totalResponseDays = 0;
-    withResponse.forEach(r => {
-      const start = new Date(r.timestamp).getTime();
-      const response = new Date(r.reviewed_at || r.forwarded_at || r.in_process_at).getTime();
-      if (!isNaN(start) && !isNaN(response)) totalResponseDays += (response - start) / (1000 * 60 * 60 * 24);
-    });
-    // The old fallback of 2 days silently produced a score of 70 for a council
-    // that had never responded to anything.
-    const avgResponseDays = withResponse.length > 0 ? totalResponseDays / withResponse.length : null;
-    const responsivenessScore = avgResponseDays == null
-      ? null
-      : Math.round(Math.max(10, Math.min(100, 100 - (avgResponseDays * 15))));
-
-    // COMPOSITE CITY WELLNESS INDEX
-    // Domains without data score null and are excluded, with the remaining
-    // weights renormalised to 1 — otherwise a single null would poison the
-    // whole sum to NaN. `excludedDomains` is surfaced so the UI can say which
-    // domains the score actually covers. Phase 4 replaces this with SPI/UCI.
-    const CWI_WEIGHTS = {
-      infrastructure: 0.25, environment: 0.20, publicSafety: 0.20,
-      efficiency: 0.15, satisfaction: 0.10, responsiveness: 0.10,
-    };
-    const scoreByDomain = {
-      infrastructure: infraScore, environment: envScore, publicSafety: safetyScore,
-      efficiency: efficiencyScore, satisfaction: satisfactionScore,
-      responsiveness: responsivenessScore,
-    };
-    const included = Object.keys(CWI_WEIGHTS).filter(k => scoreByDomain[k] != null);
-    const excludedDomains = Object.keys(CWI_WEIGHTS).filter(k => scoreByDomain[k] == null);
-    const weightSum = included.reduce((s, k) => s + CWI_WEIGHTS[k], 0);
-    const cwi = weightSum > 0
-      ? Math.round(included.reduce((s, k) => s + scoreByDomain[k] * CWI_WEIGHTS[k], 0) / weightSum)
-      : null;
-
-    // Shared rubric — see GRADE_SCALE. Previously this file carried three
-    // different scales that looked identical to anyone comparing their outputs.
-    const getGrade = (s) => gradeFor(s)?.grade ?? null;
-
-    const domains = {
-      infrastructure: { name: 'Infrastructure', score: infraScore, activeIssues: infraActive, totalReports: infraReports.length },
-      environment: { name: 'Environment', score: envScore, activeIssues: envActive, totalReports: envReports.length },
-      publicSafety: { name: 'Public Safety', score: safetyScore, activeIssues: safetyActive, totalReports: safetyReports.length },
-      efficiency: { name: 'Service Efficiency', score: efficiencyScore, activeIssues: total - resolved - rejected, totalReports: resolvedWithDates.length },
-      satisfaction: { name: 'Citizen Satisfaction', score: satisfactionScore, activeIssues: 0, totalReports: total },
-      responsiveness: { name: 'Responsiveness', score: responsivenessScore, activeIssues: 0, totalReports: withResponse.length },
-    };
-
-    return { cwi, domains, grade: getGrade(cwi), excludedDomains };
-  }, [filteredReports]);
+  // Urban Condition — the state of the city, scored from the open defect burden
+  // rather than resolution rate. Using resolution rate here would measure the
+  // council again, which is the conflation this split removes.
+  const urbanCondition = useMemo(
+    () => buildUrbanCondition(filteredReports),
+    [filteredReports]
+  );
 
   // 5.6. Zone Wellness Scorecard
   const zoneScorecard = useMemo(() => {
@@ -1028,59 +921,42 @@ export function AnalyticsPage() {
     }).sort((a, b) => b.total - a.total);
   }, [filteredReports]);
 
-  // 5.7. Wellness Trend Data (12 weeks — deterministic from report data)
-  const wellnessTrendData = useMemo(() => {
-    const weeks = [];
-    const now = new Date();
-    for (let i = 11; i >= 0; i--) {
-      const weekStart = startOfWeek(subDays(now, i * 7), { weekStartsOn: 1 });
-      const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
-
-      // Cumulative reports up to this week
-      const cumReports = reports.filter(r => { if (!r.timestamp) return false; return new Date(r.timestamp) < weekEnd; });
-      const total = cumReports.length || 1;
-      const resolved = cumReports.filter(r => r.status === 'Resolved').length;
-      const rejected = cumReports.filter(r => r.status === 'Rejected').length;
-      const validTotal = total - rejected || 1;
-
-      // Domain sub-scores
-      // null, not 75 — a week with no reports in a domain is unmeasured, and the
-      // old default drew a flat "healthy" line out of an empty dataset. Recharts
-      // renders nulls as gaps. Phase 4 replaces this memo with a real
-      // point-in-time cumulative-flow reconstruction.
-      const scoreDomain = (keywords) => {
-        const dr = cumReports.filter(r => { const c = (r.categories || '').toLowerCase(); return keywords.some(k => c.includes(k)); });
-        if (dr.length === 0) return null;
-        const dres = dr.filter(r => r.status === 'Resolved').length;
-        return Math.round(Math.max(20, Math.min(100, (dres / dr.length) * 100)));
-      };
-
-      const infra = scoreDomain(['road', 'sidewalk', 'light', 'sign', 'pothole']);
-      const env = scoreDomain(['waste', 'dumping', 'burning', 'vegetation', 'garbage']);
-      const safety = scoreDomain(['vandal', 'tree', 'fallen', 'fire']);
-      // Renormalise over whichever domains are measurable this week.
-      const parts = [[infra, 0.35], [env, 0.35], [safety, 0.30]].filter(([v]) => v != null);
-      const wSum = parts.reduce((s, [, w]) => s + w, 0);
-      const cwi = wSum > 0 ? Math.round(parts.reduce((s, [v, w]) => s + v * w, 0) / wSum) : null;
-
-      const cap = (v) => (v == null ? null : Math.min(100, v));
-      weeks.push({ week: format(weekStart, 'MMM dd'), CWI: cap(cwi), Infrastructure: cap(infra), Environment: cap(env), Safety: cap(safety) });
-    }
-    return weeks;
-  }, [reports]);
+  // Real point-in-time backlog reconstruction. The previous memo recomputed each
+  // past week from present-day statuses, so a ticket resolved this morning
+  // counted as resolved in all twelve historical weeks.
+  const backlogFlow = useMemo(() => buildBacklogFlow(filteredReports), [filteredReports]);
 
   // 5.8. Actionable Insights Generation (rule-based)
   const actionableInsights = useMemo(() => {
     const insights = [];
     const now = new Date();
 
-    // 1. Worsening domain detection
-    Object.entries(cityWellnessData.domains).forEach(([key, domain]) => {
-      // Same coercion trap as above — an unmeasured domain must not read as 0.
+    // 1a. Service stages missing their target. Actionable by the council.
+    Object.entries(servicePerformance.domains).forEach(([key, domain]) => {
+      // Null guard matters: `null < 60` coerces to `0 < 60`.
       if (domain.score != null && domain.score < 60) {
-        insights.push({ id: `domain-${key}`, type: 'warning', title: `${domain.name} Needs Attention`,
-          description: `${domain.name} health score is ${domain.score}/100 with ${domain.activeIssues} active issues. This domain is below the acceptable threshold and requires immediate intervention.`,
-          zone: 'City-wide', action: `Prioritize ${domain.name.toLowerCase()} reports and allocate additional resources to this domain.` });
+        const detail = domain.medianDays != null
+          ? `Median ${domain.medianDays.toFixed(1)} days against a ${domain.targetDays}-day target (n=${domain.n}).`
+          : `First-pass yield is ${domain.score}% across ${domain.n} dispatched reports.`;
+        insights.push({
+          id: `spi-${key}`, type: 'warning', title: `${domain.name} is missing its target`,
+          description: `${detail} This stage is the council's to control.`,
+          zone: 'City-wide',
+          action: `Review the ${domain.name.toLowerCase()} step — it is consuming more of the SLA budget than allowed for.`,
+        });
+      }
+    });
+
+    // 1b. Categories where the city itself is deteriorating.
+    Object.entries(urbanCondition.domains).forEach(([key, domain]) => {
+      if (domain.score != null && domain.score < 60) {
+        insights.push({
+          id: `uci-${key}`, type: 'warning', title: `${domain.name} defects are accumulating`,
+          description: `${domain.openCount} open, an age-weighted burden of ${domain.burden} against a tolerance of ${domain.target}` +
+            (domain.medianAgeDays != null ? `, median age ${Math.round(domain.medianAgeDays)} days.` : '.'),
+          zone: 'City-wide',
+          action: `Clear the oldest ${domain.name.toLowerCase()} defects first — age is what drives this burden up.`,
+        });
       }
     });
 
@@ -1157,28 +1033,30 @@ export function AnalyticsPage() {
         zone: 'City-wide', action: `Prioritize high-engagement reports to demonstrate government responsiveness to citizen concerns.` });
     }
 
-    // 9. Overall city health status. The null guard matters: `null < 60` coerces
-    // to `0 < 60`, so without it an unmeasurable city reported itself critical.
-    if (cityWellnessData.cwi == null) {
-      // No index, no verdict.
-    } else if (cityWellnessData.cwi >= 80) {
-      insights.push({ id: 'city-health-good', type: 'success', title: 'City Health Status: Excellent',
-        description: `The overall City Wellness Index is ${cityWellnessData.cwi}/100 (Grade ${cityWellnessData.grade}). All major domains are performing within acceptable thresholds.`,
-        zone: 'City-wide', action: 'Maintain current operations and focus on continuous improvement in weaker domains.' });
-    } else if (cityWellnessData.cwi < 60) {
-      insights.push({ id: 'city-health-poor', type: 'critical', title: 'City Health Status: Needs Improvement',
-        description: `The overall City Wellness Index is ${cityWellnessData.cwi}/100 (Grade ${cityWellnessData.grade}). Multiple domains are below acceptable thresholds.`,
-        zone: 'City-wide', action: 'Convene an emergency planning session to address critical infrastructure and service gaps.' });
+    // 9. Overall standing. Reported as two separate verdicts, because a council
+    // can be responding well to a city that is still deteriorating — the case
+    // the old single composite could not express.
+    const spi = servicePerformance.index;
+    const uci = urbanCondition.index;
+    if (spi != null && spi < 60) {
+      insights.push({ id: 'spi-poor', type: 'critical', title: 'Service performance below target',
+        description: `Service Performance Index is ${spi}/100. The council is missing its own stage targets across multiple steps.`,
+        zone: 'City-wide', action: 'Start with the stage consuming the largest share of end-to-end time in the funnel.' });
+    }
+    if (uci != null && uci < 60) {
+      insights.push({ id: 'uci-poor', type: 'critical', title: 'Urban condition deteriorating',
+        description: `Urban Condition Index is ${uci}/100. Open defects are accumulating faster than the agreed tolerance, regardless of response speed.`,
+        zone: 'City-wide', action: 'This is a capacity or budget question rather than a process one — closing tickets faster will not by itself reverse it.' });
+    }
+    if (spi != null && uci != null && spi >= 80 && uci < 60) {
+      insights.push({ id: 'spi-uci-divergence', type: 'info', title: 'Responding well, but falling behind',
+        description: `Service Performance is ${spi}/100 while Urban Condition is ${uci}/100. The council is handling what arrives, but defects are accumulating faster than they are cleared.`,
+        zone: 'City-wide', action: 'Additional crew capacity is more likely to help here than further process tuning.' });
     }
 
     const priority = { critical: 0, warning: 1, info: 2, success: 3 };
     return insights.sort((a, b) => (priority[a.type] ?? 4) - (priority[b.type] ?? 4));
-  }, [filteredReports, cityWellnessData, zoneScorecard, deptSLAMetrics, rootCauseAdvisories]);
-
-  // 5.9. Radar Chart Data
-  const radarChartData = useMemo(() => {
-    return Object.values(cityWellnessData.domains).map(d => ({ domain: d.name, score: d.score, fullMark: 100 }));
-  }, [cityWellnessData]);
+  }, [filteredReports, servicePerformance, urbanCondition, zoneScorecard, deptSLAMetrics, rootCauseAdvisories]);
 
   // 6. Coordinates list for density Heatmap
   const heatmapPoints = useMemo(() => {
@@ -2049,156 +1927,15 @@ export function AnalyticsPage() {
 
             {filterBar}
 
-            {/* Row 1: CWI Gauge Hero + 6 Domain Health Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              {/* CWI Radial Gauge */}
-              <div className="content-card flex flex-col items-center justify-center py-8 px-6">
-                <div
-                  className="cwi-gauge"
-                  style={{
-                    '--gauge-pct': cityWellnessData.cwi ?? 0,
-                    '--gauge-color': cityWellnessData.cwi == null ? '#8a8477'
-                      : cityWellnessData.cwi >= 80 ? '#15803d'
-                      : cityWellnessData.cwi >= 60 ? '#b45309' : '#b91c1c'
-                  }}
-                >
-                  <div className="cwi-gauge-glow" />
-                  <div className="cwi-gauge-ring" />
-                  <div className="cwi-gauge-value">{cityWellnessData.cwi ?? '—'}</div>
-                  <div className="cwi-gauge-label">City Wellness</div>
-                </div>
-                {cityWellnessData.grade ? (
-                  <div className={`mt-5 text-2xl font-black cwi-grade-${cityWellnessData.grade}`}>
-                    Grade {cityWellnessData.grade}
-                  </div>
-                ) : (
-                  <div className="mt-5 text-base font-bold text-[#8a8477]">Insufficient data</div>
-                )}
-                <div className="text-[10px] text-[#8a8477] font-semibold mt-1 uppercase tracking-wider">
-                  Composite Health Index
-                </div>
-                <div className="mt-4 flex flex-col items-center gap-1 text-[10px] text-[#8a8477]">
-                  <span className="flex items-center gap-2">
-                    <Heart size={12} className="text-[#8a8477]" />
-                    <span className="font-semibold">Based on {filteredReports.length} reports</span>
-                  </span>
-                  {cityWellnessData.excludedDomains?.length > 0 && (
-                    <span className="font-semibold">
-                      {cityWellnessData.excludedDomains.length} of 6 domains omitted — insufficient data
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* 6 Domain Health Cards */}
-              <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
-                {Object.entries(cityWellnessData.domains).map(([key, domain]) => {
-                  // Unmeasured domains keep the identical box model — only the
-                  // score, bar fill and caption change — so the grid never shifts.
-                  const measured = domain.score != null;
-                  return (
-                    <div key={key} className="domain-card">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] font-extrabold text-[#8a8477] uppercase tracking-wider">{domain.name}</span>
-                        <span className={`text-lg font-black ${
-                          !measured ? 'text-[#8a8477]'
-                            : domain.score >= 80 ? 'text-emerald-700'
-                            : domain.score >= 60 ? 'text-amber-700' : 'text-red-700'
-                        }`}>
-                          {measured ? domain.score : '—'}
-                        </span>
-                      </div>
-                      <div className="domain-score-bar">
-                        {measured ? (
-                          <div
-                            className="domain-score-fill"
-                            style={{
-                              width: `${domain.score}%`,
-                              backgroundColor: domain.score >= 80 ? '#15803d' : domain.score >= 60 ? '#b45309' : '#b91c1c'
-                            }}
-                          />
-                        ) : (
-                          <div
-                            className="domain-score-fill"
-                            style={{
-                              width: '100%',
-                              background: 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, transparent 6px 12px)'
-                            }}
-                          />
-                        )}
-                      </div>
-                      <div className="text-[10px] text-[#8a8477] font-medium mt-2">
-                        {measured
-                          ? `${domain.activeIssues > 0 ? `${domain.activeIssues} active issues` : 'No active issues'} · ${domain.totalReports} total`
-                          : 'Insufficient data — no reports in this domain'}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Row 2: Radar Chart + Wellness Trend Chart */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Radar Chart */}
-              <div className="content-card">
-                <div className="content-card-header">
-                  <div className="content-card-title">City Health Balance</div>
-                </div>
-                <div className="p-5">
-                  <div style={{ height: '280px', width: '100%' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadarChart data={radarChartData} cx="50%" cy="50%" outerRadius="65%">
-                        <PolarGrid stroke="rgba(31,30,26,0.08)" />
-                        <PolarAngleAxis dataKey="domain" tick={{ fill: '#8a8477', fontSize: 9, fontWeight: 700 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                        <Radar name="Score" dataKey="score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2} />
-                        <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                      </RadarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="text-center text-[10px] text-[#8a8477] font-medium mt-2">
-                    Balanced scores indicate healthy city operations across all domains
-                  </div>
-                </div>
-              </div>
-
-              {/* Wellness Trend Chart (12 Weeks) */}
-              <div className="content-card lg:col-span-2">
-                <div className="content-card-header">
-                  <div className="content-card-title">City Wellness Trend (12 Weeks)</div>
-                </div>
-                <div className="p-5">
-                  <div style={{ height: '280px', width: '100%' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={wellnessTrendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorCWI" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
-                        <XAxis dataKey="week" stroke="#8a8477" fontSize={10} tickLine={false} />
-                        <YAxis stroke="#8a8477" fontSize={10} tickLine={false} domain={[0, 100]} />
-                        <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                        <Area type="monotone" dataKey="CWI" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCWI)" name="City Wellness Index" />
-                        <Area type="monotone" dataKey="Infrastructure" stroke="#34d399" strokeWidth={1.5} fillOpacity={0} dot={false} />
-                        <Area type="monotone" dataKey="Environment" stroke="#fbbf24" strokeWidth={1.5} fillOpacity={0} dot={false} />
-                        <Area type="monotone" dataKey="Safety" stroke="#f87171" strokeWidth={1.5} fillOpacity={0} dot={false} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  {/* Chart Legend */}
-                  <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 mt-3 text-[10px] font-bold text-[#8a8477]">
-                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#6366f1' }} />CWI</div>
-                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#34d399' }} />Infrastructure</div>
-                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#fbbf24' }} />Environment</div>
-                    <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#f87171' }} />Safety</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Two bands: what the council does, and what the city is like.
+                The previous single composite scored throughput and labelled it
+                city condition. */}
+            <CityHealthBands
+              servicePerformance={servicePerformance}
+              urbanCondition={urbanCondition}
+              backlogFlow={backlogFlow}
+              reportCount={filteredReports.length}
+            />
 
             {/* Row 3: Actionable Insights Panel */}
             <div className="content-card">

@@ -1,7 +1,8 @@
 import {
   toDate, mean, median, percentile, canonicalizeCategory, deriveZone,
   stageDurations, endToEndDays, buildFunnel, buildComposition, STAGES,
-  deriveDepartmentOptions,
+  deriveDepartmentOptions, weightedIndex, buildServicePerformance,
+  buildUrbanCondition, buildBacklogFlow,
 } from './analyticsMetrics';
 import { gradeFor, SPI_WEIGHTS, UCI_WEIGHTS, SLA_TARGET_DAYS, SLA_END_TO_END_DAYS } from './analyticsConstants';
 
@@ -210,6 +211,80 @@ describe('analyticsMetrics', () => {
     it('ignores reports with no department', () => {
       expect(deriveDepartmentOptions([{ assigned_department: '' }, {}])).to.have.length(0);
       expect(deriveDepartmentOptions([])).to.have.length(0);
+    });
+  });
+
+  describe('composite indices', () => {
+    it('renormalises over measurable domains and names the excluded ones', () => {
+      const idx = weightedIndex(
+        { a: 80, b: 60, c: null },
+        { a: 0.5, b: 0.25, c: 0.25 }
+      );
+      // (80*0.5 + 60*0.25) / 0.75 = 73.33 -> 73
+      expect(idx.value).to.equal(73);
+      expect(idx.excluded).to.deep.equal(['c']);
+      expect(idx.coverage).to.be.closeTo(0.75, 1e-9);
+    });
+
+    it('returns null rather than NaN when nothing is measurable', () => {
+      const idx = weightedIndex({ a: null, b: null }, { a: 0.5, b: 0.5 });
+      expect(idx.value).to.equal(null);
+    });
+
+    it('scores urban condition from open-defect burden, not resolution rate', () => {
+      const open = (id, ageDays) => ({
+        id, status: 'Pending', categories: 'Road Damage',
+        timestamp: new Date(Date.now() - ageDays * DAY).toISOString(),
+      });
+      // Every report resolved -> zero burden -> a perfect condition score, even
+      // though resolution rate plays no part in the calculation.
+      const allFixed = buildUrbanCondition([
+        { id: 1, status: 'Resolved', categories: 'Road Damage', timestamp: at(0) },
+      ]);
+      expect(allFixed.domains['Road Damage'].score).to.equal(100);
+      expect(allFixed.domains['Road Damage'].openCount).to.equal(0);
+
+      // Ageing open defects push the score down.
+      const fresh = buildUrbanCondition([open(1, 0), open(2, 0)]);
+      const stale = buildUrbanCondition([open(1, 365), open(2, 365)]);
+      expect(stale.domains['Road Damage'].score).to.be.lessThan(
+        fresh.domains['Road Damage'].score
+      );
+    });
+
+    it('treats a category with no reports as unmeasured, not perfect', () => {
+      const uci = buildUrbanCondition([{ id: 1, status: 'Pending', categories: 'Road Damage', timestamp: at(0) }]);
+      expect(uci.domains['Waste Management'].score).to.equal(null);
+      expect(uci.excluded).to.include('Waste Management');
+    });
+
+    it('caps service performance at 100 for beating a target', () => {
+      // Triage target is 0.5d; these resolve in ~0.1d.
+      const fast = Array.from({ length: 6 }, (_, i) => wellFormed({ id: i, reviewed_at: at(0.1) }));
+      const spi = buildServicePerformance(fast);
+      expect(spi.domains.triage.score).to.equal(100);
+    });
+
+    it('excludes stages below the sufficiency threshold', () => {
+      const spi = buildServicePerformance([wellFormed({ id: 1 })]); // n=1
+      expect(spi.domains.triage.score).to.equal(null);
+      expect(spi.excluded).to.include('triage');
+    });
+  });
+
+  describe('backlogFlow', () => {
+    it('reconstructs the backlog point-in-time instead of from current status', () => {
+      // Submitted 8 weeks ago, resolved 1 week ago. It must read as open in the
+      // intervening weeks, which the old present-status approach got wrong.
+      const flow = buildBacklogFlow(
+        [{ id: 1, status: 'Resolved', timestamp: at(-56), resolved_at: at(-7) }],
+        { weeks: 12, now: base }
+      );
+      expect(flow).to.have.length(12);
+      const mid = flow[Math.floor(flow.length / 2)];
+      expect(mid.open, 'open mid-window').to.equal(1);
+      expect(flow[flow.length - 1].open, 'open at the end').to.equal(0);
+      expect(flow.reduce((s, p) => s + p.outflow, 0)).to.equal(1);
     });
   });
 

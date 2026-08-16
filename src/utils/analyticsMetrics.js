@@ -11,6 +11,13 @@ import {
   MAX_ZONE_SNAP_KM,
   ZONE_UNMAPPED,
   ZONE_UNASSIGNED,
+  SLA_TARGET_DAYS,
+  SPI_WEIGHTS,
+  UCI_WEIGHTS,
+  UCI_BURDEN_TARGETS,
+  AGE_WEIGHT_DAYS,
+  MIN_N_FOR_STAGE,
+  MIN_N_FOR_SCORE,
 } from './analyticsConstants';
 import { AUTHORITIES } from './authorities';
 
@@ -337,4 +344,179 @@ export function buildComposition(reports) {
       share: meanTotalDays > 0 ? s.meanDays / meanTotalDays : 0,
     })),
   };
+}
+
+// ── Composite indices ────────────────────────────────────────────────────────
+
+/**
+ * Combines domain scores into an index, renormalising over the domains that
+ * could actually be measured.
+ *
+ * Without renormalisation a single unmeasured domain either poisons the sum to
+ * NaN or, worse, gets a flattering default and drags the index toward it. This
+ * returns the excluded list too, so the UI can state what the score covers
+ * rather than implying it covers everything.
+ */
+export function weightedIndex(scoresByKey, weights) {
+  const keys = Object.keys(weights);
+  const included = keys.filter((k) => scoresByKey[k] != null);
+  const excluded = keys.filter((k) => scoresByKey[k] == null);
+  const weightSum = included.reduce((s, k) => s + weights[k], 0);
+
+  return {
+    value: weightSum > 0
+      ? Math.round(included.reduce((s, k) => s + scoresByKey[k] * weights[k], 0) / weightSum)
+      : null,
+    included,
+    excluded,
+    coverage: weightSum,
+  };
+}
+
+/**
+ * Service Performance Index — how well the council responds.
+ *
+ * Every input is a council action, measured as attainment against the agreed
+ * per-stage SLA budget. Scores cap at 100: beating a target is not extra
+ * credit, it means the target is stale, which is a different conversation.
+ *
+ * Derives from the same buildFunnel output the funnel chart renders, so the two
+ * panels cannot disagree about how long a stage takes.
+ */
+export function buildServicePerformance(reports) {
+  const funnel = buildFunnel(reports, { cohort: 'all', minN: MIN_N_FOR_STAGE });
+  const byKey = Object.fromEntries(funnel.stages.map((s) => [s.key, s]));
+
+  const attainment = (key) => {
+    const stage = byKey[key];
+    const target = SLA_TARGET_DAYS[key];
+    if (!stage?.sufficient || stage.median == null || target == null) return null;
+    // A zero-budget stage (rework) scores 100 only when it actually took no time.
+    if (target === 0) return stage.median <= 0 ? 100 : 0;
+    return Math.max(0, Math.min(100, Math.round((target / Math.max(stage.median, 1e-6)) * 100)));
+  };
+
+  const domains = {
+    triage: { key: 'triage', name: 'Triage', score: attainment('triage'), n: byKey.triage?.n ?? 0, medianDays: byKey.triage?.median ?? null, targetDays: SLA_TARGET_DAYS.triage },
+    dispatch: { key: 'dispatch', name: 'Dispatch decision', score: attainment('dispatch'), n: byKey.dispatch?.n ?? 0, medianDays: byKey.dispatch?.median ?? null, targetDays: SLA_TARGET_DAYS.dispatch },
+    poolWait: { key: 'poolWait', name: 'Pool wait', score: attainment('poolWait'), n: byKey.poolWait?.n ?? 0, medianDays: byKey.poolWait?.median ?? null, targetDays: SLA_TARGET_DAYS.poolWait },
+    work: { key: 'work', name: 'Work', score: attainment('work'), n: byKey.work?.n ?? 0, medianDays: byKey.work?.median ?? null, targetDays: SLA_TARGET_DAYS.work },
+    verify: { key: 'verify', name: 'Verification', score: attainment('verify'), n: byKey.verify?.n ?? 0, medianDays: byKey.verify?.median ?? null, targetDays: SLA_TARGET_DAYS.verify },
+    firstPass: {
+      key: 'firstPass',
+      name: 'First-pass yield',
+      // Routing quality: the share of dispatched reports never re-pooled.
+      score: funnel.dispatchedCount >= MIN_N_FOR_SCORE ? funnel.firstPassYield : null,
+      n: funnel.dispatchedCount,
+      medianDays: null,
+      targetDays: null,
+    },
+  };
+
+  const scores = Object.fromEntries(Object.entries(domains).map(([k, d]) => [k, d.score]));
+  const index = weightedIndex(scores, SPI_WEIGHTS);
+
+  return { index: index.value, excluded: index.excluded, domains, funnel };
+}
+
+/**
+ * Urban Condition Index — the state of the city itself.
+ *
+ * Deliberately does NOT use resolution rate. Resolution rate measures the
+ * council's throughput, and scoring city condition with it is exactly the
+ * conflation this split exists to remove: a council could close every ticket
+ * quickly while the city steadily accumulates defects.
+ *
+ * Instead it scores the open-defect burden per category, weighting each open
+ * defect by how long it has stayed open, against a tolerance the council sets
+ * (UCI_BURDEN_TARGETS — a policy input, not a measurement).
+ */
+export function buildUrbanCondition(reports, now = Date.now()) {
+  const open = (reports || []).filter(
+    (r) => r?.status !== 'Resolved' && r?.status !== 'Rejected'
+  );
+
+  const categories = Object.keys(UCI_WEIGHTS);
+  const domains = {};
+
+  for (const cat of categories) {
+    const inCat = open.filter((r) => canonicalizeCategory(r.categories || r.ai_prediction) === cat);
+    const allInCat = (reports || []).filter(
+      (r) => canonicalizeCategory(r.categories || r.ai_prediction) === cat
+    );
+
+    // A category nobody has ever reported is unmeasured, not perfect.
+    if (allInCat.length === 0) {
+      domains[cat] = { key: cat, name: cat, score: null, openCount: 0, burden: null, medianAgeDays: null, target: UCI_BURDEN_TARGETS[cat] };
+      continue;
+    }
+
+    const ages = [];
+    let burden = 0;
+    for (const r of inCat) {
+      const submitted = toDate(r.timestamp);
+      const ageDays = submitted == null ? 0 : Math.max(0, (now - submitted) / MS_PER_DAY);
+      ages.push(ageDays);
+      burden += 1 + ageDays / AGE_WEIGHT_DAYS;
+    }
+
+    const target = UCI_BURDEN_TARGETS[cat];
+    domains[cat] = {
+      key: cat,
+      name: cat,
+      score: Math.max(0, Math.min(100, Math.round(100 * (1 - burden / target)))),
+      openCount: inCat.length,
+      burden: Math.round(burden * 10) / 10,
+      medianAgeDays: ages.length ? median(ages) : null,
+      target,
+    };
+  }
+
+  const scores = Object.fromEntries(Object.entries(domains).map(([k, d]) => [k, d.score]));
+  const index = weightedIndex(scores, UCI_WEIGHTS);
+
+  return { index: index.value, excluded: index.excluded, domains };
+}
+
+/**
+ * Weekly cumulative flow, reconstructed point-in-time from real timestamps.
+ *
+ * Replaces a trend that recomputed each past week from present-day statuses, so
+ * a ticket resolved this morning counted as resolved in all twelve historical
+ * weeks and the line could only ever slope upward.
+ *
+ * Rejection date is inferred from reviewed_at, which is stamped on both approval
+ * and rejection; that is safe here because a rejected report is never
+ * subsequently approved.
+ */
+export function buildBacklogFlow(reports, { weeks = 12, now = Date.now() } = {}) {
+  const points = [];
+
+  for (let i = weeks - 1; i >= 0; i--) {
+    const weekEnd = now - i * 7 * MS_PER_DAY;
+    const weekStart = weekEnd - 7 * MS_PER_DAY;
+
+    let open = 0;
+    let inflow = 0;
+    let outflow = 0;
+
+    for (const r of reports || []) {
+      const submitted = toDate(r.timestamp);
+      if (submitted == null) continue;
+
+      const resolvedAt = toDate(r.resolved_at);
+      const rejectedAt = r.status === 'Rejected' ? toDate(r.reviewed_at) : null;
+
+      if (submitted > weekStart && submitted <= weekEnd) inflow += 1;
+      if (resolvedAt != null && resolvedAt > weekStart && resolvedAt <= weekEnd) outflow += 1;
+
+      const isResolvedAsOf = resolvedAt != null && resolvedAt <= weekEnd;
+      const isRejectedAsOf = rejectedAt != null && rejectedAt <= weekEnd;
+      if (submitted <= weekEnd && !isResolvedAsOf && !isRejectedAsOf) open += 1;
+    }
+
+    points.push({ weekEnd, open, inflow, outflow });
+  }
+
+  return points;
 }
