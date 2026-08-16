@@ -24,6 +24,7 @@ import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
+import { StageFunnel } from '../components/StageFunnel';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 
@@ -1361,6 +1362,14 @@ export function AnalyticsPage() {
     ? (hotspots.find(h => h.id === activeClusterId) || rootCauseAdvisories.find(a => a.id === activeClusterId))
     : null;
 
+  // The date filter cohorts by SUBMISSION date (matchesDateFilter keys off
+  // r.timestamp). Saying so matters: cohorting by resolution date instead would
+  // censor slow reports out of short windows and make the service look faster
+  // than it is — the standard survivorship trap in SLA reporting.
+  const dateFilterLabel = dateFilter === 'all'
+    ? 'All reports, cohorted by submission date'
+    : `Reports submitted in the last ${dateFilter === '7d' ? '7' : '30'} days`;
+
   // One instance rendered on every tab. City Health previously had no filter UI
   // at all despite being filter-sensitive, so it silently reflected whatever had
   // been selected on another tab.
@@ -1491,6 +1500,10 @@ export function AnalyticsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Stage-duration funnel — the headline operational analytic:
+                which stage of the pipeline actually consumes the days. */}
+            <StageFunnel reports={filteredReports} dateFilterLabel={dateFilterLabel} />
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
