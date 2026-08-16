@@ -383,21 +383,21 @@ select option {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  border: 1px solid rgba(31,30,26,0.10);
-  background: rgba(31,30,26,0.03);
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(75,71,61,0.75);
+  color: rgba(231,237,225,0.8);
   transition: all 0.18s;
   margin-left: auto;
 }
 
 .notif-bell-btn:hover {
-  background: rgba(74,93,63,0.08);
-  color: #3d4d34;
-  border-color: rgba(74,93,63,0.2);
+  background: rgba(217,119,87,0.18);
+  color: #ffffff;
+  border-color: rgba(217,119,87,0.35);
 }
 
 .notif-bell-dot {
