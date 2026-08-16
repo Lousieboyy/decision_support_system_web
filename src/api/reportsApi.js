@@ -17,12 +17,36 @@ function getAuthHeaders() {
   return headers;
 }
 
-export const fetchReports = async (role = 'admin') => {
-  const response = await fetch(`${API_URL}/reports?role=${role}`, {
+// The backend caps each page at 200 rows (main.py: `.limit(max(1, min(limit, 200)))`)
+// and defaults to 50 when no limit is sent. Fetching without a limit therefore
+// silently truncates every analytic to the newest 50 reports.
+export const REPORTS_PAGE_SIZE = 200;
+export const MAX_REPORTS = 5000;
+
+// `role` is vestigial — the backend scopes off the JWT — but it is kept so the
+// existing call sites and Cypress intercepts (`**/reports*`) keep working.
+export const fetchReports = async (role = 'admin', { limit, offset } = {}) => {
+  const qs = new URLSearchParams({ role });
+  if (limit != null) qs.set('limit', String(limit));
+  if (offset != null) qs.set('offset', String(offset));
+  const response = await fetch(`${API_URL}/reports?${qs}`, {
     headers: getAuthHeaders(),
   });
   if (!response.ok) throw new Error('Failed to fetch reports');
   return response.json();
+};
+
+// Walks every page so callers get the whole dataset rather than the newest 50.
+// Stops on the first short page, or at MAX_REPORTS as a runaway guard.
+export const fetchAllReports = async (role = 'admin') => {
+  const all = [];
+  for (let offset = 0; offset < MAX_REPORTS; offset += REPORTS_PAGE_SIZE) {
+    const page = await fetchReports(role, { limit: REPORTS_PAGE_SIZE, offset });
+    if (!Array.isArray(page)) break;
+    all.push(...page);
+    if (page.length < REPORTS_PAGE_SIZE) break;
+  }
+  return all;
 };
 
 export const fetchStats = async () => {

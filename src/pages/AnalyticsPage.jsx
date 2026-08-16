@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
-import { fetchReports } from '../api/reportsApi';
+import { fetchAllReports } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
@@ -19,6 +19,10 @@ import {
   Lightbulb, Heart, Activity
 } from 'lucide-react';
 import { format, parseISO, subDays, startOfWeek } from 'date-fns';
+
+// End-to-end resolution target, in days. Phase 1 relocates this (and the other
+// scattered thresholds) into src/utils/analyticsConstants.js.
+const SLA_TARGET_DAYS = 3;
 
 // Helper to compute priority on the fly matching the mobile app logic
 const getPriority = (status, categories) => {
@@ -199,8 +203,9 @@ export function AnalyticsPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      // Pass the user role to fetchReports to ensure secure data fetching
-      const data = await fetchReports(role || 'admin');
+      // Pass the user role to fetchAllReports to ensure secure data fetching.
+      // Paginated so analytics cover the whole dataset, not just the newest page.
+      const data = await fetchAllReports(role || 'admin');
       const reportsWithPriority = data.map(r => ({
         ...r,
         priority: getPriority(r.status, r.categories)
@@ -259,7 +264,7 @@ export function AnalyticsPage() {
     const clusters = [];
 
     active.forEach((report) => {
-      const canonical = canonicalizeCategory(report.categories || report.predictedCategory);
+      const canonical = canonicalizeCategory(report.categories || report.ai_prediction);
       
       // Look for an existing cluster within proximityRadius meters of the same canonical type
       let foundCluster = false;
@@ -381,7 +386,7 @@ export function AnalyticsPage() {
 
       // Classify which canonical categories are present
       const categoriesInGroup = groupItems.map((r) =>
-        canonicalizeCategory(r.categories || r.predictedCategory)
+        canonicalizeCategory(r.categories || r.ai_prediction)
       );
       const uniqueCategories = new Set(categoriesInGroup);
 
@@ -459,12 +464,17 @@ export function AnalyticsPage() {
 
     // Run distance check to find repeat complaints in proximity of resolved ones (within 50m and 60 days)
     unresolvedReports.forEach(unres => {
-      const unresTime = unres.created_at ? new Date(unres.created_at).getTime() : Date.now();
+      // Submission time is `timestamp`; there is no `created_at` on the API payload.
+      // Undated records are skipped rather than defaulted to now(), which would
+      // force daysDiff to ~0 and make every undated pair look co-incident.
+      const unresTime = unres.timestamp ? new Date(unres.timestamp).getTime() : null;
+      if (!unresTime) return;
       resolvedReports.forEach(res => {
-        const resTime = res.created_at ? new Date(res.created_at).getTime() : Date.now();
+        const resTime = res.timestamp ? new Date(res.timestamp).getTime() : null;
+        if (!resTime) return;
         const daysDiff = Math.abs(unresTime - resTime) / (1000 * 60 * 60 * 24);
 
-        if (daysDiff <= 60 && canonicalizeCategory(unres.categories || unres.predictedCategory) === canonicalizeCategory(res.categories || res.predictedCategory)) {
+        if (daysDiff <= 60 && canonicalizeCategory(unres.categories || unres.ai_prediction) === canonicalizeCategory(res.categories || res.ai_prediction)) {
           const dist = calculateDistance(unres.latitude, unres.longitude, res.latitude, res.longitude);
           if (dist <= 50) { // Same spot repeat complaint
             const dept = res.assigned_department || '';
@@ -476,40 +486,47 @@ export function AnalyticsPage() {
       });
     });
 
-    // We also calculate actual SLA resolution rates (resolved within 3 days)
+    // Actual SLA resolution rates (resolved within the target), measured from
+    // `timestamp` -> `resolved_at`. Reports missing either date are excluded from
+    // BOTH numerator and denominator — counting them as on-time (the previous
+    // behaviour) made this rate incapable of returning anything but 100 or 92.
     const onTimeResolved = { JKR: 0, MBMB: 0, SWCorp: 0 };
+    const datedResolved = { JKR: 0, MBMB: 0, SWCorp: 0 };
+    const deptKeyOf = (r) => {
+      const dept = (r.assigned_department || '').toLowerCase();
+      if (dept.includes('jkr')) return 'JKR';
+      if (dept.includes('mbmb')) return 'MBMB';
+      if (dept.includes('swcorp')) return 'SWCorp';
+      return null;
+    };
+
     resolvedReports.forEach(r => {
-      const created = r.created_at ? new Date(r.created_at).getTime() : null;
-      const updated = r.updated_at ? new Date(r.updated_at).getTime() : null;
-      const dept = r.assigned_department || '';
-      
-      if (created && updated) {
-        const diffDays = (updated - created) / (1000 * 60 * 60 * 24);
-        if (diffDays <= 3) {
-          if (dept.toLowerCase().includes('jkr')) onTimeResolved.JKR++;
-          else if (dept.toLowerCase().includes('mbmb')) onTimeResolved.MBMB++;
-          else if (dept.toLowerCase().includes('swcorp')) onTimeResolved.SWCorp++;
-        }
-      } else {
-        // Fallback: treat as on-time if no dates
-        if (dept.toLowerCase().includes('jkr')) onTimeResolved.JKR++;
-        else if (dept.toLowerCase().includes('mbmb')) onTimeResolved.MBMB++;
-        else if (dept.toLowerCase().includes('swcorp')) onTimeResolved.SWCorp++;
-      }
+      const key = deptKeyOf(r);
+      if (!key) return;
+      const start = r.timestamp ? new Date(r.timestamp).getTime() : null;
+      const end = r.resolved_at ? new Date(r.resolved_at).getTime() : null;
+      if (!start || !end || isNaN(start) || isNaN(end)) return;
+      datedResolved[key]++;
+      if ((end - start) / (1000 * 60 * 60 * 24) <= SLA_TARGET_DAYS) onTimeResolved[key]++;
     });
 
-    const calculateSLARate = (onTime, total) => {
-      if (!total) return 92; // default high baseline if no resolved tickets
-      return Math.round((onTime / total) * 100);
-    };
+    // null (not a number) when there is nothing to measure — the render layer
+    // shows "Insufficient data" rather than a plausible-looking invented rate.
+    const calculateSLARate = (onTime, total) => (
+      total ? Math.round((onTime / total) * 100) : null
+    );
 
     const rates = {
-      JKR: calculateSLARate(onTimeResolved.JKR, totalResolved.JKR),
-      MBMB: calculateSLARate(onTimeResolved.MBMB, totalResolved.MBMB),
-      SWCorp: calculateSLARate(onTimeResolved.SWCorp, totalResolved.SWCorp),
+      JKR: calculateSLARate(onTimeResolved.JKR, datedResolved.JKR),
+      MBMB: calculateSLARate(onTimeResolved.MBMB, datedResolved.MBMB),
+      SWCorp: calculateSLARate(onTimeResolved.SWCorp, datedResolved.SWCorp),
     };
 
+    // A null rate means "not measured", which is not the same as failing —
+    // grading an unmeasured department F would be as misleading as the old
+    // 92% default. Phase 1 replaces this with the shared GRADE_SCALE.
     const getGrade = (rate) => {
+      if (rate == null) return null;
       if (rate >= 90) return 'A (Optimal)';
       if (rate >= 80) return 'B (Good)';
       if (rate >= 70) return 'C (Satisfactory)';
@@ -556,15 +573,21 @@ export function AnalyticsPage() {
 
     const computed = combined.map(item => {
       // Calculate Average Elapsed Days of reports inside the cluster
-      const totalDays = item.items.reduce((sum, r) => {
-        const created = r.created_at ? new Date(r.created_at).getTime() : Date.now();
-        const elapsed = (Date.now() - created) / (1000 * 60 * 60 * 24);
-        return sum + elapsed;
-      }, 0);
-      const avgElapsed = item.items.length ? (totalDays / item.items.length) : 0;
+      // Age is measured from `timestamp`. Reading the nonexistent `created_at`
+      // and defaulting to now() made every elapsed value ~0, so the aging term
+      // contributed nothing to the criticality score.
+      const dated = item.items.filter(r => r.timestamp && !isNaN(new Date(r.timestamp).getTime()));
+      const totalDays = dated.reduce((sum, r) => (
+        sum + (Date.now() - new Date(r.timestamp).getTime()) / (1000 * 60 * 60 * 24)
+      ), 0);
+      const avgElapsed = dated.length ? (totalDays / dated.length) : 0;
 
-      // Count High Priority reports in the cluster
-      const highPriorityCount = item.items.filter(r => (r.priority || '').toLowerCase() === 'high').length;
+      // Count High Priority reports in the cluster. The API never serializes
+      // `priority`; loadData derives it locally. Calling getPriority directly
+      // removes the dependency on that mapping having run.
+      const highPriorityCount = item.items.filter(
+        r => getPriority(r.status, r.categories || r.ai_prediction) === 'High'
+      ).length;
 
       // Criticality Score Equation
       let rawScore = (item.size * 8) + 
@@ -689,20 +712,27 @@ export function AnalyticsPage() {
     });
 
     return Object.values(metrics).map((m) => {
+      // null, not 0 and not a fabricated 4.5 — a department with nothing resolved
+      // has no measurable resolve time. The old fallback rendered an invented
+      // over-SLA red bar for departments that had simply never closed a ticket.
       const avgResponseDays = m.assigned
         ? parseFloat((m.totalResponseHours / m.assigned / 24).toFixed(1))
-        : 0;
+        : null;
       const avgResolveDays = m.resolved
         ? parseFloat((m.totalResolutionHours / m.resolved / 24).toFixed(1))
-        : 0;
+        : null;
 
-      return {
-        ...m,
-        avgResponseDays,
-        avgResolveDays: avgResolveDays || (m.backlog > 0 ? 4.5 : 0), // fallback average if resolved empty
-      };
+      return { ...m, avgResponseDays, avgResolveDays };
     });
   }, [filteredReports]);
+
+  // Only departments with a measurable resolve time reach the SLA chart, so a
+  // department that has never closed a ticket contributes no bar at all rather
+  // than an invented one. Filtering here also keeps <Cell> aligned with the bars.
+  const measurableSLAMetrics = useMemo(
+    () => deptSLAMetrics.filter((d) => d.avgResolveDays != null),
+    [deptSLAMetrics]
+  );
 
   // 2.5 Scoped department status data for breakdown chart
   const deptStatusData = useMemo(() => {
@@ -732,7 +762,9 @@ export function AnalyticsPage() {
         totalResolutionHours += (end - start) / (1000 * 60 * 60);
       }
     });
-    const avgDays = resolved.length ? (totalResolutionHours / resolved.length / 24).toFixed(1) : '2.4';
+    // null when nothing has been resolved — the KPI card renders "Insufficient
+    // data" rather than the invented 2.4-day figure it used to show.
+    const avgDays = resolved.length ? (totalResolutionHours / resolved.length / 24).toFixed(1) : null;
 
     // Resource allocation health analysis
     let worstBacklogDept = 'None';
@@ -757,6 +789,10 @@ export function AnalyticsPage() {
         healthStatus,
         recommendation,
         worstBacklogDept: selectedDept,
+        // Ranking departments against each other is meaningless when the view
+        // is scoped to a single one.
+        fastestSLA: null,
+        slowestSLA: null,
       };
     }
 
@@ -778,6 +814,14 @@ export function AnalyticsPage() {
       } to clear pending road repair backlogs.`;
     }
 
+    // Real fastest/slowest resolution times, over departments that actually have
+    // a measurable one. These replace a hardcoded "SWCorp (<1.0 Day)" string and
+    // a "Slowest SLA" label that was really showing the largest backlog.
+    const measurable = deptSLAMetrics.filter((d) => d.avgResolveDays != null);
+    const bySpeed = [...measurable].sort((a, b) => a.avgResolveDays - b.avgResolveDays);
+    const fastestSLA = bySpeed[0] || null;
+    const slowestSLA = bySpeed.length > 1 ? bySpeed[bySpeed.length - 1] : null;
+
     return {
       total,
       active,
@@ -786,6 +830,8 @@ export function AnalyticsPage() {
       healthStatus,
       recommendation,
       worstBacklogDept,
+      fastestSLA,
+      slowestSLA,
     };
   }, [filteredReports, hotspots, deptSLAMetrics, selectedDept]);
 
@@ -830,21 +876,23 @@ export function AnalyticsPage() {
   // 5.5. City Wellness Index — Composite Score (0–100)
   const cityWellnessData = useMemo(() => {
     const total = filteredReports.length;
-    if (total === 0) return { cwi: 75, domains: {
-      infrastructure: { name: 'Infrastructure', score: 75, activeIssues: 0, totalReports: 0 },
-      environment: { name: 'Environment', score: 78, activeIssues: 0, totalReports: 0 },
-      publicSafety: { name: 'Public Safety', score: 82, activeIssues: 0, totalReports: 0 },
-      efficiency: { name: 'Service Efficiency', score: 70, activeIssues: 0, totalReports: 0 },
-      satisfaction: { name: 'Citizen Satisfaction', score: 65, activeIssues: 0, totalReports: 0 },
-      responsiveness: { name: 'Responsiveness', score: 72, activeIssues: 0, totalReports: 0 },
-    }, grade: 'B' };
+    // No data means no score. The previous early-return invented a healthy
+    // grade-B city, so an empty dataset — or a failed fetch — rendered as good news.
+    if (total === 0) return { cwi: null, domains: {
+      infrastructure: { name: 'Infrastructure', score: null, activeIssues: 0, totalReports: 0 },
+      environment: { name: 'Environment', score: null, activeIssues: 0, totalReports: 0 },
+      publicSafety: { name: 'Public Safety', score: null, activeIssues: 0, totalReports: 0 },
+      efficiency: { name: 'Service Efficiency', score: null, activeIssues: 0, totalReports: 0 },
+      satisfaction: { name: 'Citizen Satisfaction', score: null, activeIssues: 0, totalReports: 0 },
+      responsiveness: { name: 'Responsiveness', score: null, activeIssues: 0, totalReports: 0 },
+    }, grade: null };
 
     const resolved = filteredReports.filter(r => r.status === 'Resolved').length;
     const rejected = filteredReports.filter(r => r.status === 'Rejected').length;
 
     // Helper: match report category against keywords
     const getCatReports = (keywords) => filteredReports.filter(r => {
-      const cat = (r.categories || r.predictedCategory || '').toLowerCase();
+      const cat = (r.categories || r.ai_prediction || '').toLowerCase();
       return keywords.some(kw => cat.includes(kw));
     });
 
@@ -852,9 +900,11 @@ export function AnalyticsPage() {
     const infraReports = getCatReports(['road', 'pothole', 'sidewalk', 'pavement', 'light', 'lamp', 'lighting', 'sign', 'bridge']);
     const infraResolved = infraReports.filter(r => r.status === 'Resolved').length;
     const infraActive = infraReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected').length;
+    // null when the domain has no reports. The old defaults (80/82/85/75) meant
+    // a domain with ZERO data outscored most domains with real data.
     const infraScore = infraReports.length > 0
       ? Math.round(Math.max(15, Math.min(100, (infraResolved / infraReports.length) * 100 - (infraActive * 3))))
-      : 80;
+      : null;
 
     // ENVIRONMENT — waste, dumping, pollution, vegetation
     const envReports = getCatReports(['waste', 'garbage', 'dumping', 'trash', 'burning', 'vegetation', 'overgrown', 'pollution', 'smoke']);
@@ -862,18 +912,21 @@ export function AnalyticsPage() {
     const envActive = envReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected').length;
     const envScore = envReports.length > 0
       ? Math.round(Math.max(15, Math.min(100, (envResolved / envReports.length) * 100 - (envActive * 4))))
-      : 82;
+      : null;
 
     // PUBLIC SAFETY — vandalism, fallen trees, fire hazards
     const safetyReports = getCatReports(['vandal', 'graffiti', 'tree', 'fallen', 'fire', 'hazard', 'manhole', 'stray', 'electrical']);
     const safetyResolved = safetyReports.filter(r => r.status === 'Resolved').length;
     const safetyActive = safetyReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected').length;
+    // Derived directly rather than via the `priority` field loadData attaches,
+    // so this score does not silently break if that mapping changes.
     const safetyHighPriority = safetyReports.filter(r =>
-      (r.priority || '').toLowerCase() === 'high' && r.status !== 'Resolved' && r.status !== 'Rejected'
+      getPriority(r.status, r.categories || r.ai_prediction) === 'High' &&
+      r.status !== 'Resolved' && r.status !== 'Rejected'
     ).length;
     const safetyScore = safetyReports.length > 0
       ? Math.round(Math.max(10, Math.min(100, (safetyResolved / safetyReports.length) * 100 - (safetyHighPriority * 10) - (safetyActive * 3))))
-      : 85;
+      : null;
 
     // SERVICE EFFICIENCY — % resolved within 3-day SLA
     const resolvedWithDates = filteredReports.filter(r => r.status === 'Resolved' && r.timestamp && r.resolved_at);
@@ -881,11 +934,11 @@ export function AnalyticsPage() {
     resolvedWithDates.forEach(r => {
       const start = new Date(r.timestamp).getTime();
       const end = new Date(r.resolved_at).getTime();
-      if (!isNaN(start) && !isNaN(end) && (end - start) / (1000 * 60 * 60 * 24) <= 3) onTimeCount++;
+      if (!isNaN(start) && !isNaN(end) && (end - start) / (1000 * 60 * 60 * 24) <= SLA_TARGET_DAYS) onTimeCount++;
     });
     const efficiencyScore = resolvedWithDates.length > 0
       ? Math.round((onTimeCount / resolvedWithDates.length) * 100)
-      : 75;
+      : null;
 
     // CITIZEN SATISFACTION — upvote engagement + resolution rate
     const totalUpvotes = filteredReports.reduce((sum, r) => sum + (r.upvotes || 0), 0);
@@ -901,16 +954,39 @@ export function AnalyticsPage() {
       const response = new Date(r.reviewed_at || r.forwarded_at || r.in_process_at).getTime();
       if (!isNaN(start) && !isNaN(response)) totalResponseDays += (response - start) / (1000 * 60 * 60 * 24);
     });
-    const avgResponseDays = withResponse.length > 0 ? totalResponseDays / withResponse.length : 2;
-    const responsivenessScore = Math.round(Math.max(10, Math.min(100, 100 - (avgResponseDays * 15))));
+    // The old fallback of 2 days silently produced a score of 70 for a council
+    // that had never responded to anything.
+    const avgResponseDays = withResponse.length > 0 ? totalResponseDays / withResponse.length : null;
+    const responsivenessScore = avgResponseDays == null
+      ? null
+      : Math.round(Math.max(10, Math.min(100, 100 - (avgResponseDays * 15))));
 
     // COMPOSITE CITY WELLNESS INDEX
-    const cwi = Math.round(
-      infraScore * 0.25 + envScore * 0.20 + safetyScore * 0.20 +
-      efficiencyScore * 0.15 + satisfactionScore * 0.10 + responsivenessScore * 0.10
-    );
+    // Domains without data score null and are excluded, with the remaining
+    // weights renormalised to 1 — otherwise a single null would poison the
+    // whole sum to NaN. `excludedDomains` is surfaced so the UI can say which
+    // domains the score actually covers. Phase 4 replaces this with SPI/UCI.
+    const CWI_WEIGHTS = {
+      infrastructure: 0.25, environment: 0.20, publicSafety: 0.20,
+      efficiency: 0.15, satisfaction: 0.10, responsiveness: 0.10,
+    };
+    const scoreByDomain = {
+      infrastructure: infraScore, environment: envScore, publicSafety: safetyScore,
+      efficiency: efficiencyScore, satisfaction: satisfactionScore,
+      responsiveness: responsivenessScore,
+    };
+    const included = Object.keys(CWI_WEIGHTS).filter(k => scoreByDomain[k] != null);
+    const excludedDomains = Object.keys(CWI_WEIGHTS).filter(k => scoreByDomain[k] == null);
+    const weightSum = included.reduce((s, k) => s + CWI_WEIGHTS[k], 0);
+    const cwi = weightSum > 0
+      ? Math.round(included.reduce((s, k) => s + scoreByDomain[k] * CWI_WEIGHTS[k], 0) / weightSum)
+      : null;
 
-    const getGrade = (s) => { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; };
+    const getGrade = (s) => {
+      if (s == null) return null;
+      if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C';
+      if (s >= 60) return 'D'; return 'F';
+    };
 
     const domains = {
       infrastructure: { name: 'Infrastructure', score: infraScore, activeIssues: infraActive, totalReports: infraReports.length },
@@ -921,7 +997,7 @@ export function AnalyticsPage() {
       responsiveness: { name: 'Responsiveness', score: responsivenessScore, activeIssues: 0, totalReports: withResponse.length },
     };
 
-    return { cwi, domains, grade: getGrade(cwi) };
+    return { cwi, domains, grade: getGrade(cwi), excludedDomains };
   }, [filteredReports]);
 
   // 5.6. Zone Wellness Scorecard
@@ -967,9 +1043,13 @@ export function AnalyticsPage() {
       const validTotal = total - rejected || 1;
 
       // Domain sub-scores
+      // null, not 75 — a week with no reports in a domain is unmeasured, and the
+      // old default drew a flat "healthy" line out of an empty dataset. Recharts
+      // renders nulls as gaps. Phase 4 replaces this memo with a real
+      // point-in-time cumulative-flow reconstruction.
       const scoreDomain = (keywords) => {
         const dr = cumReports.filter(r => { const c = (r.categories || '').toLowerCase(); return keywords.some(k => c.includes(k)); });
-        if (dr.length === 0) return 75;
+        if (dr.length === 0) return null;
         const dres = dr.filter(r => r.status === 'Resolved').length;
         return Math.round(Math.max(20, Math.min(100, (dres / dr.length) * 100)));
       };
@@ -977,9 +1057,13 @@ export function AnalyticsPage() {
       const infra = scoreDomain(['road', 'sidewalk', 'light', 'sign', 'pothole']);
       const env = scoreDomain(['waste', 'dumping', 'burning', 'vegetation', 'garbage']);
       const safety = scoreDomain(['vandal', 'tree', 'fallen', 'fire']);
-      const cwi = Math.round(infra * 0.35 + env * 0.35 + safety * 0.30);
+      // Renormalise over whichever domains are measurable this week.
+      const parts = [[infra, 0.35], [env, 0.35], [safety, 0.30]].filter(([v]) => v != null);
+      const wSum = parts.reduce((s, [, w]) => s + w, 0);
+      const cwi = wSum > 0 ? Math.round(parts.reduce((s, [v, w]) => s + v * w, 0) / wSum) : null;
 
-      weeks.push({ week: format(weekStart, 'MMM dd'), CWI: Math.min(100, cwi), Infrastructure: Math.min(100, infra), Environment: Math.min(100, env), Safety: Math.min(100, safety) });
+      const cap = (v) => (v == null ? null : Math.min(100, v));
+      weeks.push({ week: format(weekStart, 'MMM dd'), CWI: cap(cwi), Infrastructure: cap(infra), Environment: cap(env), Safety: cap(safety) });
     }
     return weeks;
   }, [reports]);
@@ -991,7 +1075,8 @@ export function AnalyticsPage() {
 
     // 1. Worsening domain detection
     Object.entries(cityWellnessData.domains).forEach(([key, domain]) => {
-      if (domain.score < 60) {
+      // Same coercion trap as above — an unmeasured domain must not read as 0.
+      if (domain.score != null && domain.score < 60) {
         insights.push({ id: `domain-${key}`, type: 'warning', title: `${domain.name} Needs Attention`,
           description: `${domain.name} health score is ${domain.score}/100 with ${domain.activeIssues} active issues. This domain is below the acceptable threshold and requires immediate intervention.`,
           zone: 'City-wide', action: `Prioritize ${domain.name.toLowerCase()} reports and allocate additional resources to this domain.` });
@@ -1038,7 +1123,7 @@ export function AnalyticsPage() {
       const pctIncrease = Math.round(((last7 - prev7) / prev7) * 100);
       const catCounts = {};
       filteredReports.filter(r => r.timestamp && (now - new Date(r.timestamp)) / (1000 * 60 * 60 * 24) <= 7).forEach(r => {
-        const cat = r.categories || r.predictedCategory || 'Other'; catCounts[cat] = (catCounts[cat] || 0) + 1;
+        const cat = r.categories || r.ai_prediction || 'Other'; catCounts[cat] = (catCounts[cat] || 0) + 1;
       });
       const topCat = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
       insights.push({ id: 'volume-spike', type: 'warning', title: `${pctIncrease}% Report Volume Spike Detected`,
@@ -1071,8 +1156,11 @@ export function AnalyticsPage() {
         zone: 'City-wide', action: `Prioritize high-engagement reports to demonstrate government responsiveness to citizen concerns.` });
     }
 
-    // 9. Overall city health status
-    if (cityWellnessData.cwi >= 80) {
+    // 9. Overall city health status. The null guard matters: `null < 60` coerces
+    // to `0 < 60`, so without it an unmeasurable city reported itself critical.
+    if (cityWellnessData.cwi == null) {
+      // No index, no verdict.
+    } else if (cityWellnessData.cwi >= 80) {
       insights.push({ id: 'city-health-good', type: 'success', title: 'City Health Status: Excellent',
         description: `The overall City Wellness Index is ${cityWellnessData.cwi}/100 (Grade ${cityWellnessData.grade}). All major domains are performing within acceptable thresholds.`,
         zone: 'City-wide', action: 'Maintain current operations and focus on continuous improvement in weaker domains.' });
@@ -1238,6 +1326,37 @@ export function AnalyticsPage() {
     );
   }
 
+  // A failed load must not fall through to the dashboard. Previously `error` was
+  // set and never read, so a network failure rendered a full page of zeroes and
+  // fallbacks that looked like real, healthy data.
+  if (error) {
+    return (
+      <div className="p-6 md:p-8">
+        <div className="page-header-title mb-1">Infrastructure Analytics</div>
+        <p className="page-header-sub mb-6">
+          Operational wellness scores, predictive hotspots, and response efficiency metrics.
+        </p>
+        <div
+          className="p-5 rounded-xl flex items-start gap-3 border"
+          style={{ background: '#ffffff', borderColor: 'rgba(31,30,26,0.08)', color: '#201f1b' }}
+        >
+          <AlertTriangle size={22} className="text-[#c1613f] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-bold">Failed to load analytics</h3>
+            <p className="text-sm mt-0.5" style={{ color: 'rgba(75,71,61,0.75)' }}>{error}</p>
+            <p className="text-xs mt-2" style={{ color: '#8a8477' }}>
+              No figures are shown because none could be computed. Retry once the
+              reports service is reachable.
+            </p>
+            <button onClick={loadData} className="export-btn mt-4">
+              <RefreshCw size={14} /> Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const activeCluster = activeClusterId
     ? (hotspots.find(h => h.id === activeClusterId) || rootCauseAdvisories.find(a => a.id === activeClusterId))
     : null;
@@ -1368,7 +1487,11 @@ export function AnalyticsPage() {
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
                   <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Avg Resolution SLA</div>
-                  <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.avgDays} Days</div>
+                  <div className="text-2xl font-black text-[#201f1b] mt-1">
+                    {kpiStats.avgDays == null
+                      ? <span className="text-base text-[#8a8477]">Insufficient data</span>
+                      : `${kpiStats.avgDays} Days`}
+                  </div>
                   <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Calculated from historical tickets</div>
                 </div>
               </div>
@@ -1481,15 +1604,15 @@ export function AnalyticsPage() {
                   <div style={{ height: '260px', width: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       {selectedDept === 'all' ? (
-                        <BarChart data={deptSLAMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <BarChart data={measurableSLAMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
                           <XAxis dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} />
                           <YAxis stroke="#8a8477" fontSize={11} tickLine={false} label={{ value: 'Days', angle: -90, position: 'insideLeft', stroke: '#8a8477', fontSize: 10 }} />
                           <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                          <ReferenceLine y={3} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Target SLA', fill: '#ef4444', fontSize: 9, position: 'top' }} />
+                          <ReferenceLine y={SLA_TARGET_DAYS} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Target SLA', fill: '#ef4444', fontSize: 9, position: 'top' }} />
                           <Bar dataKey="avgResolveDays" radius={[6, 6, 0, 0]} maxBarSize={45}>
-                            {deptSLAMetrics.map((entry, index) => {
-                              const exceedsSLA = entry.avgResolveDays > 3;
+                            {measurableSLAMetrics.map((entry, index) => {
+                              const exceedsSLA = entry.avgResolveDays > SLA_TARGET_DAYS;
                               return <Cell key={`cell-${index}`} fill={exceedsSLA ? '#ef4444' : '#10b981'} />;
                             })}
                           </Bar>
@@ -1547,10 +1670,22 @@ export function AnalyticsPage() {
                   <div className="border-t border-[#1f1e1a]/8 pt-4">
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
                       <span>Fastest SLA</span>
-                      <span className="text-[#201f1b]">SWCorp (&lt;1.0 Day)</span>
+                      <span className="text-[#201f1b]">
+                        {kpiStats.fastestSLA
+                          ? `${kpiStats.fastestSLA.name} (${kpiStats.fastestSLA.avgResolveDays} days)`
+                          : 'Insufficient data'}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
                       <span>Slowest SLA</span>
+                      <span className="text-[#201f1b]">
+                        {kpiStats.slowestSLA
+                          ? `${kpiStats.slowestSLA.name} (${kpiStats.slowestSLA.avgResolveDays} days)`
+                          : 'Insufficient data'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
+                      <span>Largest Backlog</span>
                       <span className="text-[#8a8477]">{kpiStats.worstBacklogDept}</span>
                     </div>
                   </div>
@@ -1972,51 +2107,85 @@ export function AnalyticsPage() {
                 <div
                   className="cwi-gauge"
                   style={{
-                    '--gauge-pct': cityWellnessData.cwi,
-                    '--gauge-color': cityWellnessData.cwi >= 80 ? '#15803d' : cityWellnessData.cwi >= 60 ? '#b45309' : '#b91c1c'
+                    '--gauge-pct': cityWellnessData.cwi ?? 0,
+                    '--gauge-color': cityWellnessData.cwi == null ? '#8a8477'
+                      : cityWellnessData.cwi >= 80 ? '#15803d'
+                      : cityWellnessData.cwi >= 60 ? '#b45309' : '#b91c1c'
                   }}
                 >
                   <div className="cwi-gauge-glow" />
                   <div className="cwi-gauge-ring" />
-                  <div className="cwi-gauge-value">{cityWellnessData.cwi}</div>
+                  <div className="cwi-gauge-value">{cityWellnessData.cwi ?? '—'}</div>
                   <div className="cwi-gauge-label">City Wellness</div>
                 </div>
-                <div className={`mt-5 text-2xl font-black cwi-grade-${cityWellnessData.grade}`}>
-                  Grade {cityWellnessData.grade}
-                </div>
+                {cityWellnessData.grade ? (
+                  <div className={`mt-5 text-2xl font-black cwi-grade-${cityWellnessData.grade}`}>
+                    Grade {cityWellnessData.grade}
+                  </div>
+                ) : (
+                  <div className="mt-5 text-base font-bold text-[#8a8477]">Insufficient data</div>
+                )}
                 <div className="text-[10px] text-[#8a8477] font-semibold mt-1 uppercase tracking-wider">
                   Composite Health Index
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-[10px] text-[#8a8477]">
-                  <Heart size={12} className="text-[#8a8477]" />
-                  <span className="font-semibold">Based on {filteredReports.length} reports</span>
+                <div className="mt-4 flex flex-col items-center gap-1 text-[10px] text-[#8a8477]">
+                  <span className="flex items-center gap-2">
+                    <Heart size={12} className="text-[#8a8477]" />
+                    <span className="font-semibold">Based on {filteredReports.length} reports</span>
+                  </span>
+                  {cityWellnessData.excludedDomains?.length > 0 && (
+                    <span className="font-semibold">
+                      {cityWellnessData.excludedDomains.length} of 6 domains omitted — insufficient data
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* 6 Domain Health Cards */}
               <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
-                {Object.entries(cityWellnessData.domains).map(([key, domain]) => (
-                  <div key={key} className="domain-card">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-extrabold text-[#8a8477] uppercase tracking-wider">{domain.name}</span>
-                      <span className={`text-lg font-black ${domain.score >= 80 ? 'text-emerald-700' : domain.score >= 60 ? 'text-amber-700' : 'text-red-700'}`}>
-                        {domain.score}
-                      </span>
+                {Object.entries(cityWellnessData.domains).map(([key, domain]) => {
+                  // Unmeasured domains keep the identical box model — only the
+                  // score, bar fill and caption change — so the grid never shifts.
+                  const measured = domain.score != null;
+                  return (
+                    <div key={key} className="domain-card">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[10px] font-extrabold text-[#8a8477] uppercase tracking-wider">{domain.name}</span>
+                        <span className={`text-lg font-black ${
+                          !measured ? 'text-[#8a8477]'
+                            : domain.score >= 80 ? 'text-emerald-700'
+                            : domain.score >= 60 ? 'text-amber-700' : 'text-red-700'
+                        }`}>
+                          {measured ? domain.score : '—'}
+                        </span>
+                      </div>
+                      <div className="domain-score-bar">
+                        {measured ? (
+                          <div
+                            className="domain-score-fill"
+                            style={{
+                              width: `${domain.score}%`,
+                              backgroundColor: domain.score >= 80 ? '#15803d' : domain.score >= 60 ? '#b45309' : '#b91c1c'
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="domain-score-fill"
+                            style={{
+                              width: '100%',
+                              background: 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, transparent 6px 12px)'
+                            }}
+                          />
+                        )}
+                      </div>
+                      <div className="text-[10px] text-[#8a8477] font-medium mt-2">
+                        {measured
+                          ? `${domain.activeIssues > 0 ? `${domain.activeIssues} active issues` : 'No active issues'} · ${domain.totalReports} total`
+                          : 'Insufficient data — no reports in this domain'}
+                      </div>
                     </div>
-                    <div className="domain-score-bar">
-                      <div
-                        className="domain-score-fill"
-                        style={{
-                          width: `${domain.score}%`,
-                          backgroundColor: domain.score >= 80 ? '#15803d' : domain.score >= 60 ? '#b45309' : '#b91c1c'
-                        }}
-                      />
-                    </div>
-                    <div className="text-[10px] text-[#8a8477] font-medium mt-2">
-                      {domain.activeIssues > 0 ? `${domain.activeIssues} active issues` : 'No active issues'} · {domain.totalReports} total
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 

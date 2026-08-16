@@ -9,7 +9,7 @@ import { format, parseISO } from 'date-fns';
 import { 
   getImageUrl, updateReportStatus, adminReview, adminReject,
   startMaintenance, completeTask, authorityResolve,
-  fetchReports, analyzeReportImage, rejectProof,
+  fetchAllReports, analyzeReportImage, rejectProof,
   fetchTeams, fetchTeamWorkers, dispatchToTeam, transferReport, claimReport,
   fetchCrews, reassignCrew
 } from '../api/reportsApi';
@@ -467,9 +467,10 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       setActionSuccess(null);
       setShowAfter(report.status === 'Resolved' && !!report.completion_image_path);
       
-      // Check for duplicates if Admin
+      // Check for duplicates if Admin. Must scan every report, not just the
+      // newest page, or near-duplicates older than one page go undetected.
       if (currentRole === 'admin' && report.status === 'Pending') {
-        fetchReports('admin').then(all => {
+        fetchAllReports('admin').then(all => {
           const dups = all.filter(r => 
             r.id !== report.id && 
             r.status !== 'Resolved' &&

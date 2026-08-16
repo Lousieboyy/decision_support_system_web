@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchStats, fetchTimeline, fetchReports, fetchTeamWorkload, fetchTransfers } from '../api/reportsApi';
+import { fetchStats, fetchTimeline, fetchAllReports, fetchTeamWorkload, fetchTransfers } from '../api/reportsApi';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -114,7 +114,7 @@ export function DashboardPage() {
       const [statsData, timelineData, reportsData] = await Promise.all([
         fetchStats().catch(() => null),
         fetchTimeline().catch(() => []),
-        fetchReports('admin').catch(() => []),
+        fetchAllReports('admin').catch(() => []),
       ]);
 
       const validReports = Array.isArray(reportsData) ? reportsData : [];

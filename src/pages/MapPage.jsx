@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { fetchReports, getImageUrl, updateReportStatus } from '../api/reportsApi';
+import { fetchAllReports, getImageUrl, updateReportStatus } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import L from 'leaflet';
 import 'leaflet.heat';
@@ -327,7 +327,7 @@ export function MapPage() {
   const loadReports = async () => {
     try {
       setLoading(true);
-      const data = await fetchReports(currentRole);
+      const data = await fetchAllReports(currentRole);
       const safeData = Array.isArray(data) ? data : [];
 
       // Filter out resolved reports that are older than 7 days

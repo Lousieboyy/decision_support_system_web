@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { fetchReports, getImageUrl } from '../api/reportsApi';
+import { fetchAllReports, getImageUrl } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
 import { AUTHORITIES } from '../utils/authorities';
@@ -124,7 +124,7 @@ export function ReportsPage() {
   const loadReports = async () => {
     try {
       setLoading(true);
-      const data = await fetchReports(currentRole);
+      const data = await fetchAllReports(currentRole);
       setReports(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
