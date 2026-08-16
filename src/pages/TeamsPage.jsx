@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Users, AlertTriangle, Clock, TrendingDown, TrendingUp, Send,
-  CheckCircle2, RefreshCw, Inbox, X, Plus, UserMinus, Coffee, Power,
+  CheckCircle2, RefreshCw, Inbox, X, Plus, UserMinus, Coffee, Power, Trash2,
 } from 'lucide-react';
 import {
   fetchTeamWorkload, fetchTeamWorkers, fetchTransfers,
   approveTransfer, denyTransfer,
-  fetchCrews, fetchCrewWorkload, createCrew, updateCrew,
+  fetchCrews, fetchCrewWorkload, createCrew, updateCrew, deleteCrew,
   addCrewMember, removeCrewMember, setStaffLeave,
 } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
@@ -123,15 +123,29 @@ function CrewManager({ teamId, roster, onChanged }) {
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(248,113,113,0.15)', color: '#fca5a5' }}>DISABLED</span>
                 )}
               </div>
-              <button
-                onClick={() => run(`toggle-${crew.id}`, () => updateCrew(crew.id, { status: crew.status === 'disabled' ? 'active' : 'disabled' }))}
-                disabled={busy === `toggle-${crew.id}`}
-                title={crew.status === 'disabled' ? 'Re-enable this crew' : 'Disable this crew (e.g. whole crew on leave)'}
-                className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                style={{ color: crew.status === 'disabled' ? '#4ade80' : '#fca5a5' }}
-              >
-                <Power size={12} /> {crew.status === 'disabled' ? 'Enable' : 'Disable'}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => run(`toggle-${crew.id}`, () => updateCrew(crew.id, { status: crew.status === 'disabled' ? 'active' : 'disabled' }))}
+                  disabled={busy === `toggle-${crew.id}`}
+                  title={crew.status === 'disabled' ? 'Re-enable this crew' : 'Disable this crew (e.g. whole crew on leave)'}
+                  className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                  style={{ color: crew.status === 'disabled' ? '#4ade80' : '#fca5a5' }}
+                >
+                  <Power size={12} /> {crew.status === 'disabled' ? 'Enable' : 'Disable'}
+                </button>
+                <button
+                  onClick={() => {
+                    if (!window.confirm(`Delete ${crew.name}? This can't be undone.`)) return;
+                    run(`delete-${crew.id}`, () => deleteCrew(crew.id));
+                  }}
+                  disabled={crew.members.length > 0 || busy === `delete-${crew.id}`}
+                  title={crew.members.length > 0 ? 'Remove all members before deleting this crew' : `Delete ${crew.name}`}
+                  className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ color: '#fca5a5' }}
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
             </div>
 
             {stats && (

@@ -175,6 +175,15 @@ export const updateCrew = async (crewId, { name, status } = {}) => {
   return response.json();
 };
 
+export const deleteCrew = async (crewId) => {
+  const response = await fetch(`${API_URL}/crews/${crewId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to delete crew');
+  return response.json();
+};
+
 export const addCrewMember = async (crewId, staffId) => {
   const response = await fetch(`${API_URL}/crews/${crewId}/members`, {
     method: 'POST',
