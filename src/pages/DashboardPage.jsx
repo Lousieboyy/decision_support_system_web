@@ -53,7 +53,7 @@ function DeptTag({ department }) {
   );
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border ${
-      auth?.color || 'bg-slate-100 border-slate-200 text-slate-600'
+      auth?.color || 'bg-stone-100 border-stone-200 text-stone-600'
     }`}>
       <Building2 size={10} />
       {auth?.abbr || department.slice(0, 10)}
@@ -63,14 +63,14 @@ function DeptTag({ department }) {
 
 function StatCard({ title, value, icon, iconColor, bgColor, borderColor, subtitle }) {
   return (
-    <div className="bg-white/5 backdrop-blur-xl border border-white/8 rounded-2xl p-5 flex items-center gap-4 hover:border-white/20 transition-all duration-300">
+    <div className="bg-white border border-[#1f1e1a]/8 shadow-[0_8px_32px_rgba(31,30,26,0.06)] rounded-2xl p-5 flex items-center gap-4 hover:border-[#1f1e1a]/15 transition-all duration-300">
       <div className={`p-3.5 rounded-xl border ${bgColor} ${iconColor} ${borderColor} flex items-center justify-center shrink-0`}>
         {icon}
       </div>
       <div className="min-w-0 flex-1 text-left">
-        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">{title}</div>
-        <div className="text-2xl font-black text-slate-100 mt-1">{value ?? '-'}</div>
-        {subtitle && <div className="text-[10px] text-slate-400 font-medium mt-0.5 truncate">{subtitle}</div>}
+        <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider truncate">{title}</div>
+        <div className="text-2xl font-black text-[#201f1b] mt-1">{value ?? '-'}</div>
+        {subtitle && <div className="text-[10px] text-[#8a8477] font-medium mt-0.5 truncate">{subtitle}</div>}
       </div>
     </div>
   );
@@ -232,9 +232,9 @@ export function DashboardPage() {
   if (error) {
     return (
       <div className="p-8">
-        <div className="p-4 rounded-xl flex items-center gap-3 border" style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)', color: '#e2e8f0' }}>
-          <AlertTriangle size={20} className="text-zinc-400" />
-          <div><h3 className="font-bold">Failed to load statistics</h3><p className="text-sm" style={{ color: 'rgba(148,163,184,0.7)' }}>{error}</p></div>
+        <div className="p-4 rounded-xl flex items-center gap-3 border" style={{ background: '#ffffff', borderColor: 'rgba(31,30,26,0.08)', color: '#201f1b' }}>
+          <AlertTriangle size={20} className="text-[#c1613f]" />
+          <div><h3 className="font-bold">Failed to load statistics</h3><p className="text-sm" style={{ color: 'rgba(75,71,61,0.75)' }}>{error}</p></div>
         </div>
       </div>
     );
@@ -249,15 +249,15 @@ export function DashboardPage() {
           <div className="page-header-sub mt-1">
             {deptId ? (
               <span className="flex items-center gap-2">
-                <span className="font-semibold text-slate-200">{user?.displayName}</span>
-                <span className="text-slate-300">|</span>
+                <span className="font-semibold text-[#3d4d34]">{user?.displayName}</span>
+                <span className="text-[#8a8477]">|</span>
                 <span>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()} Department</span>
-                {lastRefreshed && <span className="ml-2 text-xs text-slate-400">· Last updated: {format(lastRefreshed, 'HH:mm:ss')}</span>}
+                {lastRefreshed && <span className="ml-2 text-xs text-[#8a8477]">· Last updated: {format(lastRefreshed, 'HH:mm:ss')}</span>}
               </span>
             ) : (
               <span>
                 Real-time statistics for city issue reports
-                {lastRefreshed && <span className="ml-2 text-xs text-slate-400">· Last updated: {format(lastRefreshed, 'HH:mm:ss')}</span>}
+                {lastRefreshed && <span className="ml-2 text-xs text-[#8a8477]">· Last updated: {format(lastRefreshed, 'HH:mm:ss')}</span>}
               </span>
             )}
           </div>
@@ -267,9 +267,9 @@ export function DashboardPage() {
           <button
             onClick={loadAll}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50" style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(203,213,225,0.85)' }}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50" style={{ background: 'rgba(74,93,63,0.07)', border: '1px solid rgba(74,93,63,0.18)', color: '#3d4d34' }}
           >
-            <RefreshCw size={15} className={loading ? 'animate-spin text-slate-400' : ''} />
+            <RefreshCw size={15} className={loading ? 'animate-spin text-[#8a8477]' : ''} />
             Refresh
           </button>
         </div>
@@ -280,7 +280,7 @@ export function DashboardPage() {
       {!stats && loading ? (
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {[...Array(4)].map((_, i) => <div key={i} className="rounded-2xl border border-white/8 animate-pulse h-[100px]" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+            {[...Array(4)].map((_, i) => <div key={i} className="rounded-2xl border border-[#1f1e1a]/8 animate-pulse h-[100px]" style={{ background: '#ffffff' }} />)}
           </div>
         </div>
       ) : stats ? (
@@ -288,22 +288,22 @@ export function DashboardPage() {
           {/* SLA Alerts */}
           {(slaMetrics.bottlenecks > 0 || slaMetrics.avgDays > 0) && (
             <div className="flex flex-col md:flex-row gap-5 mb-6">
-              <div className="flex-1 rounded-2xl p-5 flex items-center gap-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="p-3 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', color: '#f1f5f9' }}>
+              <div className="flex-1 rounded-2xl p-5 flex items-center gap-4" style={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.08)', boxShadow: '0 8px 32px rgba(31,30,26,0.06)' }}>
+                <div className="p-3 rounded-full" style={{ background: 'rgba(217,119,87,0.12)', color: '#c1613f' }}>
                   <AlertCircle size={28} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#f1f5f9' }}>Bottleneck Alert</h3>
-                  <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>{slaMetrics.bottlenecks} report(s) have been stuck for over 3 days.</p>
+                  <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#201f1b' }}>Bottleneck Alert</h3>
+                  <p className="text-sm font-medium" style={{ color: '#8a8477' }}>{slaMetrics.bottlenecks} report(s) have been stuck for over 3 days.</p>
                 </div>
               </div>
-              <div className="flex-1 rounded-2xl p-5 flex items-center gap-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div className="p-3 rounded-full" style={{ background: 'rgba(255,255,255,0.05)', color: '#f1f5f9' }}>
+              <div className="flex-1 rounded-2xl p-5 flex items-center gap-4" style={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.08)', boxShadow: '0 8px 32px rgba(31,30,26,0.06)' }}>
+                <div className="p-3 rounded-full" style={{ background: 'rgba(74,93,63,0.10)', color: '#3d4d34' }}>
                   <Clock size={28} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#f1f5f9' }}>SLA Performance</h3>
-                  <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>Average resolution time is {slaMetrics.avgDays} days.</p>
+                  <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#201f1b' }}>SLA Performance</h3>
+                  <p className="text-sm font-medium" style={{ color: '#8a8477' }}>Average resolution time is {slaMetrics.avgDays} days.</p>
                 </div>
               </div>
             </div>
@@ -311,10 +311,10 @@ export function DashboardPage() {
 
           {/* Team load strip — who is drowning, and who can take work */}
           {canSeeTeams && teamLoad.length > 0 && (
-            <div className="rounded-2xl p-5 mb-6" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="rounded-2xl p-5 mb-6" style={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.08)', boxShadow: '0 8px 32px rgba(31,30,26,0.06)' }}>
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#f1f5f9' }}>Team Load</h3>
-                <Link to="/teams" className="text-xs font-semibold" style={{ color: '#94a3b8' }}>
+                <h3 className="text-sm font-bold uppercase tracking-wider" style={{ color: '#201f1b' }}>Team Load</h3>
+                <Link to="/teams" className="text-xs font-semibold" style={{ color: '#3d4d34' }}>
                   {pendingTransfers > 0
                     ? `${pendingTransfers} release request${pendingTransfers === 1 ? '' : 's'} waiting →`
                     : 'Manage teams →'}
@@ -322,18 +322,18 @@ export function DashboardPage() {
               </div>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                 {teamLoad.map(t => {
-                  const tone = t.status === 'bottleneck' ? '#f87171'
-                    : t.status === 'strained' ? '#fbbf24' : '#4ade80';
+                  const tone = t.status === 'bottleneck' ? '#dc2626'
+                    : t.status === 'strained' ? '#c1613f' : '#15803d';
                   return (
-                    <div key={t.id} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.04)', borderLeft: `3px solid ${tone}` }}>
+                    <div key={t.id} className="rounded-xl p-4" style={{ background: 'var(--cream-100)', borderLeft: `3px solid ${tone}` }}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-bold" style={{ color: '#f1f5f9' }}>{t.name}</span>
+                        <span className="text-sm font-bold" style={{ color: '#201f1b' }}>{t.name}</span>
                         <span className="text-[10px] font-bold uppercase" style={{ color: tone }}>{t.status}</span>
                       </div>
-                      <p className="text-xs" style={{ color: '#94a3b8' }}>
+                      <p className="text-xs" style={{ color: '#4b473d' }}>
                         {t.open_count} open · {t.unclaimed_count} unclaimed
                       </p>
-                      <p className="text-xs" style={{ color: '#64748b' }}>
+                      <p className="text-xs" style={{ color: '#8a8477' }}>
                         {t.load_per_worker != null
                           ? `${t.load_per_worker} per worker (${t.worker_count})`
                           : `no workers assigned`}
@@ -352,36 +352,36 @@ export function DashboardPage() {
               title="Total Reports"
               value={stats.total}
               icon={<MapPin size={22} />}
-              iconColor="text-zinc-300"
-              bgColor="bg-zinc-800/10"
-              borderColor="border-zinc-800/20"
+              iconColor="text-[#4a5d3f]"
+              bgColor="bg-[#4a5d3f]/10"
+              borderColor="border-[#4a5d3f]/20"
               subtitle="All-time submissions"
             />
             <StatCard
               title="Pending"
               value={stats.pending}
               icon={<AlertTriangle size={22} />}
-              iconColor="text-amber-400"
+              iconColor="text-amber-600"
               bgColor="bg-amber-500/10"
-              borderColor="border-amber-500/20"
+              borderColor="border-amber-500/25"
               subtitle="Awaiting admin review"
             />
             <StatCard
               title="Active Work"
               value={(stats.in_review || 0) + (stats.in_process || 0) + (stats.in_maintenance || 0)}
               icon={<Activity size={22} />}
-              iconColor="text-blue-400"
+              iconColor="text-blue-600"
               bgColor="bg-blue-500/10"
-              borderColor="border-blue-500/20"
+              borderColor="border-blue-500/25"
               subtitle="In review / process / maint."
             />
             <StatCard
               title="Resolved"
               value={stats.resolved}
               icon={<CheckCircle2 size={22} />}
-              iconColor="text-emerald-400"
+              iconColor="text-emerald-600"
               bgColor="bg-emerald-500/10"
-              borderColor="border-emerald-500/20"
+              borderColor="border-emerald-500/25"
               subtitle={`${resolutionRate}% resolution rate`}
             />
           </div>
@@ -404,15 +404,15 @@ export function DashboardPage() {
                             <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#cbd5e1' }} interval="preserveStartEnd" />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#cbd5e1' }} allowDecimals={false} />
-                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(10,10,10,0.95)', color: '#e2e8f0', fontSize: '13px', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#e2e8f0' }} labelStyle={{ color: '#94a3b8' }} formatter={(val) => [`${val} report${val !== 1 ? 's' : ''}`, 'Count']} />
-                        <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2.5} fill="url(#colorCount)" dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#6366f1', stroke: '#ffffff', strokeWidth: 2 }} />
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(31,30,26,0.08)" />
+                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#8a8477' }} interval="preserveStartEnd" />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#8a8477' }} allowDecimals={false} />
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(31,30,26,0.10)', background: '#ffffff', color: '#201f1b', fontSize: '13px', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} formatter={(val) => [`${val} report${val !== 1 ? 's' : ''}`, 'Count']} />
+                        <Area type="monotone" dataKey="count" stroke="#4a5d3f" strokeWidth={2.5} fill="url(#colorCount)" dot={{ r: 3, fill: '#4a5d3f', strokeWidth: 0 }} activeDot={{ r: 5, fill: '#4a5d3f', stroke: '#ffffff', strokeWidth: 2 }} />
                       </AreaChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="flex h-full items-center justify-center text-slate-400 text-sm">Not enough data yet.</div>
+                    <div className="flex h-full items-center justify-center text-[#8a8477] text-sm">Not enough data yet.</div>
                   )}
                 </div>
               </div>
@@ -431,12 +431,12 @@ export function DashboardPage() {
                         <Pie data={chartData} cx="50%" cy="45%" innerRadius={55} outerRadius={88} paddingAngle={4} dataKey="value">
                           {chartData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(10,10,10,0.95)', color: '#e2e8f0', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#e2e8f0' }} labelStyle={{ color: '#94a3b8' }} />
-                        <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} formatter={(value) => <span style={{ fontSize: 11, color: '#ffffff', fontWeight: 500 }}>{value}</span>} />
+                        <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(31,30,26,0.10)', background: '#ffffff', color: '#201f1b', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} formatter={(value) => <span style={{ fontSize: 11, color: '#201f1b', fontWeight: 500 }}>{value}</span>} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="flex h-full items-center justify-center text-slate-400 text-sm">No category data.</div>
+                    <div className="flex h-full items-center justify-center text-[#8a8477] text-sm">No category data.</div>
                   )}
                 </div>
               </div>
@@ -450,18 +450,18 @@ export function DashboardPage() {
             </div>
             <div className="p-5 space-y-3">
               {[
-                { label: 'Pending',      value: stats.pending || 0,       color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', text: '#fbbf24' },
-                { label: 'In Review',    value: stats.in_review || 0,     color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', text: '#60a5fa' },
-                { label: 'In Process',   value: stats.in_process || 0,    color: '#6366f1', bg: 'rgba(99,102,241,0.12)', text: '#818cf8' },
-                { label: 'In Maint.',    value: stats.in_maintenance || 0,color: '#a855f7', bg: 'rgba(168,85,247,0.12)', text: '#c084fc' },
-                { label: 'Resolved',     value: stats.resolved || 0,      color: '#10b981', bg: 'rgba(16,185,129,0.12)', text: '#34d399' },
-                { label: 'Rejected',     value: stats.rejected || 0,      color: '#ef4444', bg: 'rgba(239,68,68,0.12)', text: '#f87171' },
+                { label: 'Pending',      value: stats.pending || 0,       color: '#d97757', bg: 'rgba(217,119,87,0.12)', text: '#b45309' },
+                { label: 'In Review',    value: stats.in_review || 0,     color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
+                { label: 'In Process',   value: stats.in_process || 0,    color: '#6366f1', bg: 'rgba(99,102,241,0.12)', text: '#4338ca' },
+                { label: 'In Maint.',    value: stats.in_maintenance || 0,color: '#a855f7', bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
+                { label: 'Resolved',     value: stats.resolved || 0,      color: '#4a5d3f', bg: 'rgba(74,93,63,0.12)', text: '#3d4d34' },
+                { label: 'Rejected',     value: stats.rejected || 0,      color: '#ef4444', bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
               ].map(({ label, value, color, bg, text }) => {
                 const pct = stats.total ? Math.round((value / stats.total) * 100) : 0;
                 return (
                   <div key={label} className="flex items-center gap-4 text-left">
                     <span className="w-24 text-xs font-bold" style={{ color: text }}>{label}</span>
-                    <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                    <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.07)' }}>
                       <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
                     </div>
                     <span className="w-16 text-right text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: bg, color: text }}>
@@ -478,28 +478,28 @@ export function DashboardPage() {
             <div className="content-card mb-5">
               <div className="content-card-header">
                 <div className="content-card-title">Department Performance</div>
-                <span className="text-xs text-slate-400 font-medium">Based on recent 20 reports</span>
+                <span className="text-xs text-[#8a8477] font-medium">Based on recent 20 reports</span>
               </div>
               <div className="p-5">
                 <div className="h-[200px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={deptPerformanceData} layout="vertical" margin={{ top: 0, right: 50, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.06)" />
-                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#cbd5e1' }} allowDecimals={false} />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#ffffff', fontWeight: 600 }} width={45} />
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(255,255,255,0.10)', background: 'rgba(10,10,10,0.95)', color: '#e2e8f0', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#e2e8f0' }} labelStyle={{ color: '#94a3b8' }} />
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
+                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#8a8477' }} allowDecimals={false} />
+                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#201f1b', fontWeight: 600 }} width={45} />
+                      <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(31,30,26,0.10)', background: '#ffffff', color: '#201f1b', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                       <Bar dataKey="assigned" name="Assigned" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={12}>
-                        <LabelList dataKey="assigned" position="right" style={{ fontSize: 11, fill: '#818cf8', fontWeight: 700 }} />
+                        <LabelList dataKey="assigned" position="right" style={{ fontSize: 11, fill: '#4338ca', fontWeight: 700 }} />
                       </Bar>
-                      <Bar dataKey="resolved" name="Resolved" fill="#10b981" radius={[0, 4, 4, 0]} barSize={12}>
-                        <LabelList dataKey="resolved" position="right" style={{ fontSize: 11, fill: '#34d399', fontWeight: 700 }} />
+                      <Bar dataKey="resolved" name="Resolved" fill="#4a5d3f" radius={[0, 4, 4, 0]} barSize={12}>
+                        <LabelList dataKey="resolved" position="right" style={{ fontSize: 11, fill: '#3d4d34', fontWeight: 700 }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex items-center gap-4 mt-3 text-xs text-slate-350">
+                <div className="flex items-center gap-4 mt-3 text-xs text-[#8a8477]">
                   <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#6366f1' }} /> Assigned</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#10b981' }} /> Resolved</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#4a5d3f' }} /> Resolved</span>
                 </div>
               </div>
             </div>
@@ -509,36 +509,36 @@ export function DashboardPage() {
           <div className="content-card">
             <div className="content-card-header">
               <div className="content-card-title">Recent Reports</div>
-              <span className="text-xs text-slate-400 font-medium">Showing 20 most recent reports · Tags show assigned dept.</span>
+              <span className="text-xs text-[#8a8477] font-medium">Showing 20 most recent reports · Tags show assigned dept.</span>
             </div>
             {recentReports.length === 0 ? (
-              <div className="flex items-center justify-center py-12 text-sm" style={{ color: 'rgba(148,163,184,0.5)' }}>No reports found.</div>
+              <div className="flex items-center justify-center py-12 text-sm" style={{ color: 'rgba(138,132,119,0.85)' }}>No reports found.</div>
             ) : (
-              <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+              <div className="divide-y" style={{ borderColor: 'rgba(31,30,26,0.06)' }}>
                 {recentReports.map(report => {
                   const isMyDept = deptId ? reportMatchesDept(report, deptId) : false;
                   const statusStyles = {
-                    'Pending':        'bg-amber-500/15 border border-amber-500/30 text-amber-300',
-                    'In Review':      'bg-blue-500/15 border border-blue-500/30 text-blue-300',
-                    'In Process':     'bg-indigo-500/15 border border-indigo-500/30 text-indigo-300',
-                    'In Maintenance': 'bg-purple-500/15 border border-purple-500/30 text-purple-300',
-                    'Resolved':       'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-extrabold',
-                    'Rejected':       'bg-red-500/15 border border-red-500/30 text-red-400 line-through',
+                    'Pending':        'bg-amber-500/10 border border-amber-500/30 text-amber-700',
+                    'In Review':      'bg-blue-500/10 border border-blue-500/30 text-blue-700',
+                    'In Process':     'bg-indigo-500/10 border border-indigo-500/30 text-indigo-700',
+                    'In Maintenance': 'bg-purple-500/10 border border-purple-500/30 text-purple-700',
+                    'Resolved':       'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 font-extrabold',
+                    'Rejected':       'bg-red-500/10 border border-red-500/30 text-red-700 line-through',
                   };
-                  const statusCls = statusStyles[report.status] || 'bg-slate-100 text-slate-700';
+                  const statusCls = statusStyles[report.status] || 'bg-stone-100 text-stone-700';
                   return (
                     <div
                       key={report.id}
                       className={`flex items-center gap-4 px-5 py-3 transition-colors ${
-                        isMyDept ? 'hover:bg-white/5' : 'hover:bg-white/5'
+                        isMyDept ? 'hover:bg-[#4a5d3f]/5' : 'hover:bg-[#4a5d3f]/5'
                       }`}
                     >
-                      <span className="text-xs font-mono w-12 shrink-0" style={{ color: 'rgba(148,163,184,0.5)' }}>#{report.id}</span>
-                      <span className="text-sm font-semibold flex-1 truncate" style={{ color: '#e2e8f0' }}>{report.categories || 'Uncategorized'}</span>
-                      <span className="text-xs truncate max-w-[160px] hidden md:block" style={{ color: 'rgba(148,163,184,0.65)' }}>{report.address || 'Unknown'}</span>
+                      <span className="text-xs font-mono w-12 shrink-0" style={{ color: 'rgba(138,132,119,0.85)' }}>#{report.id}</span>
+                      <span className="text-sm font-semibold flex-1 truncate" style={{ color: '#201f1b' }}>{report.categories || 'Uncategorized'}</span>
+                      <span className="text-xs truncate max-w-[160px] hidden md:block" style={{ color: 'rgba(75,71,61,0.75)' }}>{report.address || 'Unknown'}</span>
                       {report.assigned_department && <DeptTag department={report.assigned_department} />}
                       {isMyDept && deptId && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ color: '#a5b4fc', background: 'rgba(79,70,229,0.18)', border: '1px solid rgba(79,70,229,0.3)' }}>YOUR DEPT</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ color: '#4338ca', background: 'rgba(79,70,229,0.12)', border: '1px solid rgba(79,70,229,0.25)' }}>YOUR DEPT</span>
                       )}
                       <span className={`px-2.5 py-0.5 text-xs font-bold rounded-lg shrink-0 ${statusCls}`}>{report.status || 'Pending'}</span>
                     </div>

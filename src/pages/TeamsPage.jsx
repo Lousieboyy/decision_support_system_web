@@ -14,28 +14,28 @@ import { useAuth } from '../context/AuthContext';
 // One place decides what a team's colour means; the backend hands us the
 // derived status so the panel and the app never drift apart on thresholds.
 const STATUS_STYLE = {
-  bottleneck: { label: 'Bottleneck', color: '#f87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.35)' },
-  strained:   { label: 'Strained',   color: '#fbbf24', bg: 'rgba(251,191,36,0.12)', border: 'rgba(251,191,36,0.35)' },
-  healthy:    { label: 'Healthy',    color: '#4ade80', bg: 'rgba(74,222,128,0.12)', border: 'rgba(74,222,128,0.30)' },
+  bottleneck: { label: 'Bottleneck', color: '#b91c1c', bg: 'rgba(185,28,28,0.10)', border: 'rgba(185,28,28,0.30)' },
+  strained:   { label: 'Strained',   color: '#b45309', bg: 'rgba(180,83,9,0.10)', border: 'rgba(180,83,9,0.30)' },
+  healthy:    { label: 'Healthy',    color: '#047857', bg: 'rgba(4,120,87,0.10)', border: 'rgba(4,120,87,0.25)' },
 };
 
 function Metric({ icon, label, value, hint, alert }) {
   return (
-    <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.04)' }}>
-      <div className="flex items-center gap-1.5 mb-1" style={{ color: alert ? '#fbbf24' : '#94a3b8' }}>
+    <div className="rounded-xl p-3" style={{ background: 'var(--cream-100)' }}>
+      <div className="flex items-center gap-1.5 mb-1" style={{ color: alert ? '#b45309' : '#8a8477' }}>
         {icon}
         <span className="text-[11px] font-semibold uppercase tracking-wide">{label}</span>
       </div>
-      <p className="text-xl font-bold" style={{ color: alert ? '#fbbf24' : '#f1f5f9' }}>{value}</p>
-      {hint && <p className="text-[11px] mt-0.5" style={{ color: '#64748b' }}>{hint}</p>}
+      <p className="text-xl font-bold" style={{ color: alert ? '#b45309' : '#201f1b' }}>{value}</p>
+      {hint && <p className="text-[11px] mt-0.5" style={{ color: '#8a8477' }}>{hint}</p>}
     </div>
   );
 }
 
 const CREW_STATUS_STYLE = {
-  bottleneck: '#f87171',
-  strained: '#fbbf24',
-  healthy: '#4ade80',
+  bottleneck: '#b91c1c',
+  strained: '#b45309',
+  healthy: '#047857',
 };
 
 // Crew management for the authority's own team: create crews, move workers
@@ -97,30 +97,30 @@ function CrewManager({ teamId, roster, onChanged }) {
   const unassigned = roster.filter(w => !w.crew_id);
 
   if (loading) {
-    return <p className="text-xs" style={{ color: '#64748b' }}>Loading crews...</p>;
+    return <p className="text-xs" style={{ color: '#8a8477' }}>Loading crews...</p>;
   }
 
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(248,113,113,0.12)', color: '#fca5a5' }}>
+        <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'rgba(185,28,28,0.10)', color: '#b91c1c' }}>
           {error}
         </div>
       )}
 
       {crews.map(crew => {
         const stats = workload[crew.id];
-        const tone = stats ? CREW_STATUS_STYLE[stats.derived_status] : '#94a3b8';
+        const tone = stats ? CREW_STATUS_STYLE[stats.derived_status] : '#8a8477';
         return (
-          <div key={crew.id} className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${crew.status === 'disabled' ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
-            <div className="flex items-center justify-between px-3 py-2" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          <div key={crew.id} className="rounded-xl overflow-hidden" style={{ background: '#ffffff', border: `1px solid ${crew.status === 'disabled' ? 'rgba(185,28,28,0.30)' : 'rgba(31,30,26,0.08)'}` }}>
+            <div className="flex items-center justify-between px-3 py-2" style={{ background: 'var(--cream-200)' }}>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold" style={{ color: '#f1f5f9' }}>{crew.name}</span>
+                <span className="text-sm font-bold" style={{ color: '#201f1b' }}>{crew.name}</span>
                 {stats && (
                   <span className="text-[10px] font-bold uppercase" style={{ color: tone }}>{stats.derived_status}</span>
                 )}
                 {crew.status === 'disabled' && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(248,113,113,0.15)', color: '#fca5a5' }}>DISABLED</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(185,28,28,0.10)', color: '#b91c1c' }}>DISABLED</span>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -129,7 +129,7 @@ function CrewManager({ teamId, roster, onChanged }) {
                   disabled={busy === `toggle-${crew.id}`}
                   title={crew.status === 'disabled' ? 'Re-enable this crew' : 'Disable this crew (e.g. whole crew on leave)'}
                   className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                  style={{ color: crew.status === 'disabled' ? '#4ade80' : '#fca5a5' }}
+                  style={{ color: crew.status === 'disabled' ? '#047857' : '#b91c1c' }}
                 >
                   <Power size={12} /> {crew.status === 'disabled' ? 'Enable' : 'Disable'}
                 </button>
@@ -141,7 +141,7 @@ function CrewManager({ teamId, roster, onChanged }) {
                   disabled={crew.members.length > 0 || busy === `delete-${crew.id}`}
                   title={crew.members.length > 0 ? 'Remove all members before deleting this crew' : `Delete ${crew.name}`}
                   className="flex items-center gap-1 text-[11px] font-semibold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                  style={{ color: '#fca5a5' }}
+                  style={{ color: '#b91c1c' }}
                 >
                   <Trash2 size={12} /> Delete
                 </button>
@@ -149,25 +149,25 @@ function CrewManager({ teamId, roster, onChanged }) {
             </div>
 
             {stats && (
-              <div className="px-3 py-2 text-[11px] flex flex-wrap gap-x-3 gap-y-1" style={{ color: '#94a3b8', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="px-3 py-2 text-[11px] flex flex-wrap gap-x-3 gap-y-1" style={{ color: '#8a8477', borderBottom: '1px solid rgba(31,30,26,0.06)' }}>
                 <span>{stats.open_count} open · {stats.unclaimed_count} unclaimed</span>
                 <span>{stats.load_per_worker != null ? `${stats.load_per_worker} per worker` : 'no active workers'}</span>
-                {stats.on_leave_count > 0 && <span style={{ color: '#fbbf24' }}>{stats.on_leave_count} on leave</span>}
-                {stats.sla_breached_count > 0 && <span style={{ color: '#f87171' }}>{stats.sla_breached_count} past SLA</span>}
+                {stats.on_leave_count > 0 && <span style={{ color: '#b45309' }}>{stats.on_leave_count} on leave</span>}
+                {stats.sla_breached_count > 0 && <span style={{ color: '#b91c1c' }}>{stats.sla_breached_count} past SLA</span>}
               </div>
             )}
 
             <div className="p-3 space-y-1.5">
               {crew.members.length === 0 && (
-                <p className="text-xs" style={{ color: '#64748b' }}>No members yet.</p>
+                <p className="text-xs" style={{ color: '#8a8477' }}>No members yet.</p>
               )}
               {crew.members.map(m => (
                 <div key={m.id} className="flex items-center justify-between text-sm py-1 px-2 rounded-lg"
-                  style={{ background: 'rgba(255,255,255,0.03)', opacity: m.on_leave ? 0.45 : 1 }}>
+                  style={{ background: 'var(--cream-100)', opacity: m.on_leave ? 0.45 : 1 }}>
                   <div className="flex items-center gap-2">
-                    <span style={{ color: m.on_leave ? '#64748b' : '#e2e8f0', textDecoration: m.on_leave ? 'line-through' : 'none' }}>{m.username}</span>
-                    <span className="text-[11px]" style={{ color: m.active_jobs >= 5 ? '#fbbf24' : '#64748b' }}>{m.active_jobs} active</span>
-                    {m.on_leave && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>ON LEAVE</span>}
+                    <span style={{ color: m.on_leave ? '#8a8477' : '#201f1b', textDecoration: m.on_leave ? 'line-through' : 'none' }}>{m.username}</span>
+                    <span className="text-[11px]" style={{ color: m.active_jobs >= 5 ? '#b45309' : '#8a8477' }}>{m.active_jobs} active</span>
+                    {m.on_leave && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(180,83,9,0.10)', color: '#b45309' }}>ON LEAVE</span>}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -175,7 +175,7 @@ function CrewManager({ teamId, roster, onChanged }) {
                       disabled={busy === `leave-${m.id}`}
                       title={m.on_leave ? 'Mark back from leave' : 'Mark on leave'}
                       className="cursor-pointer disabled:opacity-50"
-                      style={{ color: m.on_leave ? '#4ade80' : '#94a3b8' }}
+                      style={{ color: m.on_leave ? '#047857' : '#8a8477' }}
                     >
                       <Coffee size={13} />
                     </button>
@@ -184,7 +184,7 @@ function CrewManager({ teamId, roster, onChanged }) {
                       disabled={busy === `rm-${m.id}`}
                       title="Remove from crew"
                       className="cursor-pointer disabled:opacity-50"
-                      style={{ color: '#fca5a5' }}
+                      style={{ color: '#b91c1c' }}
                     >
                       <UserMinus size={13} />
                     </button>
@@ -197,7 +197,7 @@ function CrewManager({ teamId, roster, onChanged }) {
                   value={addTarget[crew.id] || ''}
                   onChange={e => setAddTarget(prev => ({ ...prev, [crew.id]: e.target.value }))}
                   className="flex-1 px-2 py-1.5 rounded-lg text-xs"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9' }}
+                  style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                 >
                   <option value="">Add worker...</option>
                   {roster.filter(w => w.crew_id !== crew.id).map(w => (
@@ -219,7 +219,7 @@ function CrewManager({ teamId, roster, onChanged }) {
                   }}
                   disabled={!addTarget[crew.id] || busy === `add-${crew.id}`}
                   className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30"
-                  style={{ background: 'rgba(255,255,255,0.08)', color: '#e2e8f0' }}
+                  style={{ background: 'rgba(74,93,63,0.10)', color: '#3d4d34' }}
                 >
                   <Plus size={14} />
                 </button>
@@ -230,16 +230,16 @@ function CrewManager({ teamId, roster, onChanged }) {
       })}
 
       {unassigned.length > 0 && (
-        <div className="rounded-xl p-3" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-          <p className="text-[11px] font-semibold mb-1.5" style={{ color: '#64748b' }}>
+        <div className="rounded-xl p-3" style={{ background: 'var(--cream-100)', border: '1px dashed rgba(31,30,26,0.15)' }}>
+          <p className="text-[11px] font-semibold mb-1.5" style={{ color: '#8a8477' }}>
             Not on a crew — visible in the general pool
           </p>
           <div className="flex flex-wrap gap-1.5">
             {unassigned.map(w => (
               <span key={w.id} className="text-xs px-2 py-1 rounded-lg"
                 style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  color: w.on_leave ? '#64748b' : '#cbd5e1',
+                  background: 'var(--cream-200)',
+                  color: w.on_leave ? '#8a8477' : '#4b473d',
                   opacity: w.on_leave ? 0.45 : 1,
                   textDecoration: w.on_leave ? 'line-through' : 'none',
                 }}>
@@ -257,13 +257,13 @@ function CrewManager({ teamId, roster, onChanged }) {
           onKeyDown={e => e.key === 'Enter' && handleCreateCrew()}
           placeholder="New crew name, e.g. Team C"
           className="flex-1 px-3 py-2 rounded-xl text-sm"
-          style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}
+          style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
         />
         <button
           onClick={handleCreateCrew}
           disabled={!newCrewName.trim() || busy === 'create'}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
-          style={{ background: '#f1f5f9', color: '#0f172a' }}
+          style={{ background: '#4a5d3f', color: '#ffffff' }}
         >
           <Plus size={14} /> Crew
         </button>
@@ -356,7 +356,7 @@ export function TeamsPage() {
   };
 
   if (loading) {
-    return <div className="p-8 text-sm" style={{ color: '#94a3b8' }}>Loading team workload...</div>;
+    return <div className="p-8 text-sm" style={{ color: '#8a8477' }}>Loading team workload...</div>;
   }
 
   // `teams` stays the FULL list — the transfer "Send to..." picker below
@@ -375,55 +375,54 @@ export function TeamsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#f1f5f9' }}>
+          <h1 className="page-header-title">
             {isAdmin ? 'Teams' : (visibleTeams[0]?.name ? `${visibleTeams[0].name} Team` : 'Your Team')}
           </h1>
-          <p className="text-sm mt-1" style={{ color: '#94a3b8' }}>
+          <p className="page-header-sub">
             Where the work is piling up, and who can take it. SLA threshold: {data.sla_hours}h.
           </p>
         </div>
-        <button onClick={load} className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold cursor-pointer"
-          style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0' }}>
+        <button onClick={load} className="export-btn">
           <RefreshCw size={15} /> Refresh
         </button>
       </div>
 
       {error && (
         <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-2"
-          style={{ background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.35)', color: '#fca5a5' }}>
+          style={{ background: 'rgba(185,28,28,0.08)', border: '1px solid rgba(185,28,28,0.25)', color: '#b91c1c' }}>
           <AlertTriangle size={16} /> {error}
         </div>
       )}
 
       {/* Release / transfer requests waiting on a decision */}
-      <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
-        <div className="flex items-center gap-2 px-5 py-4" style={{ background: 'rgba(255,255,255,0.04)' }}>
-          <Inbox size={18} style={{ color: '#f1f5f9' }} />
-          <p className="text-sm font-bold" style={{ color: '#f1f5f9' }}>Release requests</p>
+      <div className="rounded-2xl overflow-hidden" style={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.08)', boxShadow: '0 8px 32px rgba(31,30,26,0.06)' }}>
+        <div className="flex items-center gap-2 px-5 py-4" style={{ background: 'var(--cream-200)', borderBottom: '1px solid rgba(31,30,26,0.07)' }}>
+          <Inbox size={18} style={{ color: '#201f1b' }} />
+          <p className="text-sm font-bold" style={{ color: '#201f1b' }}>Release requests</p>
           {transfers.length > 0 && (
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#fbbf24', color: '#1e293b' }}>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#b45309', color: '#ffffff' }}>
               {transfers.length}
             </span>
           )}
         </div>
         <div className="p-5">
           {transfers.length === 0 ? (
-            <p className="text-sm" style={{ color: '#64748b' }}>No teams are asking to hand work over right now.</p>
+            <p className="text-sm" style={{ color: '#8a8477' }}>No teams are asking to hand work over right now.</p>
           ) : (
             <div className="space-y-3">
               {transfers.map(t => (
-                <div key={t.id} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                <div key={t.id} className="rounded-xl p-4" style={{ background: 'var(--cream-100)' }}>
                   <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="text-sm font-bold" style={{ color: '#f1f5f9' }}>Report #{t.report_id}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', color: '#cbd5e1' }}>
+                    <span className="text-sm font-bold" style={{ color: '#201f1b' }}>Report #{t.report_id}</span>
+                    <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'var(--cream-200)', color: '#4b473d' }}>
                       {t.report_title || 'Uncategorised'}
                     </span>
-                    <span className="text-xs" style={{ color: '#94a3b8' }}>
+                    <span className="text-xs" style={{ color: '#8a8477' }}>
                       {t.from_team || 'Unassigned'} → {t.to_team || 'any team'}
                     </span>
                   </div>
-                  <p className="text-xs mb-3" style={{ color: '#94a3b8' }}>
-                    Raised by <strong style={{ color: '#e2e8f0' }}>{t.requested_by}</strong>
+                  <p className="text-xs mb-3" style={{ color: '#8a8477' }}>
+                    Raised by <strong style={{ color: '#201f1b' }}>{t.requested_by}</strong>
                     {t.requested_by_role ? ` (${t.requested_by_role})` : ''}
                     {t.reason ? ` — "${t.reason}"` : ''}
                   </p>
@@ -433,7 +432,7 @@ export function TeamsPage() {
                         value={decisionTeam[t.id] || ''}
                         onChange={e => setDecisionTeam(prev => ({ ...prev, [t.id]: e.target.value }))}
                         className="px-3 py-2 rounded-xl text-sm"
-                        style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#f1f5f9' }}
+                        style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                       >
                         <option value="">Send to...</option>
                         {teams.filter(x => x.id !== t.from_agency_id).map(x => (
@@ -443,12 +442,11 @@ export function TeamsPage() {
                     )}
                     <button onClick={() => decide(t, true)} disabled={busyId === t.id}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
-                      style={{ background: '#f1f5f9', color: '#0f172a' }}>
+                      style={{ background: '#4a5d3f', color: '#ffffff' }}>
                       <CheckCircle2 size={15} /> Approve
                     </button>
                     <button onClick={() => decide(t, false)} disabled={busyId === t.id}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#cbd5e1' }}>
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold cursor-pointer disabled:opacity-50 bg-stone-100 border border-stone-200 text-stone-700 hover:bg-stone-200">
                       <X size={15} /> Deny
                     </button>
                   </div>
@@ -466,16 +464,16 @@ export function TeamsPage() {
           const behind = team.net_7d < 0;
           return (
             <div key={team.id} className="rounded-2xl overflow-hidden"
-              style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${s.border}` }}>
+              style={{ background: '#ffffff', border: `1px solid ${s.border}`, boxShadow: '0 8px 32px rgba(31,30,26,0.06)' }}>
               <div className="flex items-center justify-between px-5 py-4" style={{ background: s.bg }}>
                 <div className="flex items-center gap-2">
-                  <p className="text-base font-bold" style={{ color: '#f1f5f9' }}>{team.name}</p>
+                  <p className="text-base font-bold" style={{ color: '#201f1b' }}>{team.name}</p>
                   {!isAdmin && team.is_mine && (
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                      style={{ background: 'rgba(255,255,255,0.14)', color: '#e2e8f0' }}>YOUR TEAM</span>
+                      style={{ background: '#ffffff', color: s.color, border: `1px solid ${s.border}` }}>YOUR TEAM</span>
                   )}
                 </div>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: s.color, color: '#0f172a' }}>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: s.color, color: '#ffffff' }}>
                   {s.label}
                 </span>
               </div>
@@ -513,7 +511,7 @@ export function TeamsPage() {
 
               {team.bounced_count > 0 && (
                 <div className="px-4 pb-2">
-                  <p className="text-[11px]" style={{ color: '#fbbf24' }}>
+                  <p className="text-[11px]" style={{ color: '#b45309' }}>
                     {team.bounced_count} job{team.bounced_count === 1 ? '' : 's'} released back to the pool at least once.
                   </p>
                 </div>
@@ -521,7 +519,7 @@ export function TeamsPage() {
 
               <button onClick={() => toggleRoster(team.id)}
                 className="w-full px-5 py-3 text-xs font-semibold text-left cursor-pointer"
-                style={{ background: 'rgba(255,255,255,0.03)', color: '#94a3b8' }}>
+                style={{ background: 'var(--cream-100)', color: '#8a8477' }}>
                 {expanded === team.id ? 'Hide roster' : 'View roster'}
               </button>
 
@@ -532,7 +530,7 @@ export function TeamsPage() {
                       own), so whoever is looking at it is always allowed to
                       manage it — no read-only fallback needed. */}
                   {(rosters[team.id] || []).length === 0 ? (
-                    <p className="text-xs" style={{ color: '#64748b' }}>
+                    <p className="text-xs" style={{ color: '#8a8477' }}>
                       No workers on this team{team.open_count > 0 ? ' — work here has nobody to pick it up.' : '.'}
                     </p>
                   ) : (

@@ -12,16 +12,18 @@ import {
 } from '../api/datasetApi';
 
 const PANEL = {
-  background: 'rgba(255,255,255,0.055)',
-  backdropFilter: 'blur(20px)',
-  border: '1px solid rgba(255,255,255,0.09)',
+  background: '#ffffff',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
+  border: '1px solid rgba(31,30,26,0.08)',
+  boxShadow: '0 8px 32px rgba(31,30,26,0.06)',
 };
 
 const TONE_STYLES = {
-  danger:  { background: 'rgba(239,68,68,0.12)',  color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' },
-  warn:    { background: 'rgba(234,179,8,0.12)',  color: '#fde047', border: '1px solid rgba(234,179,8,0.3)' },
-  ok:      { background: 'rgba(34,197,94,0.12)',  color: '#86efac', border: '1px solid rgba(34,197,94,0.3)' },
-  neutral: { background: 'rgba(255,255,255,0.06)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.14)' },
+  danger:  { background: 'rgba(239,68,68,0.10)',  color: '#b91c1c', border: '1px solid rgba(239,68,68,0.25)' },
+  warn:    { background: 'rgba(234,179,8,0.10)',  color: '#b45309', border: '1px solid rgba(234,179,8,0.28)' },
+  ok:      { background: 'rgba(34,197,94,0.10)',  color: '#047857', border: '1px solid rgba(34,197,94,0.25)' },
+  neutral: { background: 'var(--cream-200)', color: '#4b473d', border: '1px solid rgba(31,30,26,0.10)' },
 };
 
 function VerdictBadge({ verdict }) {
@@ -41,12 +43,12 @@ function VerdictBadge({ verdict }) {
 function StatTile({ icon, label, value, sub }) {
   return (
     <div className="rounded-2xl p-5" style={PANEL}>
-      <div className="flex items-center gap-2 mb-2" style={{ color: 'rgba(148,163,184,0.65)' }}>
+      <div className="flex items-center gap-2 mb-2" style={{ color: '#8a8477' }}>
         {icon}
         <span className="text-xs font-bold uppercase tracking-wider">{label}</span>
       </div>
-      <p className="text-3xl font-bold" style={{ color: '#f1f5f9' }}>{value}</p>
-      {sub && <p className="text-xs mt-1" style={{ color: 'rgba(148,163,184,0.6)' }}>{sub}</p>}
+      <p className="text-3xl font-bold" style={{ color: '#201f1b' }}>{value}</p>
+      {sub && <p className="text-xs mt-1" style={{ color: '#8a8477' }}>{sub}</p>}
     </div>
   );
 }
@@ -169,15 +171,13 @@ export function AiDatasetPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={handleSync}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(203,213,225,0.85)' }}
+            className="export-btn"
           >
             <CloudUpload size={15} /> Sync to GitHub
           </button>
           <button
             onClick={refresh}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold transition-colors"
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(203,213,225,0.85)' }}
+            className="export-btn"
           >
             <RefreshCw size={15} /> Refresh
           </button>
@@ -192,9 +192,9 @@ export function AiDatasetPage() {
       )}
       {notice && (
         <div className="mb-6 flex items-center gap-3 p-4 rounded-2xl" style={PANEL}>
-          <CheckCircle2 size={18} style={{ color: '#86efac' }} />
-          <p className="text-sm" style={{ color: '#e2e8f0' }}>{notice}</p>
-          <button onClick={() => setNotice('')} className="ml-auto text-xs" style={{ color: 'rgba(148,163,184,0.7)' }}>
+          <CheckCircle2 size={18} style={{ color: '#047857' }} />
+          <p className="text-sm" style={{ color: '#201f1b' }}>{notice}</p>
+          <button onClick={() => setNotice('')} className="ml-auto text-xs" style={{ color: '#8a8477' }}>
             Dismiss
           </button>
         </div>
@@ -228,7 +228,7 @@ export function AiDatasetPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-2 mb-6 border-b border-white/5 pb-3">
+      <div className="flex flex-wrap gap-2 mb-6 border-b border-[#1f1e1a]/8 pb-3">
         {[
           { id: 'pending', label: `Pending Review (${pendingCount})` },
           { id: 'approved', label: `Approved (${byStatus.approved ?? 0})` },
@@ -239,11 +239,11 @@ export function AiDatasetPage() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-              tab === t.id ? 'text-white shadow-sm' : 'hover:text-slate-300'
+              tab === t.id ? 'text-white shadow-sm' : 'hover:text-[#201f1b]'
             }`}
             style={tab === t.id
-              ? { background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)' }
-              : { color: 'rgba(148,163,184,0.7)' }}
+              ? { background: '#4a5d3f', border: '1px solid #4a5d3f' }
+              : { color: '#8a8477' }}
           >
             {t.label}
           </button>
@@ -254,8 +254,8 @@ export function AiDatasetPage() {
       {tab === 'health' && (
         <div className="space-y-6">
           <div className="rounded-2xl p-6" style={PANEL}>
-            <h2 className="font-bold mb-1" style={{ color: '#f1f5f9' }}>Class balance</h2>
-            <p className="text-xs mb-5" style={{ color: 'rgba(148,163,184,0.65)' }}>
+            <h2 className="font-bold mb-1" style={{ color: '#201f1b' }}>Class balance</h2>
+            <p className="text-xs mb-5" style={{ color: '#8a8477' }}>
               Images per class across the base dataset and newly collected samples.
             </p>
 
@@ -273,16 +273,16 @@ export function AiDatasetPage() {
             <div style={{ width: '100%', height: 340, overflowX: 'auto' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 8, right: 16, bottom: 60, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
                   <XAxis dataKey="name" angle={-40} textAnchor="end" interval={0}
-                         tick={{ fill: 'rgba(148,163,184,0.75)', fontSize: 11 }} />
-                  <YAxis tick={{ fill: 'rgba(148,163,184,0.75)', fontSize: 11 }} />
+                         tick={{ fill: '#8a8477', fontSize: 11 }} />
+                  <YAxis tick={{ fill: '#8a8477', fontSize: 11 }} />
                   <Tooltip
-                    contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 12, color: '#e2e8f0' }}
-                    cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 12, color: '#201f1b' }}
+                    cursor={{ fill: 'rgba(31,30,26,0.04)' }}
                   />
-                  <Bar dataKey="base" stackId="a" name="Base dataset" fill="rgba(148,163,184,0.55)" />
-                  <Bar dataKey="collected" stackId="a" name="Collected" fill="#86efac">
+                  <Bar dataKey="base" stackId="a" name="Base dataset" fill="rgba(138,132,119,0.35)" />
+                  <Bar dataKey="collected" stackId="a" name="Collected" fill="#4a5d3f">
                     {chartData.map((entry, i) => <Cell key={i} />)}
                   </Bar>
                 </BarChart>
@@ -291,16 +291,16 @@ export function AiDatasetPage() {
           </div>
 
           <div className="rounded-2xl p-6" style={PANEL}>
-            <h2 className="font-bold mb-3" style={{ color: '#f1f5f9' }}>Retraining</h2>
-            <p className="text-sm mb-3" style={{ color: 'rgba(203,213,225,0.85)' }}>
+            <h2 className="font-bold mb-3" style={{ color: '#201f1b' }}>Retraining</h2>
+            <p className="text-sm mb-3" style={{ color: '#4b473d' }}>
               Training runs offline, on a machine with TensorFlow — the deployed backend
               serves a TFLite model and cannot train.
             </p>
             <pre className="text-xs p-4 rounded-xl overflow-x-auto"
-                 style={{ background: 'rgba(0,0,0,0.35)', color: '#86efac', border: '1px solid rgba(255,255,255,0.08)' }}>
+                 style={{ background: 'var(--cream-200)', color: '#3d4d34', border: '1px solid rgba(31,30,26,0.08)' }}>
 python retrain_model.py --pull
             </pre>
-            <p className="text-xs mt-3" style={{ color: 'rgba(148,163,184,0.65)' }}>
+            <p className="text-xs mt-3" style={{ color: '#8a8477' }}>
               Merges the approved samples with the base dataset, trains, and only replaces the
               served model if it scores better on a held-out set.
             </p>
@@ -312,12 +312,12 @@ python retrain_model.py --pull
       {tab !== 'health' && (
         <div className="rounded-2xl overflow-hidden" style={PANEL}>
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-16" style={{ color: 'rgba(148,163,184,0.7)' }}>
+            <div className="flex flex-col items-center justify-center py-16" style={{ color: '#8a8477' }}>
               <RefreshCw size={28} className="mb-3 animate-spin opacity-50" />
               <p className="text-sm">Loading samples…</p>
             </div>
           ) : samples.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16" style={{ color: 'rgba(148,163,184,0.7)' }}>
+            <div className="flex flex-col items-center justify-center py-16" style={{ color: '#8a8477' }}>
               <CheckCircle2 size={40} className="mb-3 opacity-40" />
               <p className="font-medium">
                 {tab === 'pending' ? 'Nothing awaiting review' : `No ${tab} samples`}
@@ -332,7 +332,7 @@ python retrain_model.py --pull
             <div style={{ overflowX: 'auto' }}>
               <table className="w-full text-left text-sm">
                 <thead className="text-xs font-bold tracking-wider uppercase"
-                       style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.07)', color: 'rgba(148,163,184,0.65)' }}>
+                       style={{ background: 'var(--cream-200)', borderBottom: '1px solid rgba(31,30,26,0.07)', color: '#8a8477' }}>
                   <tr>
                     <th className="px-6 py-4">Image</th>
                     <th className="px-6 py-4">Proposed label</th>
@@ -341,11 +341,11 @@ python retrain_model.py --pull
                     {tab === 'pending' && <th className="px-6 py-4">Actions</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <tbody className="divide-y" style={{ borderColor: 'rgba(31,30,26,0.06)' }}>
                   {samples.map(sample => {
                     const preview = getImageUrl(sample.preview_url);
                     return (
-                      <tr key={sample.id} className="transition-colors hover:bg-white/5 align-top">
+                      <tr key={sample.id} className="transition-colors hover:bg-[#4a5d3f]/5 align-top">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             {preview ? (
@@ -353,16 +353,16 @@ python retrain_model.py --pull
                                 src={preview}
                                 alt=""
                                 className="rounded-lg object-cover"
-                                style={{ width: 72, height: 72, border: '1px solid rgba(255,255,255,0.1)' }}
+                                style={{ width: 72, height: 72, border: '1px solid rgba(31,30,26,0.10)' }}
                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
                             ) : (
                               <div className="rounded-lg flex items-center justify-center"
-                                   style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.05)', color: 'rgba(148,163,184,0.5)' }}>
+                                   style={{ width: 72, height: 72, background: 'var(--cream-100)', color: '#8a8477' }}>
                                 <ImageOff size={20} />
                               </div>
                             )}
-                            <div className="text-xs" style={{ color: 'rgba(148,163,184,0.7)' }}>
+                            <div className="text-xs" style={{ color: '#8a8477' }}>
                               <div>#{sample.id}</div>
                               {sample.report_id && <div>report {sample.report_id}</div>}
                             </div>
@@ -370,15 +370,15 @@ python retrain_model.py --pull
                         </td>
 
                         <td className="px-6 py-4">
-                          <p className="font-semibold mb-1" style={{ color: '#e2e8f0' }}>
+                          <p className="font-semibold mb-1" style={{ color: '#201f1b' }}>
                             {(sample.class_label || '—').replace(/_/g, ' ')}
                           </p>
                           <div className="flex items-center gap-2">
-                            <div className="h-1.5 rounded-full overflow-hidden" style={{ width: 70, background: 'rgba(255,255,255,0.08)' }}>
+                            <div className="h-1.5 rounded-full overflow-hidden" style={{ width: 70, background: 'rgba(31,30,26,0.08)' }}>
                               <div className="h-full rounded-full"
-                                   style={{ width: `${Math.round((sample.confidence || 0) * 100)}%`, background: 'rgba(255,255,255,0.45)' }} />
+                                   style={{ width: `${Math.round((sample.confidence || 0) * 100)}%`, background: '#4a5d3f' }} />
                             </div>
-                            <span className="text-[11px]" style={{ color: 'rgba(148,163,184,0.75)' }}>
+                            <span className="text-[11px]" style={{ color: '#8a8477' }}>
                               {Math.round((sample.confidence || 0) * 100)}%
                             </span>
                           </div>
@@ -393,14 +393,14 @@ python retrain_model.py --pull
                         <td className="px-6 py-4">
                           <VerdictBadge verdict={sample.authenticity_verdict} />
                           {sample.authenticity_score != null && (
-                            <p className="text-[11px] mt-1.5" style={{ color: 'rgba(148,163,184,0.6)' }}>
+                            <p className="text-[11px] mt-1.5" style={{ color: '#8a8477' }}>
                               score {sample.authenticity_score}/100
                             </p>
                           )}
                         </td>
 
                         <td className="px-6 py-4 max-w-xs">
-                          <p className="text-xs leading-relaxed" style={{ color: 'rgba(203,213,225,0.75)' }}>
+                          <p className="text-xs leading-relaxed" style={{ color: '#4b473d' }}>
                             {sample.reason}
                           </p>
                         </td>
@@ -412,25 +412,25 @@ python retrain_model.py --pull
                                 value={relabel[sample.id] || ''}
                                 onChange={(e) => setRelabel(r => ({ ...r, [sample.id]: e.target.value }))}
                                 className="px-2 py-1.5 rounded-lg text-xs"
-                                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0' }}
+                                style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                               >
                                 <option value="">Keep proposed label</option>
                                 {TRAINABLE_CLASSES.map(c => (
-                                  <option key={c} value={c} style={{ background: '#0f172a' }}>{c}</option>
+                                  <option key={c} value={c}>{c}</option>
                                 ))}
                               </select>
                               <div className="flex items-center gap-2">
                                 <button
                                   disabled={busyId === sample.id}
                                   onClick={() => handleApprove(sample)}
-                                  className="flex-1 px-3 py-2 bg-white text-black text-xs font-bold rounded-xl hover:bg-zinc-200 transition-colors border border-white disabled:opacity-50"
+                                  className="flex-1 px-3 py-2 bg-[#4a5d3f] text-white text-xs font-bold rounded-xl hover:bg-[#3d4d34] transition-colors border border-[#4a5d3f] disabled:opacity-50"
                                 >
                                   Approve
                                 </button>
                                 <button
                                   disabled={busyId === sample.id}
                                   onClick={() => handleReject(sample)}
-                                  className="flex-1 px-3 py-2 bg-zinc-800 text-zinc-300 text-xs font-bold rounded-xl hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-50"
+                                  className="flex-1 px-3 py-2 bg-red-500/10 text-red-700 text-xs font-bold rounded-xl hover:bg-red-500/20 transition-colors border border-red-500/25 disabled:opacity-50"
                                 >
                                   Reject
                                 </button>
@@ -447,7 +447,7 @@ python retrain_model.py --pull
           )}
 
           {samples.length > 0 && (
-            <div className="px-6 py-3 text-xs" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', color: 'rgba(148,163,184,0.6)' }}>
+            <div className="px-6 py-3 text-xs" style={{ borderTop: '1px solid rgba(31,30,26,0.06)', color: '#8a8477' }}>
               Showing {samples.length} of {total}
             </div>
           )}

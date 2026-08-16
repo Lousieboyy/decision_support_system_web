@@ -91,7 +91,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
   ];
 
   const getRoleDisplay = () => {
-    if (role === 'admin') return { title: user?.displayName || 'Admin User', desc: 'System Administrator', abbr: 'AD', color: 'bg-zinc-500/20 text-zinc-300' };
+    if (role === 'admin') return { title: user?.displayName || 'Admin User', desc: 'System Administrator', abbr: 'AD', color: 'bg-[#d97757]/25 text-white' };
     
     // Handle both formats: "authority_mbmb" (demo) and "authority" (backend)
     if (role === 'authority' || role?.startsWith('authority_')) {
@@ -104,10 +104,10 @@ export function Sidebar({ isOpen, setIsOpen }) {
         title: user?.displayName || `${dept?.abbr || 'Local'} Authority`, 
         desc: dept ? dept.name : 'Local Authority', 
         abbr: dept ? dept.abbr.substring(0, 2) : 'LA', 
-        color: dept?.avatarColor || 'bg-zinc-700/20 text-zinc-300 border-zinc-700/30' 
+        color: dept?.avatarColor || 'bg-white/12 text-white border-white/20'
       };
     }
-    
+
     // Handle both formats: "worker_mbmb" (demo) and "worker" (backend)
     if (role === 'worker' || role?.startsWith('worker_')) {
       let deptId = null;
@@ -119,16 +119,16 @@ export function Sidebar({ isOpen, setIsOpen }) {
         title: user?.displayName || `Worker${dept ? ` (${dept.abbr})` : ''}`, 
         desc: dept ? dept.name : 'Field Operator', 
         abbr: 'WK', 
-        color: dept?.avatarColor || 'bg-zinc-700/40 text-zinc-200 border-zinc-650/40' 
+        color: dept?.avatarColor || 'bg-white/12 text-white border-white/20'
       };
     }
-    
+
     // Fallback for citizen role
     if (role === 'citizen') {
-      return { title: user?.displayName || 'Citizen', desc: 'Report Submitter', abbr: 'CT', color: 'bg-zinc-800 text-zinc-200 border-zinc-700' };
+      return { title: user?.displayName || 'Citizen', desc: 'Report Submitter', abbr: 'CT', color: 'bg-white/10 text-white border-white/15' };
     }
-    
-    return { title: 'User', desc: 'Guest', abbr: 'U', color: 'bg-zinc-900/60 text-zinc-400 border-zinc-800/40' };
+
+    return { title: 'User', desc: 'Guest', abbr: 'U', color: 'bg-white/5 text-white/60 border-white/10' };
   };
 
   const display = getRoleDisplay();
@@ -150,8 +150,8 @@ export function Sidebar({ isOpen, setIsOpen }) {
           </button>
           
           {/* Mobile Close Button */}
-          <button 
-            className="md:hidden ml-2 p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+          <button
+            className="md:hidden ml-2 p-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
             onClick={() => setIsOpen(false)}
           >
             <X size={20} />
@@ -198,10 +198,10 @@ export function Sidebar({ isOpen, setIsOpen }) {
           <div className="fixed inset-0 z-[190]" onClick={() => setNotifOpen(false)} />
           <div className="notif-dropdown">
             <div className="notif-header">
-              <span className="notif-title">Notifications {notifs.length > 0 && <span style={{ color: '#94a3b8', fontWeight: 500 }}>({notifs.length})</span>}</span>
+              <span className="notif-title">Notifications {notifs.length > 0 && <span style={{ color: '#8a8477', fontWeight: 500 }}>({notifs.length})</span>}</span>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {notifs.length > 0 && <button className="notif-clear" onClick={handleClearAll}>Clear all</button>}
-                <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex' }}><X size={16} /></button>
+                <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8477', display: 'flex' }}><X size={16} /></button>
               </div>
             </div>
             {notifs.length === 0 ? (
@@ -210,7 +210,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
               <div style={{ maxHeight: 340, overflowY: 'auto' }}>
                 {notifs.map(n => (
                   <div key={n.id} className={`notif-item${n.read ? '' : ' unread'}`}>
-                    <div className="notif-item-icon" style={{ background: n.type === 'status' ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)', color: '#ffffff' }}>
+                    <div className="notif-item-icon" style={{ background: n.type === 'status' ? 'rgba(74,93,63,0.10)' : 'rgba(217,119,87,0.14)', color: n.type === 'status' ? '#3d4d34' : '#c1613f' }}>
                       {n.type === 'status' ? <RefreshCw size={14} /> : <CheckCircle2 size={14} />}
                     </div>
                     <div>

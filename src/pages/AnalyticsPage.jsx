@@ -1158,7 +1158,7 @@ export function AnalyticsPage() {
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
-        backgroundColor: '#030712', // match dashboard dark background
+        backgroundColor: '#faf8f2', // match Grove light background
       });
       const imgData = canvas.toDataURL('image/png');
       
@@ -1231,8 +1231,8 @@ export function AnalyticsPage() {
     return (
       <div className="flex h-96 items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <RefreshCw className="animate-spin text-indigo-400" size={32} />
-          <div className="text-slate-400 font-medium">Computing City Infrastructure Insights...</div>
+          <RefreshCw className="animate-spin text-[#4a5d3f]" size={32} />
+          <div className="text-[#8a8477] font-medium">Computing City Infrastructure Insights...</div>
         </div>
       </div>
     );
@@ -1257,7 +1257,7 @@ export function AnalyticsPage() {
         <button
           onClick={exportToPDF}
           disabled={pdfGenerating}
-          className="flex items-center justify-center gap-2 bg-white text-black hover:bg-zinc-200 disabled:bg-zinc-800 disabled:text-zinc-500 px-5 py-2.5 rounded-xl font-bold transition-all shadow-lg hover:shadow-white/5 shadow-black/25 text-sm cursor-pointer border border-white"
+          className="export-btn disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {pdfGenerating ? (
             <>
@@ -1274,13 +1274,13 @@ export function AnalyticsPage() {
       </div>
 
         {/* Sub-navigation Tabs */}
-        <div className="flex bg-white/3 p-1.5 rounded-2xl border border-white/5 self-start overflow-x-auto scrollbar-none max-w-full gap-2">
+        <div className="flex bg-[#f5f1e6] p-1.5 rounded-2xl border border-[#1f1e1a]/8 self-start overflow-x-auto scrollbar-none max-w-full gap-2">
         <button
           onClick={() => setActiveViewTab('overview')}
           className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'overview'
-              ? 'bg-white text-black shadow-lg shadow-white/10 border border-white'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
+              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
           }`}
         >
           Overview & Trends
@@ -1289,8 +1289,8 @@ export function AnalyticsPage() {
           onClick={() => setActiveViewTab('hotspots')}
           className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'hotspots'
-              ? 'bg-white text-black shadow-lg shadow-white/10 border border-white'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
+              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
           }`}
         >
           Predictive Hotspots ({hotspots.length + rootCauseAdvisories.length})
@@ -1299,8 +1299,8 @@ export function AnalyticsPage() {
           onClick={() => setActiveViewTab('cityhealth')}
           className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'cityhealth'
-              ? 'bg-white text-black shadow-lg shadow-white/10 border border-white'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/5 border border-transparent'
+              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
+              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
           }`}
         >
           <Activity size={15} />
@@ -1315,15 +1315,15 @@ export function AnalyticsPage() {
         {activeViewTab === 'overview' && (
           <div className="space-y-6 animate-fade-in">
             {/* Control Panel / Filter Bar */}
-            <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-2xl p-5">
+            <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-5">
               <div className="flex flex-wrap items-center gap-6 text-left">
                 {/* Date Filter */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Time Interval</label>
+                  <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Time Interval</label>
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
-                    className="bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-zinc-500 transition-colors custom-select min-w-[150px]"
+                    className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[150px]"
                   >
                     <option value="all">All Time</option>
                     <option value="7d">Last 7 Days</option>
@@ -1333,12 +1333,12 @@ export function AnalyticsPage() {
 
                 {/* Department Filter */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Department Scope</label>
+                  <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Department Scope</label>
                   {role === 'admin' ? (
                     <select
                       value={selectedDept}
                       onChange={(e) => setSelectedDept(e.target.value)}
-                      className="bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-zinc-500 transition-colors custom-select min-w-[180px]"
+                      className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[180px]"
                     >
                       <option value="all">All Departments</option>
                       <option value="JKR">JKR (Public Works)</option>
@@ -1346,8 +1346,8 @@ export function AnalyticsPage() {
                       <option value="SWCorp">SWCorp (Waste Management)</option>
                     </select>
                   ) : (
-                    <div className="bg-zinc-950/50 border border-white/5 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold min-w-[180px] flex items-center gap-1.5 h-[34px]">
-                      <span className="w-2 h-2 rounded-full bg-zinc-400" />
+                    <div className="bg-[#f5f1e6] border border-[#1f1e1a]/8 text-[#4b473d] px-4 py-2 rounded-xl text-xs font-bold min-w-[180px] flex items-center gap-1.5 h-[34px]">
+                      <span className="w-2 h-2 rounded-full bg-[#8a8477]" />
                       {selectedDept === 'all' ? 'All Departments' : `${selectedDept}`}
                     </div>
                   )}
@@ -1357,37 +1357,37 @@ export function AnalyticsPage() {
 
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-              <div className="bg-white/5 backdrop-blur-xl border border-white/8 rounded-2xl p-6">
+              <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Complaints</div>
-                  <div className="text-2xl font-black text-slate-100 mt-1">{kpiStats.active}</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Out of {kpiStats.total} total reports</div>
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Complaints</div>
+                  <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.active}</div>
+                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Out of {kpiStats.total} total reports</div>
                 </div>
               </div>
 
-              <div className="bg-white/5 backdrop-blur-xl border border-white/8 rounded-2xl p-6">
+              <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg Resolution SLA</div>
-                  <div className="text-2xl font-black text-slate-100 mt-1">{kpiStats.avgDays} Days</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Calculated from historical tickets</div>
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Avg Resolution SLA</div>
+                  <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.avgDays} Days</div>
+                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Calculated from historical tickets</div>
                 </div>
               </div>
 
-              <div className="bg-white/5 backdrop-blur-xl border border-white/8 rounded-2xl p-6">
+              <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Hotspots</div>
-                  <div className="text-2xl font-black text-slate-100 mt-1">{kpiStats.hotspotsCount} Zones</div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">Clusters with radius &le; {proximityRadius}m</div>
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Hotspots</div>
+                  <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.hotspotsCount} Zones</div>
+                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Clusters with radius &le; {proximityRadius}m</div>
                 </div>
               </div>
 
-              <div className="bg-white/5 backdrop-blur-xl border border-white/8 rounded-2xl p-6">
+              <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Allocation Status</div>
-                  <div className="text-lg font-black text-slate-100 mt-1 truncate max-w-[170px]" title={kpiStats.healthStatus}>
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Allocation Status</div>
+                  <div className="text-lg font-black text-[#201f1b] mt-1 truncate max-w-[170px]" title={kpiStats.healthStatus}>
                     {kpiStats.healthStatus}
                   </div>
-                  <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">
                     {kpiStats.healthStatus === 'Optimal' ? 'All crew rates balanced' : `${kpiStats.worstBacklogDept} backlog warning`}
                   </div>
                 </div>
@@ -1413,10 +1413,10 @@ export function AnalyticsPage() {
                             <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="date" stroke="#cbd5e1" fontSize={10} tickLine={false} />
-                        <YAxis stroke="#cbd5e1" fontSize={10} tickLine={false} />
-                        <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} itemStyle={{ color: '#f1f5f9' }} labelStyle={{ color: '#cbd5e1' }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
+                        <XAxis dataKey="date" stroke="#8a8477" fontSize={10} tickLine={false} />
+                        <YAxis stroke="#8a8477" fontSize={10} tickLine={false} />
+                        <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                         <Area type="monotone" dataKey="Complaints" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTrend)" />
                       </AreaChart>
                     </ResponsiveContainer>
@@ -1448,12 +1448,12 @@ export function AnalyticsPage() {
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} itemStyle={{ color: '#f1f5f9' }} labelStyle={{ color: '#cbd5e1' }} />
+                        <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                       </PieChart>
                     </ResponsiveContainer>
                     
                     {/* Legends Custom */}
-                    <div className="absolute bottom-2 left-0 right-0 flex flex-wrap justify-center gap-x-3 gap-y-1 px-4 text-[10px] text-slate-100 font-semibold">
+                    <div className="absolute bottom-2 left-0 right-0 flex flex-wrap justify-center gap-x-3 gap-y-1 px-4 text-[10px] text-[#201f1b] font-semibold">
                       {categoryChartData.map((entry, index) => (
                         <div key={entry.name} className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full" style={{ background: COLORS[index % COLORS.length] }} />
@@ -1482,10 +1482,10 @@ export function AnalyticsPage() {
                     <ResponsiveContainer width="100%" height="100%">
                       {selectedDept === 'all' ? (
                         <BarChart data={deptSLAMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                          <XAxis dataKey="name" stroke="#cbd5e1" fontSize={11} tickLine={false} />
-                          <YAxis stroke="#cbd5e1" fontSize={11} tickLine={false} label={{ value: 'Days', angle: -90, position: 'insideLeft', stroke: '#cbd5e1', fontSize: 10 }} />
-                          <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} itemStyle={{ color: '#f1f5f9' }} labelStyle={{ color: '#cbd5e1' }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
+                          <XAxis dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} />
+                          <YAxis stroke="#8a8477" fontSize={11} tickLine={false} label={{ value: 'Days', angle: -90, position: 'insideLeft', stroke: '#8a8477', fontSize: 10 }} />
+                          <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                           <ReferenceLine y={3} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Target SLA', fill: '#ef4444', fontSize: 9, position: 'top' }} />
                           <Bar dataKey="avgResolveDays" radius={[6, 6, 0, 0]} maxBarSize={45}>
                             {deptSLAMetrics.map((entry, index) => {
@@ -1496,10 +1496,10 @@ export function AnalyticsPage() {
                         </BarChart>
                       ) : (
                         <BarChart data={deptStatusData} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                          <XAxis type="number" stroke="#cbd5e1" fontSize={10} tickLine={false} />
-                          <YAxis dataKey="name" type="category" stroke="#cbd5e1" fontSize={11} tickLine={false} />
-                          <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} itemStyle={{ color: '#f1f5f9' }} labelStyle={{ color: '#cbd5e1' }} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
+                          <XAxis type="number" stroke="#8a8477" fontSize={10} tickLine={false} />
+                          <YAxis dataKey="name" type="category" stroke="#8a8477" fontSize={11} tickLine={false} />
+                          <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                           <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={30}>
                             {deptStatusData.map((entry, index) => {
                               let color = '#3b82f6';
@@ -1526,17 +1526,17 @@ export function AnalyticsPage() {
                 </div>
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div>
-                    <p className="text-xs leading-relaxed text-slate-300">
+                    <p className="text-xs leading-relaxed text-[#4b473d]">
                       City assets and labor tracking alerts. These alerts are automatically triggered when any department backlogs exceed targets:
                     </p>
                     
                     <div className="mt-4 space-y-3">
-                      <div className="p-4 rounded-xl border flex items-start gap-3 bg-zinc-800/10 border-zinc-700/20 text-zinc-300">
+                      <div className="p-4 rounded-xl border flex items-start gap-3 bg-[#4a5d3f]/10 border-[#4a5d3f]/20 text-[#4a5d3f]">
                         <div className="text-left">
                           <div className="text-xs font-bold uppercase tracking-wide">
                             {kpiStats.healthStatus === 'Optimal' ? 'System Healthy' : 'Resource Reallocation Alert'}
                           </div>
-                          <div className="text-[11px] leading-relaxed mt-1 text-slate-350">
+                          <div className="text-[11px] leading-relaxed mt-1 text-[#8a8477]">
                             {kpiStats.recommendation}
                           </div>
                         </div>
@@ -1544,14 +1544,14 @@ export function AnalyticsPage() {
                     </div>
                   </div>
 
-                  <div className="border-t border-white/5 pt-4">
-                    <div className="flex items-center justify-between text-xs text-slate-400 font-bold">
+                  <div className="border-t border-[#1f1e1a]/8 pt-4">
+                    <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
                       <span>Fastest SLA</span>
-                      <span className="text-white">SWCorp (&lt;1.0 Day)</span>
+                      <span className="text-[#201f1b]">SWCorp (&lt;1.0 Day)</span>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-slate-400 font-bold mt-2">
+                    <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
                       <span>Slowest SLA</span>
-                      <span className="text-zinc-400">{kpiStats.worstBacklogDept}</span>
+                      <span className="text-[#8a8477]">{kpiStats.worstBacklogDept}</span>
                     </div>
                   </div>
                 </div>
@@ -1564,16 +1564,16 @@ export function AnalyticsPage() {
         {activeViewTab === 'hotspots' && (
           <div className="space-y-6 animate-fade-in">
             {/* Control Panel / Filter Bar */}
-            <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-2xl p-5">
+            <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-5">
               <div className="flex flex-wrap items-center justify-between gap-4 text-left">
                 <div className="flex flex-wrap items-center gap-4">
                   {/* Date Filter */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Time Interval</label>
+                    <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Time Interval</label>
                     <select
                       value={dateFilter}
                       onChange={(e) => setDateFilter(e.target.value)}
-                      className="bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-zinc-500 transition-colors custom-select min-w-[130px]"
+                      className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[130px]"
                     >
                       <option value="all">All Time</option>
                       <option value="7d">Last 7 Days</option>
@@ -1583,12 +1583,12 @@ export function AnalyticsPage() {
 
                   {/* Department Filter */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Department Scope</label>
+                    <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Department Scope</label>
                     {role === 'admin' ? (
                       <select
                         value={selectedDept}
                         onChange={(e) => setSelectedDept(e.target.value)}
-                        className="bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-zinc-500 transition-colors custom-select min-w-[150px]"
+                        className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors custom-select min-w-[150px]"
                       >
                         <option value="all">All Departments</option>
                         <option value="JKR">JKR (Public Works)</option>
@@ -1596,8 +1596,8 @@ export function AnalyticsPage() {
                         <option value="SWCorp">SWCorp (Waste Management)</option>
                       </select>
                     ) : (
-                      <div className="bg-zinc-950/50 border border-white/5 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold min-w-[150px] flex items-center gap-1.5 h-[34px]">
-                        <span className="w-2 h-2 rounded-full bg-zinc-400" />
+                      <div className="bg-[#f5f1e6] border border-[#1f1e1a]/8 text-[#4b473d] px-4 py-2 rounded-xl text-xs font-bold min-w-[150px] flex items-center gap-1.5 h-[34px]">
+                        <span className="w-2 h-2 rounded-full bg-[#8a8477]" />
                         {selectedDept === 'all' ? 'All Departments' : `${selectedDept}`}
                       </div>
                     )}
@@ -1614,12 +1614,12 @@ export function AnalyticsPage() {
                 <div className="content-card">
                   <div className="content-card-header">
                     <div className="content-card-title">
-                      <MapPin size={16} className="text-indigo-400 mr-2" />
+                      <MapPin size={16} className="text-[#4a5d3f] mr-2" />
                       Melaka Complaint Density Heatmap
                     </div>
                   </div>
                   <div className="p-5">
-                    <div className="rounded-xl overflow-hidden border border-white/5 relative z-10" style={{ height: '380px', width: '100%' }}>
+                    <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '380px', width: '100%' }}>
                       <MapContainer
                         center={[2.1896, 102.2501]}
                         zoom={12.5}
@@ -1653,19 +1653,19 @@ export function AnalyticsPage() {
 
                 {/* Hotspots & Systemic tab list */}
                 <div className="content-card flex flex-col">
-                <div className="content-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-white/5 pb-4">
+                <div className="content-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#1f1e1a]/8 pb-4">
                   <div className="content-card-title">
                     Infrastructure Decision Support
                   </div>
                   
                   {/* Tab Selector */}
-                  <div className="flex bg-zinc-950 p-1 rounded-xl border border-white/5 self-start sm:self-auto">
+                  <div className="flex bg-[#f5f1e6] p-1 rounded-xl border border-[#1f1e1a]/8 self-start sm:self-auto">
                     <button
                       onClick={() => setActiveTab('single')}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         activeTab === 'single'
-                          ? 'bg-white text-black border border-white shadow-lg'
-                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                          ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
+                          : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
                       }`}
                     >
                       Hotspots ({hotspots.length})
@@ -1674,8 +1674,8 @@ export function AnalyticsPage() {
                       onClick={() => setActiveTab('systemic')}
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         activeTab === 'systemic'
-                          ? 'bg-white text-black border border-white shadow-lg'
-                          : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                          ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
+                          : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
                       }`}
                     >
                       Systemic ({rootCauseAdvisories.length})
@@ -1686,8 +1686,8 @@ export function AnalyticsPage() {
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
                         hotspots.length === 0 ? (
-                          <div className="h-48 flex flex-col items-center justify-center text-slate-400 text-xs text-center">
-                            <CheckCircle2 className="text-slate-500 mb-2 animate-pulse mx-auto" size={24} />
+                          <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
+                            <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
                             No high-density active hotspots detected.
                           </div>
                         ) : (
@@ -1698,26 +1698,26 @@ export function AnalyticsPage() {
                                 setActiveClusterId(h.id);
                                 setMapFocus({ center: [h.latitude, h.longitude], zoom: 15.5, trigger: Date.now() });
                               }}
-                              className={`p-4 border rounded-xl space-y-2 hover:border-white/40 transition-all cursor-pointer group text-left ${
-                                activeClusterId === h.id ? 'bg-white/10 border-white/60 shadow-md' : 'bg-zinc-800/30 border-white/5'
+                              className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
+                                activeClusterId === h.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
                               }`}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
+                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
                                     {h.category}
                                   </span>
-                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
                                     {h.size} active defects
                                   </span>
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-500 group-hover:text-white flex items-center gap-0.5 transition-colors">
+                                <span className="text-[9px] font-bold text-[#8a8477] group-hover:text-[#201f1b] flex items-center gap-0.5 transition-colors">
                                   Modify Settings
                                   <ChevronRight size={10} />
                                 </span>
                               </div>
-                              <div className="text-xs text-slate-300 font-bold">{h.address}</div>
-                              <div className="text-[11px] leading-relaxed text-slate-400 italic line-clamp-2">
+                              <div className="text-xs text-[#4b473d] font-bold">{h.address}</div>
+                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic line-clamp-2">
                                 <strong>Recommendation:</strong> {h.recommendation}
                               </div>
                             </div>
@@ -1725,8 +1725,8 @@ export function AnalyticsPage() {
                         )
                       ) : (
                         rootCauseAdvisories.length === 0 ? (
-                          <div className="h-48 flex flex-col items-center justify-center text-slate-400 text-xs text-center">
-                            <CheckCircle2 className="text-slate-500 mb-2 animate-pulse mx-auto" size={24} />
+                          <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
+                            <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
                             No systemic cross-department issues detected.
                           </div>
                         ) : (
@@ -1737,26 +1737,26 @@ export function AnalyticsPage() {
                                 setActiveClusterId(a.id);
                                 setMapFocus({ center: [a.latitude, a.longitude], zoom: 15.5, trigger: Date.now() });
                               }}
-                              className={`p-4 border rounded-xl space-y-2 hover:border-white/40 transition-all cursor-pointer group text-left ${
-                                activeClusterId === a.id ? 'bg-white/10 border-white/60 shadow-md' : 'bg-zinc-800/30 border-white/5'
+                              className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
+                                activeClusterId === a.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
                               }`}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
+                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
                                     {a.category}
                                   </span>
-                                  <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
                                     {a.size} reports grouped
                                   </span>
                                 </div>
-                                <span className="text-[9px] font-bold text-slate-500 group-hover:text-white flex items-center gap-0.5 transition-colors">
+                                <span className="text-[9px] font-bold text-[#8a8477] group-hover:text-[#201f1b] flex items-center gap-0.5 transition-colors">
                                   Modify Settings
                                   <ChevronRight size={10} />
                                 </span>
                               </div>
-                              <div className="text-xs text-slate-300 font-bold">{a.address}</div>
-                              <div className="text-[11px] leading-relaxed text-slate-400 italic line-clamp-2">
+                              <div className="text-xs text-[#4b473d] font-bold">{a.address}</div>
+                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic line-clamp-2">
                                 <strong>Recommendation:</strong> {a.recommendation}
                               </div>
                             </div>
@@ -1774,22 +1774,22 @@ export function AnalyticsPage() {
                   // Detail & Edit View
                   <div className="content-card flex flex-col h-full justify-between">
                     <div>
-                      <div className="content-card-header flex items-center justify-between border-b border-white/5 pb-4">
+                      <div className="content-card-header flex items-center justify-between border-b border-[#1f1e1a]/8 pb-4">
                         <button
                           onClick={() => setActiveClusterId(null)}
-                          className="flex items-center gap-1 text-slate-400 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                          className="flex items-center gap-1 text-[#8a8477] hover:text-[#201f1b] text-xs font-bold transition-colors cursor-pointer"
                         >
                           <ChevronLeft size={16} />
                           Back
                         </button>
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-300">
+                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
                           {activeCluster.category}
                         </span>
                       </div>
                       <div className="p-5 space-y-5 text-left">
                         {/* Edit Name */}
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Hotspot Location Name</label>
+                          <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Hotspot Location Name</label>
                           <input
                             type="text"
                             value={activeCluster.address}
@@ -1803,14 +1803,14 @@ export function AnalyticsPage() {
                               }));
                             }}
                             placeholder={activeCluster.defaultAddress}
-                            className="bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-zinc-500 transition-colors w-full"
+                            className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full"
                           />
                         </div>
 
                         {/* Edit Recommendation */}
                         <div className="flex flex-col gap-1.5">
                           <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Actionable Recommendation</label>
+                            <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Actionable Recommendation</label>
                             <button
                               onClick={() => {
                                 setCustomOverrides(prev => {
@@ -1823,7 +1823,7 @@ export function AnalyticsPage() {
                                   return copy;
                                 });
                               }}
-                              className="text-[9px] font-bold text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                              className="text-[9px] font-bold text-[#8a8477] hover:text-[#4b473d] transition-colors cursor-pointer"
                             >
                               Reset to Default
                             </button>
@@ -1840,7 +1840,7 @@ export function AnalyticsPage() {
                               }));
                             }}
                             rows={4}
-                            className="bg-zinc-950 border border-white/10 rounded-xl px-4 py-2 text-xs font-semibold text-slate-200 outline-none focus:border-zinc-500 transition-colors w-full resize-none leading-relaxed"
+                            className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full resize-none leading-relaxed"
                           />
                         </div>
 
@@ -1853,33 +1853,33 @@ export function AnalyticsPage() {
                               trigger: Date.now()
                             });
                           }}
-                          className="flex items-center justify-center gap-1.5 bg-zinc-950 border border-white/10 hover:border-white/20 hover:bg-zinc-950/40 text-slate-300 hover:text-white py-2.5 rounded-xl text-xs font-bold transition-all w-full cursor-pointer"
+                          className="flex items-center justify-center gap-1.5 bg-[#f5f1e6] border border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 hover:bg-[#4a5d3f]/8 text-[#4b473d] hover:text-[#201f1b] py-2.5 rounded-xl text-xs font-bold transition-all w-full cursor-pointer"
                         >
                           <Eye size={14} />
                           Locate on Heatmap
                         </button>
 
                         {/* Exclude / Include Tickets List */}
-                        <div className="flex flex-col min-h-0 pt-2 border-t border-white/5">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center justify-between">
+                        <div className="flex flex-col min-h-0 pt-2 border-t border-[#1f1e1a]/8">
+                          <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2 flex items-center justify-between">
                             <span>Constituent Issues</span>
-                            <span className="px-1.5 py-0.5 rounded bg-zinc-950 text-slate-300 text-[9px] font-black">{activeCluster.items.length} Tickets</span>
+                            <span className="px-1.5 py-0.5 rounded bg-[#f5f1e6] text-[#4b473d] text-[9px] font-black">{activeCluster.items.length} Tickets</span>
                           </label>
                           <div className="overflow-y-auto max-h-[180px] pr-1 space-y-2 scrollbar-thin">
                             {activeCluster.items.map((item) => (
-                              <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-zinc-950/30 border border-white/5 rounded-lg text-left">
+                              <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-[#f7f4ec] border border-[#1f1e1a]/8 rounded-lg text-left">
                                 <input
                                   type="checkbox"
                                   checked={!(customOverrides[activeCluster.seedId]?.excludedReportIds?.includes(item.id))}
                                   onChange={() => handleToggleExcludeTicket(activeCluster.seedId, item.id)}
-                                  className="mt-0.5 cursor-pointer accent-zinc-500 rounded border-white/10"
+                                  className="mt-0.5 cursor-pointer accent-[#4a5d3f] rounded border-[#1f1e1a]/15"
                                   title="Exclude this ticket from cluster"
                                 />
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] leading-relaxed text-slate-300 truncate font-semibold">
+                                  <p className="text-[11px] leading-relaxed text-[#4b473d] truncate font-semibold">
                                     {item.description || 'No description'}
                                   </p>
-                                  <p className="text-[9px] text-slate-500 font-medium mt-0.5">
+                                  <p className="text-[9px] text-[#8a8477] font-medium mt-0.5">
                                     Report #{item.id} | {item.status} | {item.upvotes || 0} Upvotes
                                   </p>
                                 </div>
@@ -1892,20 +1892,20 @@ export function AnalyticsPage() {
                   </div>
                 ) : (
                   // Hotspot Parameter Controls (shown by default in right panel)
-                  <div className="bg-white/3 backdrop-blur-xl border border-white/10 rounded-2xl p-6 space-y-6 text-left animate-fade-in">
+                  <div className="bg-white border border-[#1f1e1a]/10 rounded-2xl p-6 space-y-6 text-left animate-fade-in">
                     <div>
-                      <h3 className="text-sm font-extrabold text-slate-100">
+                      <h3 className="text-sm font-extrabold text-[#201f1b]">
                         Clustering Controls
                       </h3>
-                      <p className="text-xs text-slate-400 mt-1">Adjust spatial criteria to modify hotspot grouping boundaries in real time.</p>
+                      <p className="text-xs text-[#8a8477] mt-1">Adjust spatial criteria to modify hotspot grouping boundaries in real time.</p>
                     </div>
 
                     <div className="space-y-5 pt-2">
                       {/* Proximity Slider */}
                       <div className="space-y-2 text-left">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                        <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
                           <span>Cluster Proximity Radius</span>
-                          <span className="text-indigo-400 font-bold">{proximityRadius} meters</span>
+                          <span className="text-[#4a5d3f] font-bold">{proximityRadius} meters</span>
                         </div>
                         <input
                           type="range"
@@ -1914,9 +1914,9 @@ export function AnalyticsPage() {
                           step="50"
                           value={proximityRadius}
                           onChange={(e) => setProximityRadius(Number(e.target.value))}
-                          className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-zinc-100"
+                          className="w-full h-1.5 bg-[#e7ede1] rounded-lg appearance-none cursor-pointer accent-[#4a5d3f]"
                         />
-                        <div className="flex justify-between text-[9px] text-slate-500 font-medium">
+                        <div className="flex justify-between text-[9px] text-[#8a8477] font-medium">
                           <span>50m (Precise)</span>
                           <span>1000m (Broad)</span>
                         </div>
@@ -1924,9 +1924,9 @@ export function AnalyticsPage() {
 
                       {/* Min Density Selector */}
                       <div className="space-y-2 text-left">
-                        <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                        <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
                           <span>Minimum Complaint Density</span>
-                          <span className="text-indigo-400 font-bold">{minClusterSize} tickets</span>
+                          <span className="text-[#4a5d3f] font-bold">{minClusterSize} tickets</span>
                         </div>
                         <div className="grid grid-cols-4 gap-1.5">
                           {[2, 3, 4, 5, 6, 8, 10, 15].map((val) => (
@@ -1935,21 +1935,21 @@ export function AnalyticsPage() {
                               onClick={() => setMinClusterSize(val)}
                               className={`py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                                 minClusterSize === val
-                                  ? 'bg-white border-white text-black shadow-lg shadow-white/5'
-                                  : 'bg-zinc-950 border-white/10 hover:border-white/20 text-slate-400 hover:text-slate-200'
+                                  ? 'bg-[#4a5d3f] border-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20'
+                                  : 'bg-[#f5f1e6] border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 text-[#8a8477] hover:text-[#201f1b]'
                               }`}
                             >
                               {val}+
                             </button>
                           ))}
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed mt-2">
+                        <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
                           Hotspots require at least this number of active complaints of the same category clustered within the radius.
                         </p>
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-xl bg-zinc-800/10 border border-zinc-700/20 text-[11px] text-slate-350 leading-relaxed">
+                    <div className="p-4 rounded-xl bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[11px] text-[#4b473d] leading-relaxed">
                       Select a hotspot card on the list to rename its address, edit the recommended action plans, or exclude individual report tickets.
                     </div>
                   </div>
@@ -1973,7 +1973,7 @@ export function AnalyticsPage() {
                   className="cwi-gauge"
                   style={{
                     '--gauge-pct': cityWellnessData.cwi,
-                    '--gauge-color': cityWellnessData.cwi >= 80 ? '#34d399' : cityWellnessData.cwi >= 60 ? '#fbbf24' : '#f87171'
+                    '--gauge-color': cityWellnessData.cwi >= 80 ? '#15803d' : cityWellnessData.cwi >= 60 ? '#b45309' : '#b91c1c'
                   }}
                 >
                   <div className="cwi-gauge-glow" />
@@ -1984,11 +1984,11 @@ export function AnalyticsPage() {
                 <div className={`mt-5 text-2xl font-black cwi-grade-${cityWellnessData.grade}`}>
                   Grade {cityWellnessData.grade}
                 </div>
-                <div className="text-[10px] text-slate-500 font-semibold mt-1 uppercase tracking-wider">
+                <div className="text-[10px] text-[#8a8477] font-semibold mt-1 uppercase tracking-wider">
                   Composite Health Index
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-[10px] text-slate-400">
-                  <Heart size={12} className="text-slate-500" />
+                <div className="mt-4 flex items-center gap-2 text-[10px] text-[#8a8477]">
+                  <Heart size={12} className="text-[#8a8477]" />
                   <span className="font-semibold">Based on {filteredReports.length} reports</span>
                 </div>
               </div>
@@ -1998,8 +1998,8 @@ export function AnalyticsPage() {
                 {Object.entries(cityWellnessData.domains).map(([key, domain]) => (
                   <div key={key} className="domain-card">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">{domain.name}</span>
-                      <span className={`text-lg font-black ${domain.score >= 80 ? 'text-emerald-400' : domain.score >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                      <span className="text-[10px] font-extrabold text-[#8a8477] uppercase tracking-wider">{domain.name}</span>
+                      <span className={`text-lg font-black ${domain.score >= 80 ? 'text-emerald-700' : domain.score >= 60 ? 'text-amber-700' : 'text-red-700'}`}>
                         {domain.score}
                       </span>
                     </div>
@@ -2008,11 +2008,11 @@ export function AnalyticsPage() {
                         className="domain-score-fill"
                         style={{
                           width: `${domain.score}%`,
-                          backgroundColor: domain.score >= 80 ? '#34d399' : domain.score >= 60 ? '#fbbf24' : '#f87171'
+                          backgroundColor: domain.score >= 80 ? '#15803d' : domain.score >= 60 ? '#b45309' : '#b91c1c'
                         }}
                       />
                     </div>
-                    <div className="text-[10px] text-slate-500 font-medium mt-2">
+                    <div className="text-[10px] text-[#8a8477] font-medium mt-2">
                       {domain.activeIssues > 0 ? `${domain.activeIssues} active issues` : 'No active issues'} · {domain.totalReports} total
                     </div>
                   </div>
@@ -2031,15 +2031,15 @@ export function AnalyticsPage() {
                   <div style={{ height: '280px', width: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <RadarChart data={radarChartData} cx="50%" cy="50%" outerRadius="65%">
-                        <PolarGrid stroke="rgba(255,255,255,0.08)" />
-                        <PolarAngleAxis dataKey="domain" tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 700 }} />
+                        <PolarGrid stroke="rgba(31,30,26,0.08)" />
+                        <PolarAngleAxis dataKey="domain" tick={{ fill: '#8a8477', fontSize: 9, fontWeight: 700 }} />
                         <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
                         <Radar name="Score" dataKey="score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2} />
-                        <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} itemStyle={{ color: '#f1f5f9' }} labelStyle={{ color: '#cbd5e1' }} />
+                        <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                       </RadarChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="text-center text-[10px] text-slate-500 font-medium mt-2">
+                  <div className="text-center text-[10px] text-[#8a8477] font-medium mt-2">
                     Balanced scores indicate healthy city operations across all domains
                   </div>
                 </div>
@@ -2060,10 +2060,10 @@ export function AnalyticsPage() {
                             <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="week" stroke="#cbd5e1" fontSize={10} tickLine={false} />
-                        <YAxis stroke="#cbd5e1" fontSize={10} tickLine={false} domain={[0, 100]} />
-                        <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#f1f5f9', fontSize: 12 }} itemStyle={{ color: '#f1f5f9' }} labelStyle={{ color: '#cbd5e1' }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
+                        <XAxis dataKey="week" stroke="#8a8477" fontSize={10} tickLine={false} />
+                        <YAxis stroke="#8a8477" fontSize={10} tickLine={false} domain={[0, 100]} />
+                        <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                         <Area type="monotone" dataKey="CWI" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCWI)" name="City Wellness Index" />
                         <Area type="monotone" dataKey="Infrastructure" stroke="#34d399" strokeWidth={1.5} fillOpacity={0} dot={false} />
                         <Area type="monotone" dataKey="Environment" stroke="#fbbf24" strokeWidth={1.5} fillOpacity={0} dot={false} />
@@ -2072,7 +2072,7 @@ export function AnalyticsPage() {
                     </ResponsiveContainer>
                   </div>
                   {/* Chart Legend */}
-                  <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 mt-3 text-[10px] font-bold text-slate-400">
+                  <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 mt-3 text-[10px] font-bold text-[#8a8477]">
                     <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#6366f1' }} />CWI</div>
                     <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#34d399' }} />Infrastructure</div>
                     <div className="flex items-center gap-1.5"><span className="w-3 h-0.5 rounded" style={{ background: '#fbbf24' }} />Environment</div>
@@ -2086,18 +2086,18 @@ export function AnalyticsPage() {
             <div className="content-card">
               <div className="content-card-header">
                 <div className="content-card-title flex items-center gap-2">
-                  <Lightbulb size={16} className="text-amber-400" />
+                  <Lightbulb size={16} className="text-amber-600" />
                   Actionable Urban Insights
                 </div>
-                <div className="text-[10px] font-semibold text-slate-500">
+                <div className="text-[10px] font-semibold text-[#8a8477]">
                   {actionableInsights.length} insights generated
                 </div>
               </div>
               <div className="p-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1 scrollbar-thin">
                   {actionableInsights.length === 0 ? (
-                    <div className="col-span-2 h-32 flex flex-col items-center justify-center text-slate-500 text-xs">
-                      <CheckCircle2 className="text-slate-600 mb-2" size={20} />
+                    <div className="col-span-2 h-32 flex flex-col items-center justify-center text-[#8a8477] text-xs">
+                      <CheckCircle2 className="text-[#8a8477] mb-2" size={20} />
                       No actionable insights generated from current data.
                     </div>
                   ) : (
@@ -2105,9 +2105,9 @@ export function AnalyticsPage() {
                       <div key={insight.id} className={`insight-card ${insight.type}`}>
                         <div className="flex items-start gap-3">
                           <div className={`insight-icon mt-0.5 flex-shrink-0 ${
-                            insight.type === 'critical' ? 'text-red-400' :
-                            insight.type === 'warning' ? 'text-amber-400' :
-                            insight.type === 'success' ? 'text-emerald-400' : 'text-indigo-400'
+                            insight.type === 'critical' ? 'text-red-700' :
+                            insight.type === 'warning' ? 'text-amber-700' :
+                            insight.type === 'success' ? 'text-emerald-700' : 'text-[#4a5d3f]'
                           }`}>
                             {insight.type === 'critical' ? <AlertCircle size={16} /> :
                              insight.type === 'warning' ? <AlertTriangle size={16} /> :
@@ -2115,14 +2115,14 @@ export function AnalyticsPage() {
                              <Info size={16} />}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs font-extrabold text-slate-200">{insight.title}</div>
-                            <div className="text-[11px] leading-relaxed text-slate-400 mt-1">{insight.description}</div>
+                            <div className="text-xs font-extrabold text-[#201f1b]">{insight.title}</div>
+                            <div className="text-[11px] leading-relaxed text-[#8a8477] mt-1">{insight.description}</div>
                             <div className="mt-2 flex items-center gap-2">
-                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-zinc-800/50 border border-white/5 text-slate-400">
+                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-[#1f1e1a]/6 border border-[#1f1e1a]/8 text-[#8a8477]">
                                 {insight.zone}
                               </span>
                             </div>
-                            <div className="text-[10px] leading-relaxed text-slate-300 mt-2 italic">
+                            <div className="text-[10px] leading-relaxed text-[#4b473d] mt-2 italic">
                               <strong>Recommended Action:</strong> {insight.action}
                             </div>
                           </div>
@@ -2138,10 +2138,10 @@ export function AnalyticsPage() {
             <div className="content-card">
               <div className="content-card-header">
                 <div className="content-card-title flex items-center gap-2">
-                  <MapPin size={16} className="text-indigo-400" />
+                  <MapPin size={16} className="text-[#4a5d3f]" />
                   Zone / Area Wellness Scorecard
                 </div>
-                <div className="text-[10px] font-semibold text-slate-500">
+                <div className="text-[10px] font-semibold text-[#8a8477]">
                   {zoneScorecard.length} zones tracked
                 </div>
               </div>
@@ -2162,34 +2162,34 @@ export function AnalyticsPage() {
                     <tbody>
                       {zoneScorecard.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="text-center text-slate-500 py-8">No zone data available</td>
+                          <td colSpan={7} className="text-center text-[#8a8477] py-8">No zone data available</td>
                         </tr>
                       ) : (
                         zoneScorecard.map(zone => (
                           <tr key={zone.name}>
-                            <td className="font-bold text-slate-200">{zone.name}</td>
+                            <td className="font-bold text-[#201f1b]">{zone.name}</td>
                             <td>{zone.total}</td>
                             <td>
-                              <span className={zone.active > 3 ? 'text-amber-400 font-bold' : ''}>
+                              <span className={zone.active > 3 ? 'text-amber-700 font-bold' : ''}>
                                 {zone.active}
                               </span>
                             </td>
-                            <td className="text-emerald-400">{zone.resolved}</td>
+                            <td className="text-[#3d4d34]">{zone.resolved}</td>
                             <td>
                               <div className="flex items-center gap-2">
-                                <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden max-w-[60px]">
+                                <div className="flex-1 h-1.5 bg-[#1f1e1a]/8 rounded-full overflow-hidden max-w-[60px]">
                                   <div
                                     className="h-full rounded-full"
                                     style={{
                                       width: `${zone.resolutionRate}%`,
-                                      backgroundColor: zone.resolutionRate >= 80 ? '#34d399' : zone.resolutionRate >= 60 ? '#fbbf24' : '#f87171'
+                                      backgroundColor: zone.resolutionRate >= 80 ? '#15803d' : zone.resolutionRate >= 60 ? '#b45309' : '#b91c1c'
                                     }}
                                   />
                                 </div>
                                 <span className="text-[10px] font-bold">{zone.resolutionRate}%</span>
                               </div>
                             </td>
-                            <td className={zone.avgDays > 3 ? 'text-red-400 font-bold' : 'text-slate-300'}>
+                            <td className={zone.avgDays > 3 ? 'text-red-700 font-bold' : 'text-[#4b473d]'}>
                               {zone.avgDays || '—'}
                             </td>
                             <td>

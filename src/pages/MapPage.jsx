@@ -13,9 +13,9 @@ function HeatmapLayer({ points }) {
   useEffect(() => {
     if (!points || points.length === 0) return;
     const heatPoints = points.map(p => [p.latitude, p.longitude, 1]); // Lat, Lng, Intensity
-    const heat = L.heatLayer(heatPoints, { 
-      radius: 25, 
-      blur: 15, 
+    const heat = L.heatLayer(heatPoints, {
+      radius: 25,
+      blur: 15,
       maxZoom: 14,
       gradient: {0.4: 'blue', 0.6: 'cyan', 0.7: 'lime', 0.8: 'yellow', 1.0: 'red'}
     }).addTo(map);
@@ -81,10 +81,10 @@ const getPriorityColor = (priority) => {
 const createCustomMarkerIcon = (priority, color, count) => {
   const pinSize = count > 1 ? 42 : 36;
   const pinColor = color;
-  
+
   // Custom SVG Map Pin pointing to the location.
   // Center-bottom tip is at (12, 23).
-  const innerContent = count > 1 
+  const innerContent = count > 1
     ? `
       <circle cx="12" cy="10" r="6" fill="#ffffff"></circle>
       <text x="12" y="13" fill="${pinColor}" font-size="9" font-weight="900" text-anchor="middle">${count}</text>
@@ -92,7 +92,7 @@ const createCustomMarkerIcon = (priority, color, count) => {
     : `
       <circle cx="12" cy="10" r="3" fill="#ffffff"></circle>
     `;
-    
+
   return L.divIcon({
     html: `
       <div style="
@@ -122,21 +122,21 @@ const createCustomMarkerIcon = (priority, color, count) => {
 const createClusterCustomIcon = (cluster) => {
   const count = cluster.getChildCount();
   const markers = cluster.getAllChildMarkers();
-  
+
   let hasHigh = false;
   let hasMed = false;
   let allResolved = true;
-  
+
   markers.forEach(m => {
     const priority = m.options.priority;
     if (priority === 'High') hasHigh = true;
     if (priority === 'Medium') hasMed = true;
     if (priority !== 'Resolved') allResolved = false;
   });
-  
+
   const priority = hasHigh ? 'High' : hasMed ? 'Medium' : allResolved ? 'Resolved' : 'Medium';
   const color = getPriorityColor(priority);
-  
+
   return L.divIcon({
     html: `
       <div style="
@@ -194,11 +194,11 @@ function PopupContent({ reports, setFullScreenImage }) {
     <div className="w-64">
       {/* Multi-report navigator */}
       {reports.length > 1 && (
-        <div className="flex items-center justify-between bg-slate-800 text-white px-3 py-2 text-xs font-bold rounded-t-lg">
+        <div className="flex items-center justify-between px-3 py-2 text-xs font-bold rounded-t-lg" style={{ background: 'var(--cream-200)', color: '#201f1b' }}>
           <button
             disabled={index === 0}
             onClick={(e) => { e.stopPropagation(); setIndex(i => i - 1); setShowAfter(true); }}
-            className="p-1 disabled:opacity-30 hover:bg-slate-700 rounded transition-colors"
+            className="p-1 disabled:opacity-30 hover:bg-[#4a5d3f]/10 rounded transition-colors"
           >
             <ChevronLeft size={16} />
           </button>
@@ -206,7 +206,7 @@ function PopupContent({ reports, setFullScreenImage }) {
           <button
             disabled={index === reports.length - 1}
             onClick={(e) => { e.stopPropagation(); setIndex(i => i + 1); setShowAfter(true); }}
-            className="p-1 disabled:opacity-30 hover:bg-slate-700 rounded transition-colors"
+            className="p-1 disabled:opacity-30 hover:bg-[#4a5d3f]/10 rounded transition-colors"
           >
             <ChevronRight size={16} />
           </button>
@@ -214,7 +214,7 @@ function PopupContent({ reports, setFullScreenImage }) {
       )}
 
       {/* Image — Before / After toggle when resolved with proof */}
-      <div className={`relative w-full h-32 bg-slate-100 ${reports.length === 1 ? 'rounded-t-lg' : ''} overflow-hidden`}>
+      <div className={`relative w-full h-32 bg-stone-100 ${reports.length === 1 ? 'rounded-t-lg' : ''} overflow-hidden`}>
         {displayImage ? (
           <img
             src={displayImage}
@@ -225,25 +225,27 @@ function PopupContent({ reports, setFullScreenImage }) {
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <ImageIcon className="text-slate-400" size={32} />
+            <ImageIcon className="text-[#8a8477]" size={32} />
           </div>
         )}
 
         {/* Resolved "AI Verified" banner */}
         {isResolved && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 bg-white text-black text-[10px] font-bold px-2 py-1 rounded-full shadow-md">
+          <div className="absolute top-2 left-2 flex items-center gap-1 bg-white text-[#201f1b] text-[10px] font-bold px-2 py-1 rounded-full shadow-md">
             <CheckCircle2 size={10} />
             RESOLVED
           </div>
         )}
 
-        {/* Before / After toggle tabs — only shown when resolved + has proof */}
+        {/* Before / After toggle tabs — only shown when resolved + has proof.
+            These sit on top of an arbitrary user photo, so they keep a dark
+            translucent treatment for legibility regardless of app theme. */}
         {isResolved && hasProof && (
           <div className="absolute bottom-2 right-2 flex rounded-lg overflow-hidden shadow-md border border-white/10">
             <button
               onClick={(e) => { e.stopPropagation(); setShowAfter(false); }}
               className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${
-                !showAfter ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                !showAfter ? 'bg-white text-[#201f1b]' : 'bg-black/60 text-white/70 hover:bg-black/70'
               }`}
             >
               Before
@@ -251,7 +253,7 @@ function PopupContent({ reports, setFullScreenImage }) {
             <button
               onClick={(e) => { e.stopPropagation(); setShowAfter(true); }}
               className={`px-2 py-0.5 text-[10px] font-bold transition-colors ${
-                showAfter ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                showAfter ? 'bg-white text-[#201f1b]' : 'bg-black/60 text-white/70 hover:bg-black/70'
               }`}
             >
               After
@@ -263,7 +265,7 @@ function PopupContent({ reports, setFullScreenImage }) {
       {/* Info card */}
       <div className="p-3">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-slate-800 text-sm line-clamp-1">{report.categories || 'Unknown Issue'}</h3>
+          <h3 className="font-bold text-[#201f1b] text-sm line-clamp-1">{report.categories || 'Unknown Issue'}</h3>
           <span
             className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
             style={{ backgroundColor: `${reportColor}20`, color: reportColor }}
@@ -274,23 +276,23 @@ function PopupContent({ reports, setFullScreenImage }) {
 
         {/* AI result row */}
         {!showAfter && report.ai_prediction && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2">
-            <span className="font-semibold text-slate-350">
+          <div className="flex items-center gap-1.5 text-xs text-[#4b473d] mb-2">
+            <span className="font-semibold text-[#4b473d]">
               {report.ai_prediction}
             </span>
-            <span className="text-slate-500">
+            <span className="text-[#8a8477]">
               ({report.confidence})
             </span>
           </div>
         )}
 
-        <div className="flex items-start gap-1 text-xs text-slate-500 mb-3">
+        <div className="flex items-start gap-1 text-xs text-[#8a8477] mb-3">
           <MapPin size={14} className="mt-0.5 shrink-0" />
           <span className="line-clamp-2">{report.address || 'No address'}</span>
         </div>
 
         <div className="flex justify-between items-center text-xs">
-          <span className="text-slate-400">
+          <span className="text-[#8a8477]">
             {(() => {
               const dateField = isResolved ? report.resolved_at : report.timestamp;
               if (!dateField) return 'Unknown time';
@@ -327,7 +329,7 @@ export function MapPage() {
       setLoading(true);
       const data = await fetchReports(currentRole);
       const safeData = Array.isArray(data) ? data : [];
-      
+
       // Filter out resolved reports that are older than 7 days
       const activeMapReports = safeData.filter(r => {
         if (!r.latitude || !r.longitude) return false;
@@ -374,7 +376,7 @@ export function MapPage() {
   const filteredReports = useMemo(() => {
     let result = reports;
     if (selectedCategory !== "All") {
-      result = result.filter(r => 
+      result = result.filter(r =>
         (r.categories || '').toLowerCase().includes(selectedCategory.toLowerCase())
       );
     }
@@ -404,7 +406,7 @@ export function MapPage() {
       const deptId = getDeptId(currentRole, user?.username);
       result = result.filter(r => {
         if (!r.status || r.status === 'Pending' || r.status === 'In Review') return false;
-        if (!deptId) return true; 
+        if (!deptId) return true;
         const assigned = (r.assigned_department || '').toLowerCase();
         if (deptId === 'mbmb' && (assigned.includes('mbmb') || assigned.includes('bersejarah'))) return true;
         if (deptId === 'samb' && (assigned.includes('samb') || assigned.includes('air'))) return true;
@@ -442,15 +444,15 @@ export function MapPage() {
         </div>
         {/* Live indicator */}
         <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)' }}>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', boxShadow: '0 2px 8px rgba(31,30,26,0.06)' }}>
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#4a5d3f] opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#4a5d3f]" />
             </span>
-            <span className="text-xs font-bold" style={{ color: '#ffffff' }}>Live</span>
+            <span className="text-xs font-bold" style={{ color: '#3d4d34' }}>Live</span>
           </div>
           {lastUpdated && (
-            <span className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>
+            <span className="text-[10px]" style={{ color: '#8a8477' }}>
               {secondsAgo < 10 ? 'Just now' : `${secondsAgo}s ago`} &middot; auto-refreshes every 30s
             </span>
           )}
@@ -465,9 +467,9 @@ export function MapPage() {
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-5 py-2 rounded-full text-sm font-semibold transition-all whitespace-nowrap border
-                ${selectedCategory === cat 
-                  ? 'bg-white text-black border-white shadow-md shadow-white/10' 
-                  : 'bg-white/6 text-slate-300 border-white/10 hover:border-white/20 hover:bg-white/10'
+                ${selectedCategory === cat
+                  ? 'bg-[#4a5d3f] text-white border-[#4a5d3f] shadow-md shadow-[#4a5d3f]/20'
+                  : 'bg-white text-[#4b473d] border-[#1f1e1a]/10 hover:border-[#1f1e1a]/20 hover:bg-[#4a5d3f]/5'
                 }
               `}
             >
@@ -475,12 +477,12 @@ export function MapPage() {
             </button>
           ))}
         </div>
-        
+
         <div className="flex items-center gap-2 shrink-0 pb-2">
-           <button 
+           <button
              onClick={() => setShowHeatmap(!showHeatmap)}
              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all border ${
-               showHeatmap ? 'bg-white text-black border-white shadow-md shadow-white/10' : 'bg-white/6 text-slate-355 border-white/10 hover:bg-white/10'
+               showHeatmap ? 'bg-[#4a5d3f] text-white border-[#4a5d3f] shadow-md shadow-[#4a5d3f]/20' : 'bg-white text-[#4b473d] border-[#1f1e1a]/10 hover:bg-[#4a5d3f]/5'
              }`}
            >
              <Layers size={16} />
@@ -492,18 +494,18 @@ export function MapPage() {
              onClick={() => setSelectedStatus(s => s === 'Resolved' ? 'All' : 'Resolved')}
              className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all border ${
                selectedStatus === 'Resolved'
-                 ? 'bg-white text-black border-white shadow-md shadow-white/10'
-                 : 'bg-white/6 text-slate-355 border-white/10 hover:bg-white/10'
+                 ? 'bg-[#4a5d3f] text-white border-[#4a5d3f] shadow-md shadow-[#4a5d3f]/20'
+                 : 'bg-white text-[#4b473d] border-[#1f1e1a]/10 hover:bg-[#4a5d3f]/5'
              }`}
            >
              <CheckCircle2 size={16} />
              {selectedStatus === 'Resolved' ? 'Resolved Only' : 'Resolved Only'}
            </button>
 
-           <select 
+           <select
              value={selectedStatus}
              onChange={(e) => setSelectedStatus(e.target.value)}
-             className="px-4 py-2 rounded-full text-sm font-semibold outline-none focus:border-white/40 cursor-pointer" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', color: '#e2e8f0' }}
+             className="px-4 py-2 rounded-full text-sm font-semibold outline-none cursor-pointer" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
            >
              {STATUSES.map(s => (
                <option key={s} value={s}>{s}</option>
@@ -513,19 +515,19 @@ export function MapPage() {
       </div>
 
       {/* Map Container */}
-      <div 
-        className="rounded-2xl overflow-hidden relative" style={{ border: '1px solid rgba(255,255,255,0.09)', height: 'calc(100vh - 220px)', minHeight: '500px' }}
+      <div
+        className="rounded-2xl overflow-hidden relative" style={{ border: '1px solid rgba(31,30,26,0.10)', height: 'calc(100vh - 220px)', minHeight: '500px' }}
       >
         {loading && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ background: 'rgba(10,10,10,0.75)', backdropFilter: 'blur(8px)' }}>
-            <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p style={{ color: '#e2e8f0' }} className="font-medium">Loading map data...</p>
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)' }}>
+            <div className="w-10 h-10 border-4 border-[#4a5d3f] border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p style={{ color: '#201f1b' }} className="font-medium">Loading map data...</p>
           </div>
         )}
-        
-        <MapContainer 
+
+        <MapContainer
           center={[2.1896, 102.2501]}
-          zoom={13} 
+          zoom={13}
           style={{ height: '100%', width: '100%' }}
           whenReady={(map) => {
             setTimeout(() => {
@@ -540,12 +542,12 @@ export function MapPage() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          
+
           {showHeatmap ? (
             <HeatmapLayer points={filteredReports} />
           ) : (
-            <MarkerClusterGroup 
-              chunkedLoading 
+            <MarkerClusterGroup
+              chunkedLoading
               maxClusterRadius={50}
               iconCreateFunction={createClusterCustomIcon}
             >
@@ -555,7 +557,7 @@ export function MapPage() {
                 const allResolved = group.every(r => r.status === 'Resolved');
                 const priority = hasHigh ? 'High' : hasMed ? 'Medium' : allResolved ? 'Resolved' : 'Medium';
                 const color = getPriorityColor(priority);
-                
+
                 return (
                   <Marker
                     key={group[0].id}
@@ -574,50 +576,51 @@ export function MapPage() {
         </MapContainer>
 
         {/* Legend */}
-        <div className="absolute bottom-6 left-6 z-[400] p-4 rounded-xl pointer-events-auto" style={{ background: 'rgba(10,10,10,0.88)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <h4 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'rgba(148,163,184,0.65)' }}>Map Legend</h4>
+        <div className="absolute bottom-6 left-6 z-[400] p-4 rounded-xl pointer-events-auto" style={{ background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(12px)', border: '1px solid rgba(31,30,26,0.10)', boxShadow: '0 8px 32px rgba(31,30,26,0.12)' }}>
+            <h4 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#8a8477' }}>Map Legend</h4>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500 ring-2 ring-white shadow-sm"></div>
-              <span className="text-sm font-medium" style={{ color: '#e2e8f0' }}>High Priority</span>
+              <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm"></div>
+              <span className="text-sm font-medium" style={{ color: '#201f1b' }}>High Priority</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-orange-500 ring-2 ring-white shadow-sm"></div>
-              <span className="text-sm font-medium" style={{ color: '#e2e8f0' }}>Medium Priority</span>
+              <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></div>
+              <span className="text-sm font-medium" style={{ color: '#201f1b' }}>Medium Priority</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-500 ring-2 ring-white shadow-sm"></div>
-              <span className="text-sm font-medium" style={{ color: '#e2e8f0' }}>Resolved</span>
+              <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
+              <span className="text-sm font-medium" style={{ color: '#201f1b' }}>Resolved</span>
             </div>
           </div>
-            <div className="mt-3 pt-3 text-xs" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', color: 'rgba(148,163,184,0.55)' }}>
+            <div className="mt-3 pt-3 text-xs" style={{ borderTop: '1px solid rgba(31,30,26,0.08)', color: '#8a8477' }}>
             {filteredReports.length} {filteredReports.length === 1 ? 'issue' : 'issues'} shown
           </div>
         </div>
       </div>
-      
+
       <style>{`
         .custom-popup .leaflet-popup-content-wrapper { padding: 0; overflow: hidden; border-radius: 12px; }
         .custom-popup .leaflet-popup-content { margin: 0; width: 256px !important; }
       `}</style>
 
-      {/* Full Screen Image Viewer */}
+      {/* Full Screen Image Viewer — a photo lightbox, kept dark for legibility
+          against arbitrary user-submitted images regardless of app theme */}
       {fullScreenImage && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setFullScreenImage(null)}
         >
-          <button 
+          <button
             className="absolute top-6 right-6 text-white/70 hover:text-white bg-black/50 p-2 rounded-full backdrop-blur-sm transition-colors"
             onClick={(e) => { e.stopPropagation(); setFullScreenImage(null); }}
           >
             <span className="text-xl font-bold px-2">×</span>
           </button>
-          <img 
-            src={fullScreenImage} 
-            alt="Full Screen" 
+          <img
+            src={fullScreenImage}
+            alt="Full Screen"
             className="max-w-full max-h-full object-contain rounded-lg shadow-2xl cursor-default"
-            onClick={(e) => e.stopPropagation()} 
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}
