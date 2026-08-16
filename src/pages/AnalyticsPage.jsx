@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { fetchAllReports, fetchAuthorityActions } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
@@ -10,7 +10,6 @@ import {
 import { MapContainer, TileLayer, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
-import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
@@ -18,11 +17,12 @@ import {
 } from 'lucide-react';
 import { format, parseISO, subDays } from 'date-fns';
 import {
-  SLA_END_TO_END_DAYS, CLUSTER, REINCIDENCE, INSIGHT, MIN_N_FOR_SCORE, CRITICALITY, gradeFor,
+  SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
+  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
-  buildServicePerformance, buildUrbanCondition, buildBacklogFlow,
+  buildServicePerformance, buildUrbanCondition, buildBacklogFlow, buildFunnel,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
@@ -122,7 +122,6 @@ export function AnalyticsPage() {
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [mapReady, setMapReady] = useState(false);
-  const reportRef = useRef(null);
 
   // Scoping and Filter State
   const [dateFilter, setDateFilter] = useState('all');
@@ -1086,101 +1085,184 @@ export function AnalyticsPage() {
   }, [filteredReports]);
 
   // 7. PDF Exporter
+  /**
+   * Text-based executive brief.
+   *
+   * Replaces an html2canvas screenshot of whichever tab happened to be open,
+   * which produced no selectable text, no data tables, no statement of what was
+   * filtered, and rasterised map tiles unreliably. It also mutated live CSSOM to
+   * strip oklab/oklch rules that html2canvas could not parse.
+   *
+   * The filter context is printed first: a brief that does not say what it
+   * covers cannot be checked by whoever receives it.
+   */
   const exportToPDF = async () => {
-    if (pdfGenerating) return;
     setPdfGenerating(true);
-
-    let restoreStyles = null;
     try {
-      const deletedRules = [];
-      
-      const cleanRules = (container) => {
-        if (!container || !container.cssRules) return;
-        for (let i = container.cssRules.length - 1; i >= 0; i--) {
-          try {
-            const rule = container.cssRules[i];
-            if (rule.cssRules) {
-              cleanRules(rule);
-            } else if (rule.cssText && (rule.cssText.includes('oklab') || rule.cssText.includes('oklch'))) {
-              deletedRules.push({ container, index: i, cssText: rule.cssText });
-              container.deleteRule(i);
-            }
-          } catch (err) {
-            // ignore rule-level access errors
-          }
-        }
+      const doc = new jsPDF();
+      const M = 14;
+      const BOTTOM = 275;
+      let y = 20;
+
+      const nextPage = () => { doc.addPage(); y = 20; };
+      const room = (needed = 8) => { if (y + needed > BOTTOM) nextPage(); };
+      const heading = (text) => {
+        room(14);
+        y += 4;
+        doc.setFontSize(12); doc.setFont(undefined, 'bold');
+        doc.text(text, M, y); y += 7;
+        doc.setFontSize(9); doc.setFont(undefined, 'normal');
       };
-
-      for (let i = 0; i < document.styleSheets.length; i++) {
-        const sheet = document.styleSheets[i];
-        try {
-          if (sheet.cssRules) {
-            cleanRules(sheet);
-          }
-        } catch (err) {
-          // ignore CORS errors for external fonts/styles
-        }
-      }
-
-      restoreStyles = () => {
-        // Sort deleted rules by index ascending to restore in original positions
-        deletedRules.sort((a, b) => a.index - b.index);
-        for (const item of deletedRules) {
-          try {
-            item.container.insertRule(item.cssText, item.index);
-          } catch (err) {
-            console.warn("Failed to restore rule:", err);
-          }
-        }
+      const line = (text, indent = 0) => {
+        room();
+        doc.text(String(text), M + indent, y); y += 5;
       };
-    } catch (err) {
-      console.warn("Style preprocessing failed:", err);
-    }
+      const row = (cols, widths, bold = false) => {
+        room();
+        doc.setFont(undefined, bold ? 'bold' : 'normal');
+        let x = M;
+        cols.forEach((c, i) => { doc.text(String(c), x, y); x += widths[i]; });
+        doc.setFont(undefined, 'normal');
+        y += 5;
+      };
+      const days = (v) => (v == null ? 'n/a' : v.toFixed(1) + 'd');
+      const pct = (v) => (v == null ? 'n/a' : v + '%');
 
-    try {
-      const element = reportRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#faf8f2', // match Grove light background
+      // Header and filter context.
+      doc.setFontSize(16); doc.setFont(undefined, 'bold');
+      doc.text('Infrastructure Analytics - Executive Brief', M, y); y += 8;
+      doc.setFontSize(9); doc.setFont(undefined, 'normal');
+      doc.text('Generated ' + format(new Date(), 'd MMM yyyy HH:mm'), M, y); y += 5;
+      doc.text(dateFilterLabel, M, y); y += 5;
+      doc.text(
+        'Department scope: ' + (selectedDept === 'all' ? 'All departments' : selectedDept) +
+        '  |  ' + filteredReports.length + ' of ' + reports.length + ' reports',
+        M, y
+      );
+      y += 6;
+      doc.setDrawColor(180); doc.line(M, y, 196, y); y += 2;
+
+      // Headline figures.
+      heading('Headline');
+      line('Active complaints: ' + kpiStats.active + ' of ' + kpiStats.total);
+      line('Average resolution: ' + (kpiStats.avgDays == null ? 'insufficient data' : kpiStats.avgDays + ' days'));
+      line('Service Performance Index: ' + (servicePerformance.index ?? 'insufficient data') +
+        (servicePerformance.excluded.length ? '  (' + servicePerformance.excluded.length + ' domains omitted)' : ''));
+      line('Urban Condition Index: ' + (urbanCondition.index ?? 'insufficient data') +
+        (urbanCondition.excluded.length ? '  (' + urbanCondition.excluded.length + ' categories omitted)' : ''));
+      line('Active hotspots: ' + kpiStats.hotspotsCount + ' (radius <= ' + proximityRadius + 'm, min ' + minClusterSize + ' reports)');
+
+      // Stage durations.
+      const funnel = buildFunnel(filteredReports, { cohort: 'all', minN: MIN_N_FOR_STAGE });
+      heading('Where the time goes (median days per stage)');
+      row(['Stage', 'Median', 'p90', 'Target', 'n'], [70, 25, 25, 25, 20], true);
+      funnel.stages.forEach((st) => {
+        row([
+          st.label,
+          st.sufficient ? days(st.median) : 'insufficient',
+          st.sufficient ? days(st.p90) : '-',
+          SLA_TARGET_DAYS[st.key] != null ? SLA_TARGET_DAYS[st.key] + 'd' : '-',
+          st.n,
+        ], [70, 25, 25, 25, 20]);
       });
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210; // A4 width
-      const pageHeight = 297; // A4 height
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      y += 2;
+      line('Medians shown; they do not sum to the total. Mean end-to-end: ' + days(funnel.endToEnd.mean) + ' (n=' + funnel.endToEnd.n + ').');
+      if (funnel.firstPassYield != null) {
+        line('First-pass yield ' + funnel.firstPassYield + '% - ' + funnel.bouncedCount + ' of ' + funnel.dispatchedCount + ' dispatched reports were re-pooled.');
+      }
+      if (funnel.nonMonotonic > 0) {
+        line(funnel.nonMonotonic + ' out-of-order timestamps were clamped to zero.');
       }
 
-      const tabNames = {
-        overview: "Overview_and_Trends",
-        hotspots: "Predictive_Hotspots",
-        dispatch: "Risk_and_Crew_Dispatch",
-        cityhealth: "City_Health_Wellness"
-      };
-      const tabLabel = tabNames[activeViewTab] || "Report";
-      pdf.save(`Melaka_Infrastructure_${tabLabel}_${format(new Date(), 'yyyyMMdd')}.pdf`);
-    } catch (e) {
-      console.error('PDF generation failed:', e);
+      // Department SLA.
+      heading('Department performance');
+      row(['Department', 'Assigned', 'Resolved', 'Backlog', 'Avg resolve'], [60, 25, 25, 25, 30], true);
+      deptSLAMetrics.forEach((d) => {
+        row([d.name, d.assigned, d.resolved, d.backlog, days(d.avgResolveDays)], [60, 25, 25, 25, 30]);
+      });
+
+      // Repeat-failure audit.
+      heading('Repeat-failure audit');
+      line('A new complaint of the same category within ' + REINCIDENCE.radiusM + 'm and ' + REINCIDENCE.windowDays + ' days of a resolved one.');
+      y += 1;
+      row(['Department', 'Repeats', 'Resolved', 'On-time', 'Grade'], [70, 25, 25, 25, 20], true);
+      contractorAudit.forEach((d) => {
+        row([
+          d.name.length > 34 ? d.name.slice(0, 33) + '.' : d.name,
+          d.reIncidence ?? 0,
+          d.resolvedCount ?? 0,
+          pct(d.rate),
+          gradeFor(d.rate)?.grade ?? '-',
+        ], [70, 25, 25, 25, 20]);
+      });
+
+      // Dispatch queue.
+      if (prioritizedDispatchQueue.length) {
+        heading('Dispatch priority queue');
+        row(['#', 'Location', 'Reports', 'Risk', 'Score'], [10, 85, 22, 40, 20], true);
+        prioritizedDispatchQueue.slice(0, 10).forEach((item, i) => {
+          const label = item.address || item.category || 'Cluster';
+          row([
+            i + 1,
+            label.length > 42 ? label.slice(0, 41) + '.' : label,
+            item.size,
+            item.primaryRisk || '-',
+            item.priorityScore,
+          ], [10, 85, 22, 40, 20]);
+        });
+      }
+
+      // Zones.
+      if (zoneScorecard.length) {
+        heading('Zone scorecard');
+        row(['Zone', 'Total', 'Active', 'Resolved', 'Rate', 'Grade'], [60, 22, 22, 25, 22, 20], true);
+        zoneScorecard.forEach((z) => {
+          row([
+            z.name.length > 30 ? z.name.slice(0, 29) + '.' : z.name,
+            z.total, z.active, z.resolved,
+            pct(z.resolutionRate),
+            z.grade ?? '-',
+          ], [60, 22, 22, 25, 22, 20]);
+        });
+      }
+
+      // Insights.
+      if (actionableInsights.length) {
+        heading('Actionable insights');
+        actionableInsights.forEach((ins) => {
+          room(16);
+          doc.setFont(undefined, 'bold');
+          doc.text('[' + ins.type.toUpperCase() + '] ' + ins.title, M, y); y += 5;
+          doc.setFont(undefined, 'normal');
+          doc.splitTextToSize(ins.description, 178).forEach((l) => { room(); doc.text(l, M, y); y += 4.5; });
+          doc.splitTextToSize('Action: ' + ins.action, 178).forEach((l) => { room(); doc.text(l, M + 3, y); y += 4.5; });
+          y += 2;
+        });
+      }
+
+      // Methodology footer.
+      heading('Methodology');
+      [
+        'End-to-end SLA target ' + SLA_END_TO_END_DAYS + ' days. Stage targets sum to that total.',
+        'Medians and p90 use linear interpolation (R-7). Medians are not additive.',
+        'Figures marked "insufficient data" had too few records to report; nothing is substituted.',
+        'Service Performance scores council actions. Urban Condition scores open defect burden',
+        'weighted by age, and excludes resolution rate by design.',
+      ].forEach((t) => line(t));
+
+      // Page numbers, added last so the total is known.
+      const pages = doc.getNumberOfPages();
+      for (let i = 1; i <= pages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.text('Page ' + i + ' of ' + pages, 196, 288, { align: 'right' });
+      }
+
+      doc.save('Melaka_Infrastructure_Brief_' + format(new Date(), 'yyyyMMdd') + '.pdf');
+    } catch (err) {
+      console.error('Failed to build the executive brief', err);
+      setError('Could not generate the PDF brief. Please try again.');
     } finally {
-      if (restoreStyles) {
-        try {
-          restoreStyles();
-        } catch (err) {
-          console.warn("Error restoring styles:", err);
-        }
-      }
       setPdfGenerating(false);
     }
   };
@@ -1357,7 +1439,7 @@ export function AnalyticsPage() {
       </div>
 
       {/* Main page content wrapper for PDF capture */}
-      <div ref={reportRef} className="space-y-6 p-1 rounded-2xl">
+      <div className="space-y-6 p-1 rounded-2xl">
 
         {/* ==================== OVERVIEW & TRENDS TAB ==================== */}
         {activeViewTab === 'overview' && (
