@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat } from "lucide-react";
 import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications } from "../context/AuthContext";
 import { fetchDatasetStats } from "../api/datasetApi";
-import { fetchTransfers } from "../api/reportsApi";
+import { fetchTransfers, fetchReports } from "../api/reportsApi";
 import { AUTHORITIES } from '../utils/authorities';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
@@ -16,6 +16,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
   const pendingCount = role === 'admin' ? getPendingRequests().length : 0;
   const [datasetPending, setDatasetPending] = useState(0);
   const [transferPending, setTransferPending] = useState(0);
+  const [poolCount, setPoolCount] = useState(0);
 
   // Refresh notifs every 15s
   useEffect(() => {
@@ -61,6 +62,30 @@ export function Sidebar({ isOpen, setIsOpen }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [role]);
 
+  // Badge the Reports link with how many unclaimed jobs are waiting in the
+  // worker's own team pool. A dispatched report has nowhere else to surface
+  // for the worker it's meant for — the Reports page doesn't poll, and the
+  // notification bell only ever writes to the browser that performed the
+  // action, never the recipient's. Polled more often than the admin badges
+  // since "did new work just land in my pool" is time-sensitive in a way
+  // "is there a pending signup request" isn't.
+  useEffect(() => {
+    const isWorker = role === 'worker' || role?.startsWith('worker_');
+    if (!isWorker) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const pool = await fetchReports('worker', { scope: 'pool', limit: 200 });
+        if (!cancelled) setPoolCount(Array.isArray(pool) ? pool.length : 0);
+      } catch {
+        if (!cancelled) setPoolCount(0);
+      }
+    };
+    load();
+    const id = setInterval(load, 20000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [role]);
+
   const unreadCount = notifs.filter(n => !n.read).length;
 
   const handleBellClick = () => {
@@ -87,7 +112,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
       ? { name: "Insights", path: "/", icon: <BarChart3 size={18} /> }
       : { name: "Overview", path: "/", icon: <LayoutDashboard size={18} /> },
     { name: "Map View", path: "/map", icon: <MapIcon size={18} /> },
-    { name: "Reports", path: "/reports", icon: <ClipboardList size={18} /> },
+    { name: "Reports", path: "/reports", icon: <ClipboardList size={18} />, badge: poolCount },
     ...(isPlanner
         ? [{ name: "Teams", path: "/teams", icon: <HardHat size={18} />, badge: transferPending }]
         : []),

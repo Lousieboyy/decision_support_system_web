@@ -30,10 +30,11 @@ export const MAX_REPORTS = 5000;
 
 // `role` is vestigial — the backend scopes off the JWT — but it is kept so the
 // existing call sites and Cypress intercepts (`**/reports*`) keep working.
-export const fetchReports = async (role = 'admin', { limit, offset } = {}) => {
+export const fetchReports = async (role = 'admin', { limit, offset, scope } = {}) => {
   const qs = new URLSearchParams({ role });
   if (limit != null) qs.set('limit', String(limit));
   if (offset != null) qs.set('offset', String(offset));
+  if (scope != null) qs.set('scope', scope);
   const response = await fetch(`${API_URL}/reports?${qs}`, {
     headers: getAuthHeaders(),
   });
