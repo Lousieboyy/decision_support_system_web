@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchAllReports, getImageUrl } from '../api/reportsApi';
+import { fetchAllReports, getImageUrl, claimReport } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
 import { AUTHORITIES } from '../utils/authorities';
@@ -9,7 +9,8 @@ import { format, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } fro
 import jsPDF from 'jspdf';
 import {
   Search, Filter, RefreshCw, Image as ImageIcon, MapPin,
-  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X, Building2, Download, FileText
+  ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X, Building2, Download, FileText,
+  Check, Loader2,
 } from 'lucide-react';
 
 // Get dept id from role
@@ -152,6 +153,26 @@ export function ReportsPage() {
 
   const handleUpdate = (id, partial) => {
     setReports(prev => prev.map(r => r.id === id ? { ...r, ...partial } : r));
+  };
+
+  // Accept a pool job right from the row — the list previously gave no way
+  // to tell which "In Process" rows were actually unclaimed without opening
+  // each one in the modal, even though the accept action itself already
+  // existed there. Race-safe on the backend: if a teammate claims first,
+  // this still succeeds and just reflects who actually got it.
+  const [acceptingId, setAcceptingId] = useState(null);
+  const [acceptError, setAcceptError] = useState(null);
+  const handleAccept = async (report) => {
+    setAcceptingId(report.id);
+    setAcceptError(null);
+    try {
+      const updated = await claimReport(report.id);
+      handleUpdate(report.id, updated);
+    } catch (err) {
+      setAcceptError({ id: report.id, message: err.message || 'Failed to accept task' });
+    } finally {
+      setAcceptingId(null);
+    }
   };
 
   const toggleSort = (field) => {
@@ -636,6 +657,25 @@ export function ReportsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <StatusBadge status={report.status} />
+                        {isWorker && report.in_pool && (
+                          <div className="mt-1.5 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleAccept(report)}
+                              disabled={acceptingId === report.id}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold disabled:opacity-50"
+                              style={{ background: '#3d4d34', color: '#fff' }}
+                              title="Nobody has claimed this yet — accept it to make it yours"
+                            >
+                              {acceptingId === report.id
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : <Check size={10} />}
+                              Accept
+                            </button>
+                            {acceptError?.id === report.id && (
+                              <span className="text-[9px] text-red-700">{acceptError.message}</span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         {(() => {
