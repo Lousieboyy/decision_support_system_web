@@ -305,27 +305,24 @@ export function AnalyticsPage() {
         const override = customOverrides[c.seedId] || {};
         const address = override.customAddress || defaultAddress;
 
-        // Generate recommendations in plain words — the reader is a city
-        // official, not a data analyst. The upvote callout is a real
-        // evidence signal (previously computed and shown as a raw number
-        // but never actually changed what the advice said), kept short.
+        // The recommendation is the action only — one short sentence. Count,
+        // address, and upvotes are real evidence but are already shown as
+        // their own stats everywhere this renders, so repeating them in the
+        // sentence just made it longer without saying anything new.
         let recommendation = override.customRecommendation;
         if (!recommendation) {
-          const concernNote = totalUpvotes >= 15
-            ? ` ${totalUpvotes} people upvoted this — far more than usual.`
-            : totalUpvotes >= 5
-              ? ` ${totalUpvotes} upvotes show real concern from residents.`
-              : '';
           if (c.category === 'Road Damage') {
-            recommendation = `${totalItems} road problems reported close together near ${address}.${concernNote} Fixing them one at a time costs more than repaving the whole stretch — send this to JKR/MBMB as one bigger job, not routine patching.`;
+            recommendation = 'Repave the stretch — patching each pothole separately costs more.';
           } else if (c.category === 'Street Lighting') {
-            recommendation = `${totalItems} street lights are out near ${address}${totalItems >= 4 ? ' — likely one electrical fault, not several broken bulbs' : ''}.${concernNote} Send an electrician to check the main circuit before replacing bulbs one by one.`;
+            recommendation = totalItems >= 4
+              ? 'Check the main circuit — likely one fault, not several bulbs.'
+              : 'Check for a shared electrical fault before replacing bulbs.';
           } else if (c.category === 'Waste Management') {
-            recommendation = `${totalItems} waste complaints near ${address}.${concernNote} A permanent bin and more frequent SWCorp pickups here would help more than one-time cleanups.`;
+            recommendation = 'Add a permanent bin and more frequent SWCorp pickups.';
           } else if (c.category === 'Drainage System') {
-            recommendation = `${totalItems} drainage complaints near ${address} — likely one blocked or damaged pipe, not separate debris.${concernNote} JKR should run a camera through the pipe here before the next rainy season.`;
+            recommendation = 'Camera-inspect the pipe before the next rainy season.';
           } else {
-            recommendation = `${totalItems} related reports near ${address}.${concernNote} One visit to check the whole area would be faster than sending a crew for each report.`;
+            recommendation = 'One combined site visit instead of separate crews.';
           }
         }
 
@@ -401,18 +398,17 @@ export function AnalyticsPage() {
       let advisoryType = null;
       let advisoryRec = null;
 
-      const groupUpvotes = groupItems.reduce((s, r) => s + (r.upvotes || 0), 0);
-      const groupAddress = groupItems[0]?.address || groupItems[0]?.location || 'this area';
-
+      // Action only, one sentence — count, address, and upvotes are already
+      // shown as their own stats wherever this renders.
       if (hasRoad && hasDrain) {
         advisoryType = 'Drainage & Road Decay';
-        advisoryRec = `${groupItems.length} road and drainage reports came from the same spot near ${groupAddress}${groupUpvotes >= 10 ? ` (${groupUpvotes} upvotes combined)` : ''}. This usually means water sitting on the road is damaging the ground underneath, not two separate problems. Resurfacing alone won't last — clear the drain first, then resurface.`;
+        advisoryRec = 'Water is likely damaging the road from underneath — clear the drain before resurfacing.';
       } else if (hasLight && (hasVandalism || uniqueCategories.has('Vandalism'))) {
         advisoryType = 'Darkness & Vandalism Zone';
-        advisoryRec = `${groupItems.length} broken lights and vandalism reports came from the same spot near ${groupAddress}${groupUpvotes >= 10 ? ` (${groupUpvotes} upvotes combined)` : ''}. A dark street makes it easier for vandalism to go unseen. Fix the lights first — only add cameras if it keeps happening after that.`;
+        advisoryRec = 'Fix the lights first — add cameras only if it keeps happening.';
       } else if (hasWaste && hasDrain) {
         advisoryType = 'Waste-Induced Drainage Blockages';
-        advisoryRec = `${groupItems.length} waste and drainage reports came from the same spot near ${groupAddress}${groupUpvotes >= 10 ? ` (${groupUpvotes} upvotes combined)` : ''}. Trash is likely washing into the drain, not two separate problems. Clearing the drain won't last unless SWCorp also adds a trash trap here.`;
+        advisoryRec = 'Clear the drain and add a trash trap at the same time.';
       }
 
       if (advisoryType) {
@@ -557,13 +553,11 @@ export function AnalyticsPage() {
         primaryRisk = 'Recurring Problem';
       }
 
-      // Plain-language dispatch instructions.
-      let dispatchAdvice = '';
-      if (item.isSystemic) {
-        dispatchAdvice = `Send a joint crew — 3 people from the departments involved — to check what's really going on at ${item.address}.`;
-      } else {
-        dispatchAdvice = `Send a regular crew to fix the ${item.size} ${item.category.toLowerCase()} reports here.`;
-      }
+      // Plain-language dispatch instructions — address, size, and upvotes
+      // are already shown right above this wherever it renders.
+      const dispatchAdvice = item.isSystemic
+        ? 'Send a joint crew from both departments to check what\'s really going on.'
+        : `Send a crew to fix the ${item.category.toLowerCase()} reports here.`;
 
       return {
         ...item,
@@ -723,8 +717,8 @@ export function AnalyticsPage() {
       if (backlog > INSIGHT.backlogAlertTickets) {
         healthStatus = 'Backlog Warning';
         const top = dominantOpenCategory(selectedDept);
-        const catNote = top ? ` — mostly ${top.category.toLowerCase()} (${top.count} of ${backlog})` : '';
-        recommendation = `${selectedDept} has ${backlog} open tickets${catNote}. Bring in extra crew before wait times get longer.`;
+        const catNote = top ? ` (mostly ${top.category.toLowerCase()})` : '';
+        recommendation = `${backlog} open tickets${catNote} — bring in extra crew.`;
       }
 
       return {
@@ -756,11 +750,9 @@ export function AnalyticsPage() {
       healthStatus = 'Resource Overload';
       const helperDept = deptSLAMetrics.find((d) => d.name !== worstBacklogDept && d.backlog <= 2);
       const top = dominantOpenCategory(worstBacklogDept);
-      const catNote = top ? `, mostly ${top.category.toLowerCase()}` : '';
-      recommendation = `${worstBacklogDept} has ${maxBacklog} open tickets${catNote} — more than any other department. ${
-        helperDept
-          ? `${helperDept.name} isn't as busy right now and could help.`
-          : 'No other department has room to help right now.'
+      const catNote = top ? ` (mostly ${top.category.toLowerCase()})` : '';
+      recommendation = `${worstBacklogDept}: ${maxBacklog} open tickets${catNote}. ${
+        helperDept ? `${helperDept.name} could help.` : 'No department has room to help.'
       }`;
     }
 
@@ -1419,7 +1411,7 @@ export function AnalyticsPage() {
                             {i + 1}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
                               <span className="text-sm font-bold text-[#201f1b]">
                                 {item.address || item.category}
                               </span>
@@ -1429,6 +1421,10 @@ export function AnalyticsPage() {
                               >
                                 {item.primaryRisk}
                               </span>
+                            </div>
+                            <div className="text-[11px] text-[#8a8477] mb-1">
+                              {item.category} · {item.size} report{item.size === 1 ? '' : 's'}
+                              {item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
                             </div>
                             <p className="text-xs text-[#4b473d] leading-relaxed">
                               {item.recommendation}
@@ -1685,7 +1681,7 @@ export function AnalyticsPage() {
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
                   <div>
                     <p className="text-xs leading-relaxed text-[#4b473d]">
-                      City assets and labor tracking alerts. These alerts are automatically triggered when any department backlogs exceed targets:
+                      Flags automatically when a department falls behind.
                     </p>
                     
                     <div className="mt-4 space-y-3">
@@ -1837,7 +1833,7 @@ export function AnalyticsPage() {
                                     {h.category}
                                   </span>
                                   <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
-                                    {h.size} active defects
+                                    {h.size} active defects{h.upvotes > 0 && ` · ${h.upvotes} upvotes`}
                                   </span>
                                 </div>
                                 <span className="text-[9px] font-bold text-[#8a8477] group-hover:text-[#201f1b] flex items-center gap-0.5 transition-colors">
@@ -1846,8 +1842,8 @@ export function AnalyticsPage() {
                                 </span>
                               </div>
                               <div className="text-xs text-[#4b473d] font-bold">{h.address}</div>
-                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic line-clamp-2">
-                                <strong>Recommendation:</strong> {h.recommendation}
+                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
+                                {h.recommendation}
                               </div>
                             </div>
                           ))
@@ -1876,7 +1872,7 @@ export function AnalyticsPage() {
                                     {a.category}
                                   </span>
                                   <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
-                                    {a.size} reports grouped
+                                    {a.size} reports{a.upvotes > 0 && ` · ${a.upvotes} upvotes`}
                                   </span>
                                 </div>
                                 <span className="text-[9px] font-bold text-[#8a8477] group-hover:text-[#201f1b] flex items-center gap-0.5 transition-colors">
@@ -1885,8 +1881,8 @@ export function AnalyticsPage() {
                                 </span>
                               </div>
                               <div className="text-xs text-[#4b473d] font-bold">{a.address}</div>
-                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic line-clamp-2">
-                                <strong>Recommendation:</strong> {a.recommendation}
+                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
+                                {a.recommendation}
                               </div>
                             </div>
                           ))
