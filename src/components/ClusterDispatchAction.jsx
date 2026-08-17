@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Send, Loader2, X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Send, Loader2, X, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { fetchTeams, fetchCrews, dispatchToTeam } from '../api/reportsApi';
 
 // Best-guess default team for a cluster's category, so the picker opens
@@ -94,10 +95,34 @@ export function ClusterDispatchAction({ item, onDispatched }) {
   };
 
   if (eligible.length === 0) {
+    // Everything in the cluster has already moved past Pending/In Review —
+    // show what actually happened to it instead of a dead-end label. Pulled
+    // from the same report data the page already has, so it's as fresh as
+    // the last refresh (after a dispatch, that means the dispatch itself).
+    const counts = item.items.reduce((acc, r) => {
+      const key =
+        r.status === 'In Process'
+          ? (r.assigned_worker_id ? 'claimed' : 'unclaimed in pool')
+          : r.status === 'In Maintenance' ? 'work in progress'
+          : r.status === 'Resolved' ? 'resolved'
+          : r.status === 'Rejected' ? 'rejected'
+          : (r.status || 'pending').toLowerCase();
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    const summary = Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(', ');
+
     return (
-      <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">
-        Already dispatched
-      </span>
+      <div className="flex items-center gap-2 flex-wrap text-[10px]">
+        <span className="font-semibold text-[#8a8477]">{summary}</span>
+        <Link
+          to="/teams"
+          className="flex items-center gap-0.5 font-bold"
+          style={{ color: '#3d4d34' }}
+        >
+          Track in Teams <ArrowRight size={10} />
+        </Link>
+      </div>
     );
   }
 
