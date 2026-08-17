@@ -389,8 +389,11 @@ export const analyzeReportImage = async (reportId) => {
   return response.json();
 };
 
+// Returns null when there is no image, rather than a stock photo. A report with
+// no photo used to render a stranger's street scene from Unsplash, which reads
+// as the citizen's evidence and is not.
 export const getImageUrl = (imagePath) => {
-  if (!imagePath) return 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&q=80';
+  if (!imagePath) return null;
   if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) return imagePath;
   if (imagePath.startsWith('data:image')) return imagePath;
   const path = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;

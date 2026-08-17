@@ -437,6 +437,8 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
 
   // Fullscreen image state
   const [fullScreenImage, setFullScreenImage] = useState(null);
+  // Tracks a photo that 404s, so the placeholder can say so honestly.
+  const [imageFailed, setImageFailed] = useState(false);
   
   // Before / After toggle state
   const [showAfter, setShowAfter] = useState(false);
@@ -463,6 +465,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       setActionError(null);
       setActionSuccess(null);
       setShowAfter(report.status === 'Resolved' && !!report.completion_image_path);
+      setImageFailed(false);
       
       // Check for duplicates if Admin. Must scan every report, not just the
       // newest page, or near-duplicates older than one page go undetected.
@@ -740,21 +743,29 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
         <div className="flex-1 overflow-y-auto">
           {/* Main Image */}
           <div className="w-full h-52 relative shrink-0" style={{ background: 'var(--cream-200)' }}>
-            {displayImage ? (
+            {displayImage && !imageFailed ? (
               <img
                 src={displayImage}
                 alt={showAfter ? 'After fix' : 'Original issue'}
                 className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={() => setFullScreenImage(displayImage)}
-                onError={e => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=800&q=80';
-                }}
+                // A photo that fails to load falls through to the placeholder
+                // below. It used to be replaced with a stock street scene, which
+                // an authority had no way of telling apart from the real thing.
+                onError={() => setImageFailed(true)}
               />
             ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-[#8a8477]">
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-[#8a8477] px-4 text-center">
                 <ImageIcon size={40} className="opacity-40 mb-2" />
-                <p className="text-sm font-medium">No Image Provided</p>
+                <p className="text-sm font-medium">
+                  {imageFailed ? 'Photo no longer available' : 'No Image Provided'}
+                </p>
+                {imageFailed && (
+                  <p className="text-[11px] mt-1 max-w-xs">
+                    The file is missing from the server. Do not judge this report from
+                    the image.
+                  </p>
+                )}
               </div>
             )}
 
