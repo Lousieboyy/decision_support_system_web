@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar,
+  BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar, LabelList,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import { MapContainer, TileLayer, useMap, Circle } from 'react-leaflet';
@@ -2154,86 +2154,83 @@ export function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Row 4: Zone Wellness Scorecard */}
-            <div className="content-card">
-              <div className="content-card-header">
-                <div className="content-card-title flex items-center gap-2">
-                  <MapPin size={16} className="text-[#4a5d3f]" />
-                  Zone / Area Wellness Scorecard
+            {/* Row 4: Zone Wellness Scorecard — worst zones first, so the
+                one thing worth acting on is the top bar, not a row you have
+                to hunt for in a sorted-by-volume table. */}
+            {(() => {
+              const graded = zoneScorecard.filter(z => z.resolutionRate != null);
+              const ungraded = zoneScorecard.length - graded.length;
+              const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
+              const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
+
+              const ZoneTooltip = ({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const z = payload[0].payload;
+                return (
+                  <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
+                    <div className="font-bold text-[#201f1b] mb-1">{z.name}</div>
+                    <div className="text-[#4b473d] space-y-0.5">
+                      <div>{z.total} total · {z.active} active · {z.resolved} resolved</div>
+                      <div>
+                        Avg {z.avgDays ?? '—'} days
+                        {z.avgDays != null && z.avgDays > SLA_END_TO_END_DAYS && (
+                          <span className="text-red-700 font-bold"> (over target)</span>
+                        )}
+                      </div>
+                      {z.grade && <div>Grade <strong style={{ color: gradeColor(z.resolutionRate) }}>{z.grade}</strong></div>}
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div className="content-card">
+                  <div className="content-card-header">
+                    <div className="content-card-title flex items-center gap-2">
+                      <MapPin size={16} className="text-[#4a5d3f]" />
+                      Zone / Area Wellness
+                    </div>
+                    <div className="text-[10px] font-semibold text-[#8a8477]">
+                      {zoneScorecard.length} zones tracked · worst first
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    {chartData.length === 0 ? (
+                      <div className="text-center text-[#8a8477] py-8 text-sm">No zone data available</div>
+                    ) : (
+                      <>
+                        <div style={{ height: Math.max(220, chartData.length * 34) }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
+                              <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
+                              <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
+                              <Tooltip content={<ZoneTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
+                              <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
+                              <Bar dataKey="resolutionRate" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                                {chartData.map((z) => (
+                                  <Cell key={z.name} fill={gradeColor(z.resolutionRate)} />
+                                ))}
+                                <LabelList
+                                  dataKey="resolutionRate"
+                                  position="right"
+                                  formatter={(v) => `${v}%`}
+                                  style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
+                                />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <p className="text-[10px] text-[#8a8477] mt-2">
+                          Resolution rate = resolved ÷ (total − rejected). Dashed line marks 80%, the start of a passing grade.
+                          {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} excluded — fewer than ${MIN_N_FOR_SCORE} reports to grade.`}
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="text-[10px] font-semibold text-[#8a8477]">
-                  {zoneScorecard.length} zones tracked
-                </div>
-              </div>
-              <div className="p-5">
-                <div className="overflow-x-auto max-h-[380px] overflow-y-auto scrollbar-thin rounded-lg">
-                  <table className="scorecard-table">
-                    <thead>
-                      <tr>
-                        <th>Zone / Area</th>
-                        <th>Total</th>
-                        <th>Active</th>
-                        <th>Resolved</th>
-                        <th>Resolution Rate</th>
-                        <th>Avg Days</th>
-                        <th>Grade</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {zoneScorecard.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="text-center text-[#8a8477] py-8">No zone data available</td>
-                        </tr>
-                      ) : (
-                        zoneScorecard.map(zone => (
-                          <tr key={zone.name}>
-                            <td className="font-bold text-[#201f1b]">{zone.name}</td>
-                            <td>{zone.total}</td>
-                            <td>
-                              <span className={zone.active > 3 ? 'text-amber-700 font-bold' : ''}>
-                                {zone.active}
-                              </span>
-                            </td>
-                            <td className="text-[#3d4d34]">{zone.resolved}</td>
-                            <td>
-                              {zone.resolutionRate == null ? (
-                                <span className="text-[10px] text-[#8a8477]">—</span>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <div className="flex-1 h-1.5 bg-[#1f1e1a]/8 rounded-full overflow-hidden max-w-[60px]">
-                                    <div
-                                      className="h-full rounded-full"
-                                      style={{
-                                        width: `${zone.resolutionRate}%`,
-                                        backgroundColor: zone.resolutionRate >= 80 ? '#15803d' : zone.resolutionRate >= 60 ? '#b45309' : '#b91c1c'
-                                      }}
-                                    />
-                                  </div>
-                                  <span className="text-[10px] font-bold">{zone.resolutionRate}%</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className={zone.avgDays != null && zone.avgDays > SLA_END_TO_END_DAYS ? 'text-red-700 font-bold' : 'text-[#4b473d]'}>
-                              {zone.avgDays ?? '—'}
-                            </td>
-                            <td>
-                              {zone.grade ? (
-                                <span className={`wellness-grade grade-${zone.grade}`}>{zone.grade}</span>
-                              ) : (
-                                <span
-                                  className="wellness-grade grade-NA"
-                                  title={`Needs at least ${MIN_N_FOR_SCORE} non-rejected reports to grade`}
-                                >—</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
           </div>
         )}

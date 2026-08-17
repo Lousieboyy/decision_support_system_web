@@ -1,5 +1,30 @@
 import { Info, AlertTriangle } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+} from 'recharts';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, RISK_TONE, DEFAULT_RISK_TONE } from '../utils/analyticsConstants';
+
+const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
+
+function ReliabilityTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const grade = d.rate == null ? null : gradeFor(d.rate);
+  return (
+    <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
+      <div className="font-bold text-[#201f1b] mb-1">{d.name}</div>
+      <div className="text-[#4b473d] space-y-0.5">
+        <div>{d.resolvedCount ?? 0} resolved tickets</div>
+        <div>
+          {d.reIncidence > 0 ? (
+            <span className="text-[#c1613f] font-bold">{d.reIncidence} repeat failure{d.reIncidence === 1 ? '' : 's'}</span>
+          ) : 'No repeat failures'}
+        </div>
+        {grade && <div>Grade <strong style={{ color: rateColor(d.rate) }}>{grade.grade}</strong></div>}
+      </div>
+    </div>
+  );
+}
 
 /**
  * The two analytics that were computed on every render but never displayed.
@@ -106,62 +131,31 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) 
             condition rather than the council's response speed.
           </p>
 
-          <div className="overflow-x-auto">
-            <table className="scorecard-table">
-              <thead>
-                <tr>
-                  <th>Department</th>
-                  <th>Repeat incidents</th>
-                  <th>Resolved tickets</th>
-                  <th>On-time rate</th>
-                  <th>Grade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contractorAudit.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-center text-[#8a8477] py-8">
-                      No department data available
-                    </td>
-                  </tr>
-                ) : (
-                  contractorAudit.map((d) => {
-                    const grade = d.rate == null ? null : gradeFor(d.rate);
-                    return (
-                      <tr key={d.name}>
-                        <td className="font-bold text-[#201f1b]">{d.name}</td>
-                        <td>
-                          <span className={d.reIncidence > 0 ? 'text-[#c1613f] font-bold' : 'text-[#4b473d]'}>
-                            {d.reIncidence ?? 0}
-                          </span>
-                        </td>
-                        <td className="text-[#4b473d]">{d.resolvedCount ?? '—'}</td>
-                        <td>
-                          {d.rate == null ? (
-                            <span className="text-[#8a8477]">—</span>
-                          ) : (
-                            <span className="font-bold" style={{ color: d.rate >= 80 ? '#15803d' : d.rate >= 60 ? '#b45309' : '#b91c1c' }}>
-                              {d.rate}%
-                            </span>
-                          )}
-                        </td>
-                        <td>
-                          {grade ? (
-                            <span className={`wellness-grade grade-${grade.grade}`}>{grade.grade}</span>
-                          ) : (
-                            <span
-                              className="wellness-grade grade-NA"
-                              title="No resolved tickets with both dates to measure"
-                            >—</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          {contractorAudit.length === 0 ? (
+            <div className="text-center text-[#8a8477] py-8 text-sm">No department data available</div>
+          ) : (
+            <div style={{ height: Math.max(120, contractorAudit.length * 44) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={contractorAudit} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
+                  <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
+                  <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={170} />
+                  <Tooltip content={<ReliabilityTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
+                  <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={26}>
+                    {contractorAudit.map((d) => (
+                      <Cell key={d.name} fill={rateColor(d.rate)} />
+                    ))}
+                    <LabelList
+                      dataKey="rate"
+                      position="right"
+                      formatter={(v) => (v == null ? 'no data' : `${v}%`)}
+                      style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           <p className="text-[10px] text-[#8a8477] mt-3 leading-relaxed">
             On-time rate is the share of resolved tickets closed within{' '}
