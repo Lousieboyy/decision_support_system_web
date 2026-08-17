@@ -299,6 +299,57 @@ export const fetchAuthorityActions = async ({ reportId, since, limit = 5000 } = 
   return response.json();
 };
 
+// ── Staff accounts ──────────────────────────────────────────────────────────
+// These replace the localStorage account store, where a worker "created" by an
+// admin existed only in that admin's browser and could never actually sign in.
+
+export const fetchStaff = async (status = 'all') => {
+  const response = await fetch(`${API_URL}/staff?status=${status}`, { headers: getAuthHeaders() });
+  if (!response.ok) throw await parseError(response, 'Failed to load staff accounts');
+  return response.json();
+};
+
+export const createStaff = async ({ username, password, role, email, phoneNumber, agency_id, crew_id, status }) => {
+  const response = await fetch(`${API_URL}/staff`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ username, password, role, email, phoneNumber, agency_id, crew_id, status }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to create account');
+  return response.json();
+};
+
+// Unauthenticated by design: whoever is asking has no account yet. The server
+// forces status=pending and restricts the role regardless of what is sent.
+export const requestStaffAccount = async ({ username, password, role, email, phoneNumber, agency_id }) => {
+  const response = await fetch(`${API_URL}/staff/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, role, email, phoneNumber, agency_id }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to submit request');
+  return response.json();
+};
+
+export const setStaffStatus = async (staffId, status) => {
+  const response = await fetch(`${API_URL}/staff/${staffId}/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ status }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to update account');
+  return response.json();
+};
+
+export const deleteStaff = async (staffId) => {
+  const response = await fetch(`${API_URL}/staff/${staffId}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to delete account');
+  return response.json();
+};
+
 export const approveTransfer = async (transferId, to_agency_id = null, note = '') => {
   const response = await fetch(`${API_URL}/transfers/${transferId}/approve`, {
     method: 'POST',

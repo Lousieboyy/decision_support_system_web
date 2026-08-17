@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useCallback } from 'react';
+import { fetchStaff, createStaff, requestStaffAccount, setStaffStatus, deleteStaff, fetchTeams } from '../api/reportsApi';
+import { AUTHORITIES } from '../utils/authorities';
 
 const AuthContext = createContext();
 
@@ -127,50 +129,96 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, [user]);
 
-  const requestAccount = useCallback((username, password, role, displayName) => {
-    const accounts = getAccounts();
-    if (accounts.find(a => a.username.toLowerCase().trim() === username.toLowerCase().trim())) {
-      return { ok: false, error: 'Username already exists.' };
+  // ── Staff accounts ────────────────────────────────────────────────────────
+  // These call the server. They used to read and write browser localStorage, so
+  // an account "created" by one admin existed only in that admin's browser,
+  // was invisible to every colleague, and could never actually sign in because
+  // login authenticates against the database.
+  //
+  // The UI works in combined roles like "authority_mbmb"; the server stores a
+  // role and an agency id separately, so the two are translated here.
+
+  const splitRole = useCallback(async (combinedRole) => {
+    const [base, ...rest] = String(combinedRole || 'worker').split('_');
+    const deptId = rest.join('_');
+    if (!deptId) return { role: base, agency_id: null };
+
+    const abbr = (AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId).toLowerCase();
+    try {
+      const teams = await fetchTeams();
+      const match = teams.find(t => String(t.name).toLowerCase() === abbr);
+      return { role: base, agency_id: match ? match.id : null };
+    } catch {
+      // A missing team should not block account creation; it can be set later.
+      return { role: base, agency_id: null };
     }
-    const newAccount = { username, password, role, displayName, status: 'pending' };
-    saveAccounts([...accounts, newAccount]);
-    pushAuditLog({ actor: username, action: 'REGISTER_REQUEST', detail: `"${displayName}" requested account (${role})` });
-    return { ok: true };
   }, []);
 
-  const getPendingRequests = useCallback(() => {
-    return getAccounts().filter(a => a.status === 'pending');
+  const requestAccount = useCallback(async (username, password, role, displayName) => {
+    try {
+      const { role: baseRole, agency_id } = await splitRole(role);
+      await requestStaffAccount({ username, password, role: baseRole, agency_id });
+      pushAuditLog({ actor: username, action: 'REGISTER_REQUEST', detail: `"${displayName}" requested account (${role})` });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message || 'Could not submit the request.' };
+    }
+  }, [splitRole]);
+
+  const getPendingRequests = useCallback(async () => {
+    try {
+      return await fetchStaff('pending');
+    } catch {
+      return [];
+    }
   }, []);
 
-  const resolveRequest = useCallback((username, decision) => {
-    const accounts = getAccounts();
-    const acc = accounts.find(a => a.username === username);
-    const updated = accounts.map(a => a.username === username ? { ...a, status: decision } : a);
-    saveAccounts(updated);
-    const actor = user?.username || 'admin';
-    pushAuditLog({ actor, action: decision === 'active' ? 'APPROVE_ACCOUNT' : 'REJECT_ACCOUNT', detail: `"${acc?.displayName || username}" was ${decision === 'active' ? 'approved' : 'rejected'}` });
-    if (decision === 'active') {
-      pushNotification({ type: 'account', title: 'Account Approved', body: `"${acc?.displayName || username}" is now active` });
+  const getAllAccounts = useCallback(async () => {
+    try {
+      return await fetchStaff('all');
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const resolveRequest = useCallback(async (staffId, decision) => {
+    try {
+      const updated = await setStaffStatus(staffId, decision);
+      const actor = user?.username || 'admin';
+      pushAuditLog({
+        actor,
+        action: decision === 'active' ? 'APPROVE_ACCOUNT' : 'REJECT_ACCOUNT',
+        detail: `"${updated.username}" was ${decision === 'active' ? 'approved' : 'rejected'}`,
+      });
+      if (decision === 'active') {
+        pushNotification({ type: 'account', title: 'Account Approved', body: `"${updated.username}" is now active` });
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message || 'Could not update the account.' };
     }
   }, [user]);
 
-  const getAllAccounts = useCallback(() => getAccounts(), []);
-
-  const deleteAccount = useCallback((username) => {
-    const acc = getAccounts().find(a => a.username === username);
-    saveAccounts(getAccounts().filter(a => a.username !== username));
-    pushAuditLog({ actor: user?.username || 'admin', action: 'DELETE_ACCOUNT', detail: `Deleted account "${acc?.displayName || username}"` });
-  }, [user]);
-
-  const createAccount = useCallback((username, password, role, displayName) => {
-    const accounts = getAccounts();
-    if (accounts.find(a => a.username.toLowerCase().trim() === username.toLowerCase().trim())) {
-      return { ok: false, error: 'Username already exists.' };
+  const deleteAccount = useCallback(async (staffId) => {
+    try {
+      const result = await deleteStaff(staffId);
+      pushAuditLog({ actor: user?.username || 'admin', action: 'DELETE_ACCOUNT', detail: `Deleted staff account #${staffId}` });
+      return { ok: true, ...result };
+    } catch (err) {
+      return { ok: false, error: err.message || 'Could not delete the account.' };
     }
-    saveAccounts([...accounts, { username, password, role, displayName, status: 'active' }]);
-    pushAuditLog({ actor: user?.username || 'admin', action: 'CREATE_ACCOUNT', detail: `Created account "${displayName}" (${role})` });
-    return { ok: true };
   }, [user]);
+
+  const createAccount = useCallback(async (username, password, role, displayName) => {
+    try {
+      const { role: baseRole, agency_id } = await splitRole(role);
+      await createStaff({ username, password, role: baseRole, agency_id, status: 'active' });
+      pushAuditLog({ actor: user?.username || 'admin', action: 'CREATE_ACCOUNT', detail: `Created account "${displayName}" (${role})` });
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message || 'Could not create the account.' };
+    }
+  }, [user, splitRole]);
 
   // Log a status change from anywhere in the app
   const logStatusChange = useCallback((reportId, oldStatus, newStatus, actor) => {

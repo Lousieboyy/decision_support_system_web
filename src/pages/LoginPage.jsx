@@ -37,7 +37,7 @@ export function LoginPage() {
     }
   };
 
-  const handleRequest = (e) => {
+  const handleRequest = async (e) => {
     e.preventDefault();
     setError(''); setSuccess('');
     if (!reqUsername || !reqPassword || !reqDisplayName) {
@@ -45,7 +45,7 @@ export function LoginPage() {
     }
     const finalRole = reqRoleType === 'authority' ? `authority_${reqDept}` : `worker_${reqDept}`;
     const displayName = reqDisplayName || `${reqRoleType === 'authority' ? 'Authority' : 'Worker'} (${reqDept.toUpperCase()})`;
-    const result = requestAccount(reqUsername, reqPassword, finalRole, displayName);
+    const result = await requestAccount(reqUsername, reqPassword, finalRole, displayName);
     if (!result.ok) { setError(result.error); return; }
     setSuccess('Request sent! An admin will review and approve your access.');
     setMode('login');

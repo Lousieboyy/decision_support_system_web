@@ -55,27 +55,43 @@ export function UserManagementPage() {
   const [createError, setCreateError] = useState('');
   const [createSuccess, setCreateSuccess] = useState('');
 
-  const refresh = useCallback(() => {
-    setPending(getPendingRequests());
-    setAccounts(getAllAccounts());
+  // Accounts now come from the server, so these are async. The audit log is
+  // still browser-local: it records actions taken in THIS browser only, which
+  // is why it is labelled as such in the UI.
+  const [loadError, setLoadError] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      const [pendingRows, allRows] = await Promise.all([
+        getPendingRequests(),
+        getAllAccounts(),
+      ]);
+      setPending(pendingRows);
+      setAccounts(allRows);
+      setLoadError('');
+    } catch (err) {
+      setLoadError(err.message || 'Could not load accounts from the server.');
+    }
     if (getAuditLog) setAuditLog(getAuditLog());
     setRefreshKey(k => k + 1);
   }, [getPendingRequests, getAllAccounts, getAuditLog]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleResolve = (username, decision) => {
-    resolveRequest(username, decision);
+  const handleResolve = async (staffId, decision) => {
+    const result = await resolveRequest(staffId, decision);
+    if (result && !result.ok) setLoadError(result.error);
     refresh();
   };
 
-  const handleDelete = (username) => {
+  const handleDelete = async (staffId, username) => {
     if (!window.confirm(`Delete account "${username}"? This cannot be undone.`)) return;
-    deleteAccount(username);
+    const result = await deleteAccount(staffId);
+    if (result && !result.ok) setLoadError(result.error);
     refresh();
   };
 
-  const handleCreate = (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
     setCreateError(''); setCreateSuccess('');
     if (!newUsername || !newPassword || !newDisplayName) {
@@ -84,9 +100,9 @@ export function UserManagementPage() {
     const finalRole = newRoleType === 'admin' ? 'admin'
       : newRoleType === 'authority' ? `authority_${newDept}`
       : `worker_${newDept}`;
-    const result = createAccount(newUsername, newPassword, finalRole, newDisplayName);
+    const result = await createAccount(newUsername, newPassword, finalRole, newDisplayName);
     if (!result.ok) { setCreateError(result.error); return; }
-    setCreateSuccess(`Account "${newUsername}" created successfully.`);
+    setCreateSuccess(`Account "${newUsername}" created on the server.`);
     setNewUsername(''); setNewPassword(''); setNewDisplayName('');
     refresh();
   };
@@ -170,20 +186,20 @@ export function UserManagementPage() {
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {pending.map(acc => (
-                   <tr key={acc.username} className="transition-colors hover:bg-[#4a5d3f]/5">
+                   <tr key={acc.id} className="transition-colors hover:bg-[#4a5d3f]/5">
                      <td className="px-6 py-4 font-mono font-medium" style={{ color: '#8a8477' }}>{acc.username}</td>
-                     <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.displayName}</td>
+                     <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.agency || '—'}</td>
                     <td className="px-6 py-4"><RoleBadge role={acc.role} /></td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleResolve(acc.username, 'active')}
+                          onClick={() => handleResolve(acc.id, 'active')}
                           className="flex items-center gap-1.5 px-4 py-2 bg-[#4a5d3f] text-white text-xs font-bold rounded-xl hover:bg-[#3d4d34] transition-colors border border-[#4a5d3f]"
                         >
                           Approve
                         </button>
                         <button
-                          onClick={() => handleResolve(acc.username, 'rejected')}
+                          onClick={() => handleResolve(acc.id, 'rejected')}
                           className="flex items-center gap-1.5 px-4 py-2 bg-red-500/10 text-red-700 text-xs font-bold rounded-xl hover:bg-red-500/20 transition-colors border border-red-500/25"
                         >
                           Reject
@@ -213,9 +229,9 @@ export function UserManagementPage() {
             </thead>
             <tbody className="divide-y divide-stone-100">
               {accounts.map(acc => (
-                <tr key={acc.username} className="transition-colors hover:bg-[#4a5d3f]/5">
+                <tr key={acc.id} className="transition-colors hover:bg-[#4a5d3f]/5">
                   <td className="px-6 py-4 font-mono font-medium" style={{ color: '#8a8477' }}>{acc.username}</td>
-                  <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.displayName}</td>
+                  <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.agency || '—'}</td>
                   <td className="px-6 py-4"><RoleBadge role={acc.role} /></td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
@@ -230,13 +246,13 @@ export function UserManagementPage() {
                     {acc.status === 'pending' && (
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleResolve(acc.username, 'active')}
+                          onClick={() => handleResolve(acc.id, 'active')}
                           className="flex items-center gap-1 px-3 py-1.5 bg-[#4a5d3f] text-white text-xs font-bold rounded-lg hover:bg-[#3d4d34] transition-colors border border-[#4a5d3f]"
                         >
                           Approve
                         </button>
                         <button
-                          onClick={() => handleResolve(acc.username, 'rejected')}
+                          onClick={() => handleResolve(acc.id, 'rejected')}
                           className="flex items-center gap-1 px-3 py-1.5 bg-red-500/10 text-red-700 text-xs font-bold rounded-lg hover:bg-red-500/20 transition-colors border border-red-500/25"
                         >
                           Reject
@@ -245,7 +261,7 @@ export function UserManagementPage() {
                     )}
                     {acc.status !== 'pending' && acc.username !== 'admin' && (
                       <button
-                        onClick={() => handleDelete(acc.username)}
+                        onClick={() => handleDelete(acc.id, acc.username)}
                         className="flex items-center gap-1 px-3 py-1.5 text-[#8a8477] hover:bg-red-500/5 hover:text-red-700 text-xs font-medium rounded-lg transition-colors border border-transparent"
                       >
                         Delete
