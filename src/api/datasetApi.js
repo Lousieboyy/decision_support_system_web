@@ -5,7 +5,10 @@
 
 const getApiUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl && envUrl.trim() !== '' && envUrl !== '/api') {
+  // '/api' routes through the Vite dev proxy (vite.config.js) — see the
+  // matching comment in reportsApi.js for why it must not be stripped here.
+  if (envUrl === '/api') return envUrl;
+  if (envUrl && envUrl.trim() !== '') {
     return envUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
   }
   return 'https://smart-city-citizen-app-git-main-lousieboyys-projects.vercel.app';

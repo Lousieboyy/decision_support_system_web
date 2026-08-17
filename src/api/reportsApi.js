@@ -1,6 +1,11 @@
 const getApiUrl = () => {
   const envUrl = import.meta.env.VITE_API_URL;
-  if (envUrl && envUrl.trim() !== '' && envUrl !== '/api') {
+  // '/api' is a relative path meant for the Vite dev proxy (see vite.config.js),
+  // not a value to strip a trailing "/api" segment from — stripping it produced
+  // an empty base URL, so this used to fall through to the production backend
+  // and every local dev run silently talked to prod instead of localhost:8000.
+  if (envUrl === '/api') return envUrl;
+  if (envUrl && envUrl.trim() !== '') {
     return envUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
   }
   return 'https://smart-city-citizen-app-git-main-lousieboyys-projects.vercel.app';
