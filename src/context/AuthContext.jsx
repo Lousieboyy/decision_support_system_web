@@ -47,7 +47,7 @@ export function getNotifications() {
   try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); } catch { return []; }
 }
 
-function pushNotification(notif) {
+export function pushNotification(notif) {
   const notifs = getNotifications();
   notifs.unshift({ ...notif, id: Date.now(), timestamp: new Date().toISOString(), read: false });
   localStorage.setItem(NOTIF_KEY, JSON.stringify(notifs.slice(0, 50)));

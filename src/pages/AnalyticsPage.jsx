@@ -30,18 +30,9 @@ import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
 import { DispatchAudit } from '../components/DispatchAudit';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
+import { getReportPriority as getPriority } from '../utils/reportPriority';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
-
-// Helper to compute priority on the fly matching the mobile app logic
-const getPriority = (status, categories) => {
-  if (status === 'Resolved') return 'Resolved';
-  const cat = categories || '';
-  if (cat.includes('Damage') || cat.includes('Drainage') || cat.includes('Tree')) {
-    return 'High';
-  }
-  return 'Medium';
-};
 
 // Heatmap Layer for Leaflet Map
 function HeatmapLayer({ points, ready }) {

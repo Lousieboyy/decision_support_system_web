@@ -4,6 +4,7 @@ import { fetchAllReports, getImageUrl } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
 import { AUTHORITIES } from '../utils/authorities';
+import { getReportPriority, priorityRank, PRIORITY_TONE } from '../utils/reportPriority';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import {
@@ -100,6 +101,7 @@ export function ReportsPage() {
   const [myDeptOnly, setMyDeptOnly] = useState(true);
 
   const deptId = getDeptId(currentRole, user?.username);
+  const isWorker = currentRole === 'worker' || currentRole?.startsWith('worker_');
 
   // Compute status counts for the tabs
   const statusCounts = useMemo(() => {
@@ -120,8 +122,9 @@ export function ReportsPage() {
   // Selected report for modal
   const [selectedReport, setSelectedReport] = useState(null);
 
-  // Sorting
-  const [sortField, setSortField] = useState('upvotes');
+  // Sorting — a worker's default view leads with what's most critical, not
+  // most recent; everyone else keeps the existing upvotes-first default.
+  const [sortField, setSortField] = useState(isWorker ? 'priority' : 'upvotes');
   const [sortOrder, setSortOrder] = useState('desc');
 
   // Pagination
@@ -222,6 +225,9 @@ export function ReportsPage() {
       } else if (sortField === 'upvotes' || sortField === 'id') {
         valA = Number(valA) || 0;
         valB = Number(valB) || 0;
+      } else if (sortField === 'priority') {
+        valA = priorityRank(getReportPriority(a.status, a.categories));
+        valB = priorityRank(getReportPriority(b.status, b.categories));
       } else {
         valA = String(valA ?? '').toLowerCase();
         valB = String(valB ?? '').toLowerCase();
@@ -486,6 +492,16 @@ export function ReportsPage() {
           <span className="text-xs text-[#8a8477] font-semibold uppercase tracking-wider">Sort By:</span>
           <div className="bg-white border border-[#1f1e1a]/8 p-0.5 rounded-lg flex">
             <button
+              onClick={() => { setSortField('priority'); setSortOrder('desc'); }}
+              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                sortField === 'priority'
+                  ? 'bg-[#4a5d3f] text-white font-extrabold shadow-sm'
+                  : 'text-[#8a8477] hover:text-[#4b473d]'
+              }`}
+            >
+              Priority
+            </button>
+            <button
               onClick={() => { setSortField('timestamp'); setSortOrder('desc'); }}
               className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
                 sortField === 'timestamp'
@@ -534,6 +550,9 @@ export function ReportsPage() {
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                   </th>
+                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('priority')}>
+                    <div className="flex items-center gap-1">Priority <SortIcon field="priority" /></div>
+                  </th>
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('upvotes')}>
                     <div className="flex items-center gap-1">Upvotes <SortIcon field="upvotes" /></div>
                   </th>
@@ -545,7 +564,7 @@ export function ReportsPage() {
               <tbody style={{ borderColor: 'rgba(31,30,26,0.06)' }} className="divide-y">
                 {loading && reports.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="px-6 py-12 text-center" style={{ color: '#8a8477' }}>
+                    <td colSpan="10" className="px-6 py-12 text-center" style={{ color: '#8a8477' }}>
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-8 h-8 border-4 border-[#1f1e1a]/10 border-t-[#4a5d3f] rounded-full animate-spin mb-4" />
                         Loading reports...
@@ -554,7 +573,7 @@ export function ReportsPage() {
                   </tr>
                 ) : paginatedReports.length === 0 ? (
                   <tr>
-                    <td colSpan="9" className="px-6 py-12 text-center font-medium" style={{ color: '#8a8477' }}>
+                    <td colSpan="10" className="px-6 py-12 text-center font-medium" style={{ color: '#8a8477' }}>
                       No reports found matching your criteria.
                     </td>
                   </tr>
@@ -617,6 +636,20 @@ export function ReportsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <StatusBadge status={report.status} />
+                      </td>
+                      <td className="px-6 py-4">
+                        {(() => {
+                          const p = getReportPriority(report.status, report.categories);
+                          const tone = PRIORITY_TONE[p] || PRIORITY_TONE.Medium;
+                          return (
+                            <span
+                              className="px-2 py-0.5 text-xs font-bold rounded-lg border"
+                              style={{ color: tone.color, background: tone.bg, borderColor: tone.border }}
+                            >
+                              {p}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-1.5 font-bold">

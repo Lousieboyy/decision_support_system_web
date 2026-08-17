@@ -1,11 +1,19 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat } from "lucide-react";
-import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications } from "../context/AuthContext";
+import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat, AlertTriangle, Send } from "lucide-react";
+import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications, pushNotification } from "../context/AuthContext";
 import { fetchDatasetStats } from "../api/datasetApi";
 import { fetchTransfers, fetchReports } from "../api/reportsApi";
 import { AUTHORITIES } from '../utils/authorities';
+import { getReportPriority } from '../utils/reportPriority';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
+
+const NOTIF_STYLE = {
+  status:  { bg: 'rgba(74,93,63,0.10)',   color: '#3d4d34', icon: <RefreshCw size={14} /> },
+  account: { bg: 'rgba(217,119,87,0.14)', color: '#c1613f', icon: <CheckCircle2 size={14} /> },
+  dispatch: { bg: 'rgba(59,130,246,0.12)', color: '#1d4ed8', icon: <Send size={14} /> },
+  urgent:  { bg: 'rgba(185,28,28,0.12)',  color: '#b91c1c', icon: <AlertTriangle size={14} /> },
+};
 
 export function Sidebar({ isOpen, setIsOpen }) {
   const { user, role, logout, getPendingRequests } = useAuth();
@@ -63,20 +71,56 @@ export function Sidebar({ isOpen, setIsOpen }) {
   }, [role]);
 
   // Badge the Reports link with how many unclaimed jobs are waiting in the
-  // worker's own team pool. A dispatched report has nowhere else to surface
-  // for the worker it's meant for — the Reports page doesn't poll, and the
-  // notification bell only ever writes to the browser that performed the
-  // action, never the recipient's. Polled more often than the admin badges
-  // since "did new work just land in my pool" is time-sensitive in a way
-  // "is there a pending signup request" isn't.
+  // worker's own team pool, and raise a real notification for whichever
+  // reports are actually new since the last check. A dispatched report has
+  // nowhere else to surface for the worker it's meant for — the Reports
+  // page doesn't poll, and the notification bell previously only ever
+  // wrote to the browser that performed the dispatch, never the
+  // recipient's. High-priority arrivals (per the shared severity heuristic)
+  // get their own "Urgent" notification so they don't sit unnoticed among
+  // routine ones. The first poll after login just establishes the
+  // baseline — it would be noise to "notify" about work that was already
+  // there before the worker opened the app.
+  const seenPoolIds = useRef(null);
+
   useEffect(() => {
     const isWorker = role === 'worker' || role?.startsWith('worker_');
-    if (!isWorker) return undefined;
+    if (!isWorker) {
+      seenPoolIds.current = null;
+      return undefined;
+    }
     let cancelled = false;
     const load = async () => {
       try {
         const pool = await fetchReports('worker', { scope: 'pool', limit: 200 });
-        if (!cancelled) setPoolCount(Array.isArray(pool) ? pool.length : 0);
+        const list = Array.isArray(pool) ? pool : [];
+        if (cancelled) return;
+        setPoolCount(list.length);
+
+        if (seenPoolIds.current === null) {
+          seenPoolIds.current = new Set(list.map((r) => r.id));
+          return;
+        }
+        const arrivals = list.filter((r) => !seenPoolIds.current.has(r.id));
+        arrivals.forEach((r) => {
+          const priority = getReportPriority(r.status, r.categories);
+          const place = r.address || r.location || 'your team pool';
+          if (priority === 'High') {
+            pushNotification({
+              type: 'urgent',
+              title: 'Urgent job assigned',
+              body: `${r.categories || 'Report'} at ${place} — high priority.`,
+            });
+          } else {
+            pushNotification({
+              type: 'dispatch',
+              title: 'New job assigned',
+              body: `${r.categories || 'Report'} at ${place}.`,
+            });
+          }
+        });
+        seenPoolIds.current = new Set(list.map((r) => r.id));
+        if (arrivals.length > 0) setNotifs(getNotifications());
       } catch {
         if (!cancelled) setPoolCount(0);
       }
@@ -238,10 +282,12 @@ export function Sidebar({ isOpen, setIsOpen }) {
               <div className="notif-empty">No notifications yet.<br /><span style={{ fontSize: '0.75rem' }}>Status changes and approvals appear here.</span></div>
             ) : (
               <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-                {notifs.map(n => (
+                {notifs.map(n => {
+                  const style = NOTIF_STYLE[n.type] || NOTIF_STYLE.account;
+                  return (
                   <div key={n.id} className={`notif-item${n.read ? '' : ' unread'}`}>
-                    <div className="notif-item-icon" style={{ background: n.type === 'status' ? 'rgba(74,93,63,0.10)' : 'rgba(217,119,87,0.14)', color: n.type === 'status' ? '#3d4d34' : '#c1613f' }}>
-                      {n.type === 'status' ? <RefreshCw size={14} /> : <CheckCircle2 size={14} />}
+                    <div className="notif-item-icon" style={{ background: style.bg, color: style.color }}>
+                      {style.icon}
                     </div>
                     <div>
                       <div className="notif-item-text"><strong>{n.title}</strong><br />{n.body}</div>
@@ -250,7 +296,8 @@ export function Sidebar({ isOpen, setIsOpen }) {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
