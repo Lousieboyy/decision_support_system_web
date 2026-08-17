@@ -163,6 +163,24 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) 
             date are excluded from both sides of the ratio rather than counted as on time.
           </p>
 
+          {/* A percentage alone doesn't say what to do — name whoever has
+              actual repeat failures, since that's a different problem than
+              a low on-time rate (repairs that don't hold vs. repairs that
+              are just slow). */}
+          {contractorAudit.length > 0 && (() => {
+            const worst = [...contractorAudit].sort((a, b) => (b.reIncidence || 0) - (a.reIncidence || 0))[0];
+            return worst.reIncidence > 0 ? (
+              <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(185,28,28,0.06)', color: '#b91c1c' }}>
+                {worst.name} has the most repeat failures ({worst.reIncidence}) — worth checking whether the problem
+                is how it repairs, not just how fast.
+              </div>
+            ) : (
+              <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}>
+                No department has a repeat failure right now — repairs are holding.
+              </div>
+            );
+          })()}
+
           {!auditAvailable && (
             <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
               <AlertTriangle size={10} className="inline mr-1 -mt-0.5 text-amber-700" />

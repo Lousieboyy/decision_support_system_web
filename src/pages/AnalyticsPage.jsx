@@ -2225,6 +2225,18 @@ export function AnalyticsPage() {
                           Resolution rate = resolved ÷ (total − rejected). Dashed line marks 80%, the start of a passing grade.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} excluded — fewer than ${MIN_N_FOR_SCORE} reports to grade.`}
                         </p>
+                        {/* The ranking alone doesn't say what to do about it —
+                            name the worst zone and why it's worth a look. */}
+                        {chartData[0].resolutionRate < 60 ? (
+                          <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(185,28,28,0.06)', color: '#b91c1c' }}>
+                            {chartData[0].name} is furthest behind at {chartData[0].resolutionRate}% — worth checking whether it's
+                            routing, staffing, or access slowing this zone specifically, not just city-wide capacity.
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}>
+                            No zone is critically behind — the lowest, {chartData[0].name}, is still at {chartData[0].resolutionRate}%.
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
