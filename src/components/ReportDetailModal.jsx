@@ -10,8 +10,8 @@ import {
   getImageUrl, updateReportStatus, adminReview, adminReject,
   startMaintenance, completeTask, authorityResolve,
   fetchAllReports, analyzeReportImage, rejectProof,
-  fetchTeams, fetchTeamWorkers, dispatchToTeam, transferReport, claimReport,
-  fetchCrews, reassignCrew
+  fetchTeams, dispatchToTeam, transferReport, claimReport,
+  fetchCrews, fetchCrewWorkload, reassignCrew
 } from '../api/reportsApi';
 import { describeVerdict } from '../api/datasetApi';
 import { AUTHORITIES } from '../utils/authorities';
@@ -403,8 +403,6 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
   // to leave the job in the team pool for whoever is free to accept first.
   const [teams, setTeams] = useState([]);
   const [selectedTeam, setSelectedTeam] = useState('');
-  const [teamWorkers, setTeamWorkers] = useState([]);
-  const [pinnedWorker, setPinnedWorker] = useState('');
   const [assignNote, setAssignNote] = useState('');
 
   // Authority -> Crew (sub-team within the chosen team, e.g. MBMB "Team A").
@@ -451,7 +449,6 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       setManualStatus(report.status || 'Pending');
       setSelectedDept(suggestDepartment(report));
       setDispatchNote('');
-      setPinnedWorker('');
       setAssignNote('');
       setSelectedCrew('');
       setTransferReason('');
@@ -501,16 +498,6 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
     return () => { cancelled = true; };
   }, [report?.id, isCitizen]);
 
-  // Roster for the chosen team, so pinning shows who is actually free.
-  useEffect(() => {
-    if (!selectedTeam) { setTeamWorkers([]); return; }
-    let cancelled = false;
-    fetchTeamWorkers(selectedTeam)
-      .then(list => { if (!cancelled) setTeamWorkers(list); })
-      .catch(() => { if (!cancelled) setTeamWorkers([]); });
-    return () => { cancelled = true; };
-  }, [selectedTeam]);
-
   // Crews (sub-teams) within the chosen team, e.g. MBMB "Team A" vs "Team B".
   useEffect(() => {
     if (!selectedTeam) { setCrews([]); return; }
@@ -528,6 +515,24 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
       .catch(() => { if (!cancelled) setCrews([]); });
     return () => { cancelled = true; };
   }, [selectedTeam, report?.id]);
+
+  // Live workload per crew, so the dispatcher can send the job to whichever crew
+  // is carrying least rather than guessing. Failure is silent: the crew list
+  // still works without it, just without the load figures.
+  const [crewLoad, setCrewLoad] = useState({});
+  useEffect(() => {
+    if (!selectedTeam) { setCrewLoad({}); return; }
+    let cancelled = false;
+    fetchCrewWorkload(selectedTeam)
+      .then(data => {
+        if (cancelled) return;
+        const byId = {};
+        (data?.crews || []).forEach(c => { byId[c.id] = c; });
+        setCrewLoad(byId);
+      })
+      .catch(() => { if (!cancelled) setCrewLoad({}); });
+    return () => { cancelled = true; };
+  }, [selectedTeam]);
 
   // Crews of the report's OWNING team, for the "move to another crew" panel —
   // independent of whatever team is selected in the dispatch dropdown above.
@@ -626,16 +631,12 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
     const team = teams.find(t => String(t.id) === String(selectedTeam));
     const crew = selectedCrew ? crews.find(c => String(c.id) === String(selectedCrew)) : null;
     const crewId = crew ? crew.id : null;
-    const workerId = pinnedWorker ? Number(pinnedWorker) : null;
-    const who = workerId
-      ? teamWorkers.find(w => w.id === workerId)?.username
-      : null;
+    // Dispatch is to a crew, never to an individual: the crew shares the job and
+    // sorts out between themselves who goes.
     const poolLabel = crew ? `${crew.name} (${team?.name || 'team'})` : (team?.name || 'team');
     return execAction(
-      () => dispatchToTeam(report.id, Number(selectedTeam), workerId, assignNote, crewId),
-      who
-        ? `Assigned directly to ${who}. Task is now In Process.`
-        : `Sent to the ${poolLabel} pool — the first available worker can accept it.`,
+      () => dispatchToTeam(report.id, Number(selectedTeam), null, assignNote, crewId),
+      `Sent to ${poolLabel}. Everyone on the crew can see and work on it.`,
       'In Process'
     );
   };
@@ -971,7 +972,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                 <div className="p-5 space-y-4">
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Team</label>
-                    <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setPinnedWorker(''); }} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                    <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setSelectedCrew(''); }} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                       {teams.length === 0 && <option value="">Loading teams...</option>}
                       {teams.map(t => (
                         <option key={t.id} value={t.id}>
@@ -983,43 +984,38 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                   {crews.length > 0 && (
                     <div>
                       <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Crew</label>
-                      <select value={selectedCrew} onChange={e => { setSelectedCrew(e.target.value); setPinnedWorker(''); }} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
-                        <option value="">Whole team — any worker can accept</option>
-                        {crews.map(c => (
-                          <option key={c.id} value={c.id} disabled={c.status === 'disabled'}>
-                            {c.name}{c.status === 'disabled' ? ' (disabled)' : ''} — {c.members.length} member{c.members.length === 1 ? '' : 's'}
-                          </option>
-                        ))}
+                      <select value={selectedCrew} onChange={e => setSelectedCrew(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                        <option value="">Whole team — shared by every worker</option>
+                        {crews.map(c => {
+                          // Load figures let the dispatcher balance burden rather
+                          // than guess which crew is free.
+                          const load = crewLoad[c.id];
+                          const parts = [`${c.members.length} member${c.members.length === 1 ? '' : 's'}`];
+                          if (load) {
+                            parts.push(`${load.open_count} open`);
+                            if (load.load_per_worker != null) parts.push(`${load.load_per_worker}/worker`);
+                            if (load.sla_breached_count > 0) parts.push(`${load.sla_breached_count} past SLA`);
+                          }
+                          return (
+                            <option key={c.id} value={c.id} disabled={c.status === 'disabled'}>
+                              {c.name}{c.status === 'disabled' ? ' (disabled)' : ''} — {parts.join(' · ')}
+                            </option>
+                          );
+                        })}
                       </select>
                       <p className="mt-2 text-[11px] text-[#8a8477]">
-                        Pick a crew to scope this to just their pool, e.g. "Team A" — only Team A sees and can accept it.
+                        The whole crew shares this job — any member can start it and any member can
+                        finish it, so they coordinate between themselves. Other crews cannot see it.
+                        Pick the crew carrying the lightest load.
                       </p>
                     </div>
                   )}
-                  <div>
-                    <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Assign to</label>
-                    <select value={pinnedWorker} onChange={e => setPinnedWorker(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
-                      <option value="">
-                        {selectedCrew ? 'Leave in crew pool — first available member accepts' : 'Leave in team pool — first available worker accepts'}
-                      </option>
-                      {teamWorkers
-                        .filter(w => !selectedCrew || String(w.crew_id) === String(selectedCrew))
-                        .map(w => (
-                          <option key={w.id} value={w.id} disabled={w.on_leave}>
-                            {w.username} ({w.active_jobs} active){w.on_leave ? ' — on leave' : ''}
-                          </option>
-                        ))}
-                    </select>
-                    <p className="mt-2 text-[11px] text-[#8a8477]">
-                      Pool is the default: everyone in scope sees it and the first to accept claims it.
-                    </p>
-                  </div>
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Assignment Notes</label>
                     <textarea value={assignNote} onChange={e => setAssignNote(e.target.value)} rows={2} className="w-full px-3 py-2 rounded-xl text-sm resize-none" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }} />
                   </div>
                   <button onClick={handleAuthorityAssign} disabled={actionLoading || !selectedTeam} className="w-full py-3 bg-[#4a5d3f] text-white font-bold text-sm rounded-xl hover:bg-[#3d4d34] disabled:opacity-50 border border-[#4a5d3f] cursor-pointer">
-                    {actionLoading ? 'Dispatching...' : (pinnedWorker ? 'Assign to Worker' : 'Send to Pool')}
+                    {actionLoading ? 'Dispatching...' : 'Send to Crew'}
                   </button>
                 </div>
               </div>
