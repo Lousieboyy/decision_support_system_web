@@ -158,6 +158,19 @@ export const MAX_ZONE_SNAP_KM = 5;
 export const ZONE_UNMAPPED = 'Unmapped area';
 export const ZONE_UNASSIGNED = 'Unassigned';
 
+// ── Dispatch-queue risk tone ─────────────────────────────────────────────────
+// Keyed on the primaryRisk labels AnalyticsPage assigns to a cluster.
+// Shared by the priority panel and the full dispatch table so a badge never
+// shows one color at the top of the page and a different one further down.
+export const RISK_TONE = {
+  'Recurring Problem':   { color: '#b91c1c', bg: 'rgba(185,28,28,0.08)' },
+  'Safety Risk':         { color: '#c1613f', bg: 'rgba(193,97,63,0.08)' },
+  'Long Overdue':        { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
+  'High Public Concern': { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
+  'Many Reports':        { color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
+};
+export const DEFAULT_RISK_TONE = RISK_TONE['Many Reports'];
+
 // ── Development-time invariants ──────────────────────────────────────────────
 // Catches the class of edit that silently rescales an index or unbalances the
 // stage budget. Dev-only: never ships to production bundles.

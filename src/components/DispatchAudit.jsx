@@ -1,18 +1,5 @@
 import { Info, AlertTriangle } from 'lucide-react';
-import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor } from '../utils/analyticsConstants';
-
-// Keyed directly on the primaryRisk labels AnalyticsPage assigns (see
-// prioritizedDispatchQueue) — these previously used generic Critical/High/
-// Moderate/Low keys that never matched the actual label strings, so every
-// badge silently rendered green regardless of real severity.
-const riskTone = {
-  'Recurring Problem':   { color: '#b91c1c', bg: 'rgba(185,28,28,0.08)' },
-  'Safety Risk':         { color: '#c1613f', bg: 'rgba(193,97,63,0.08)' },
-  'Long Overdue':        { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
-  'High Public Concern': { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
-  'Many Reports':        { color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
-};
-const defaultTone = riskTone['Many Reports'];
+import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, RISK_TONE, DEFAULT_RISK_TONE } from '../utils/analyticsConstants';
 
 /**
  * The two analytics that were computed on every render but never displayed.
@@ -43,7 +30,7 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) 
           ) : (
             <div className="space-y-3">
               {dispatchQueue.slice(0, 8).map((item, i) => {
-                const tone = riskTone[item.primaryRisk] || defaultTone;
+                const tone = RISK_TONE[item.primaryRisk] || DEFAULT_RISK_TONE;
                 return (
                   <div
                     key={item.id}

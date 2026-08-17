@@ -18,7 +18,7 @@ import {
 import { format, parseISO, subDays } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
-  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
+  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor, RISK_TONE, DEFAULT_RISK_TONE,
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
@@ -1386,6 +1386,78 @@ export function AnalyticsPage() {
         {activeViewTab === 'overview' && (
           <div className="space-y-6 animate-fade-in">
             {filterBar}
+
+            {/* Today's Priorities — the ranked "what to actually do" list.
+                Previously the landing tab was five passive stat cards, and
+                the only place an evidence-backed action list existed was
+                the Dispatch & Audit tab, three clicks away. Same ranking
+                prioritizedDispatchQueue already computes — just surfaced
+                where the page opens instead of buried where it doesn't. */}
+            <div className="content-card">
+              <div className="content-card-header">
+                <div className="content-card-title">Today's Priorities</div>
+                <span className="text-[11px] text-[#8a8477]">
+                  Ranked by how much this needs attention right now
+                </span>
+              </div>
+              <div className="p-5">
+                {prioritizedDispatchQueue.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-[#8a8477]">
+                    Nothing urgent right now — no cluster meets the current size threshold.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {prioritizedDispatchQueue.slice(0, 3).map((item, i) => {
+                      const tone = RISK_TONE[item.primaryRisk] || DEFAULT_RISK_TONE;
+                      return (
+                        <div
+                          key={item.id}
+                          className="rounded-xl p-4 border border-[#1f1e1a]/8 flex gap-4"
+                          style={{ background: 'var(--cream-100)' }}
+                        >
+                          <span className="text-2xl font-black text-[#8a8477] shrink-0 w-7 text-center">
+                            {i + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="text-sm font-bold text-[#201f1b]">
+                                {item.address || item.category}
+                              </span>
+                              <span
+                                className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide shrink-0"
+                                style={{ color: tone.color, background: tone.bg }}
+                              >
+                                {item.primaryRisk}
+                              </span>
+                            </div>
+                            <p className="text-xs text-[#4b473d] leading-relaxed">
+                              {item.recommendation}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-lg font-black text-[#201f1b] leading-none">
+                              {item.priorityScore}
+                            </div>
+                            <div className="text-[9px] text-[#8a8477] uppercase tracking-wider">
+                              priority
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {prioritizedDispatchQueue.length > 3 && (
+                  <button
+                    onClick={() => setActiveViewTab('dispatch')}
+                    className="mt-4 text-xs font-bold flex items-center gap-1"
+                    style={{ color: '#3d4d34' }}
+                  >
+                    See all {prioritizedDispatchQueue.length} <ChevronRight size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
 
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
