@@ -305,19 +305,27 @@ export function AnalyticsPage() {
         const override = customOverrides[c.seedId] || {};
         const address = override.customAddress || defaultAddress;
 
-        // Generate recommendations
+        // Generate recommendations in plain words — the reader is a city
+        // official, not a data analyst. The upvote callout is a real
+        // evidence signal (previously computed and shown as a raw number
+        // but never actually changed what the advice said), kept short.
         let recommendation = override.customRecommendation;
         if (!recommendation) {
+          const concernNote = totalUpvotes >= 15
+            ? ` ${totalUpvotes} people upvoted this — far more than usual.`
+            : totalUpvotes >= 5
+              ? ` ${totalUpvotes} upvotes show real concern from residents.`
+              : '';
           if (c.category === 'Road Damage') {
-            recommendation = `Concentration of ${totalItems} road surface defects detected. Repetitive patching is inefficient; we suggest scheduling a full road repaving plan for this section to optimize JKR/MBMB capital resources.`;
+            recommendation = `${totalItems} road problems reported close together near ${address}.${concernNote} Fixing them one at a time costs more than repaving the whole stretch — send this to JKR/MBMB as one bigger job, not routine patching.`;
           } else if (c.category === 'Street Lighting') {
-            recommendation = `Grid cluster of ${totalItems} street lighting reports. This suggests a circuit breaker or grid cabinet malfunction rather than separate bulb failures. Suggest electrical crew checks cabinet circuit.`;
+            recommendation = `${totalItems} street lights are out near ${address}${totalItems >= 4 ? ' — likely one electrical fault, not several broken bulbs' : ''}.${concernNote} Send an electrician to check the main circuit before replacing bulbs one by one.`;
           } else if (c.category === 'Waste Management') {
-            recommendation = `High incident zone for waste. Recommend adding a permanent waste bin cabinet and scheduling a higher frequency SWCorp collection route for this neighborhood.`;
+            recommendation = `${totalItems} waste complaints near ${address}.${concernNote} A permanent bin and more frequent SWCorp pickups here would help more than one-time cleanups.`;
           } else if (c.category === 'Drainage System') {
-            recommendation = `Drainage blockages clustered here (${totalItems} active). Indicates structural siltation or pipe collapse. Suggest JKR utilizes pipe inspection cameras.`;
+            recommendation = `${totalItems} drainage complaints near ${address} — likely one blocked or damaged pipe, not separate debris.${concernNote} JKR should run a camera through the pipe here before the next rainy season.`;
           } else {
-            recommendation = `Multiple related issues in close proximity (${totalItems} active). Suggest local authority schedules a collaborative site inspection.`;
+            recommendation = `${totalItems} related reports near ${address}.${concernNote} One visit to check the whole area would be faster than sending a crew for each report.`;
           }
         }
 
@@ -393,15 +401,18 @@ export function AnalyticsPage() {
       let advisoryType = null;
       let advisoryRec = null;
 
+      const groupUpvotes = groupItems.reduce((s, r) => s + (r.upvotes || 0), 0);
+      const groupAddress = groupItems[0]?.address || groupItems[0]?.location || 'this area';
+
       if (hasRoad && hasDrain) {
         advisoryType = 'Drainage & Road Decay';
-        advisoryRec = `Structural Drainage & Road Decay: Correlated defects detected (${groupItems.length} reports). Water logging from drainage issues is eroding the road foundation. Suggest cross-department project between JKR (road resurfacing) and SWCorp (drainage desilting).`;
+        advisoryRec = `${groupItems.length} road and drainage reports came from the same spot near ${groupAddress}${groupUpvotes >= 10 ? ` (${groupUpvotes} upvotes combined)` : ''}. This usually means water sitting on the road is damaging the ground underneath, not two separate problems. Resurfacing alone won't last — clear the drain first, then resurface.`;
       } else if (hasLight && (hasVandalism || uniqueCategories.has('Vandalism'))) {
         advisoryType = 'Darkness & Vandalism Zone';
-        advisoryRec = `Darkness & Vandalism Risk Zone: Broken street lights and vandalism/graffiti reports (${groupItems.length} reports) overlap here. Suggest MBMB installs CCTV cameras and schedules immediate electrical repairs to deter crime.`;
+        advisoryRec = `${groupItems.length} broken lights and vandalism reports came from the same spot near ${groupAddress}${groupUpvotes >= 10 ? ` (${groupUpvotes} upvotes combined)` : ''}. A dark street makes it easier for vandalism to go unseen. Fix the lights first — only add cameras if it keeps happening after that.`;
       } else if (hasWaste && hasDrain) {
         advisoryType = 'Waste-Induced Drainage Blockages';
-        advisoryRec = `Waste-Induced Drainage Blockages: Accumulation of garbage and drainage blockages (${groupItems.length} reports) suggest trash washing into public drainage grids. Suggest SWCorp installs trash traps and local enforcement audits illegal dumping activities.`;
+        advisoryRec = `${groupItems.length} waste and drainage reports came from the same spot near ${groupAddress}${groupUpvotes >= 10 ? ` (${groupUpvotes} upvotes combined)` : ''}. Trash is likely washing into the drain, not two separate problems. Clearing the drain won't last unless SWCorp also adds a trash trap here.`;
       }
 
       if (advisoryType) {
@@ -527,28 +538,31 @@ export function AnalyticsPage() {
       const trustTerm = 1.0 - (1.0 - avgTrustFraction) / CRITICALITY.trustDamping;
       const priorityScore = Math.min(100, Math.max(0, Math.round(score * trustTerm * confidenceFraction)));
 
-      // Determine the primary driving risk factor
-      let primaryRisk = 'Density Threshold';
+      // Determine the primary driving risk factor. Labels are plain words
+      // (not the dashboard-analytics phrasing this used to carry, e.g.
+      // "Spatio-Temporal Decay") because the people reading this queue are
+      // city officials, not data analysts.
+      let primaryRisk = 'Many Reports';
       const upvoteVal = item.upvotes * CRITICALITY.upvote;
       const priorityVal = highPriorityCount * CRITICALITY.highPriority;
       const agingVal = avgElapsed * CRITICALITY.agingPerDay;
 
       if (upvoteVal > priorityVal && upvoteVal > agingVal) {
-        primaryRisk = 'Citizen Urgency';
+        primaryRisk = 'High Public Concern';
       } else if (priorityVal > upvoteVal && priorityVal > agingVal) {
-        primaryRisk = 'High-Safety Hazards';
+        primaryRisk = 'Safety Risk';
       } else if (agingVal > upvoteVal && agingVal > priorityVal) {
-        primaryRisk = 'Aging Backlog Delay';
+        primaryRisk = 'Long Overdue';
       } else if (item.isSystemic) {
-        primaryRisk = 'Spatio-Temporal Decay';
+        primaryRisk = 'Recurring Problem';
       }
 
-      // Generate precise dispatch advice
+      // Plain-language dispatch instructions.
       let dispatchAdvice = '';
       if (item.isSystemic) {
-        dispatchAdvice = `Requires Joint Dispatch: 3 crew members from matching departments to inspect underlying structural issue at ${item.address}.`;
+        dispatchAdvice = `Send a joint crew — 3 people from the departments involved — to check what's really going on at ${item.address}.`;
       } else {
-        dispatchAdvice = `Requires Single-Dept Dispatch: Deploy a standard crew to resolve ${item.size} active ${item.category} complaints.`;
+        dispatchAdvice = `Send a regular crew to fix the ${item.size} ${item.category.toLowerCase()} reports here.`;
       }
 
       return {
@@ -679,21 +693,40 @@ export function AnalyticsPage() {
     // data" rather than the invented 2.4-day figure it used to show.
     const avgDays = resolved.length ? (totalResolutionHours / resolved.length / 24).toFixed(1) : null;
 
-    // Resource allocation health analysis
+    // Resource allocation health analysis. Names the category actually
+    // driving a backlog instead of guessing — a fixed "road repair backlogs"
+    // phrase used to appear even when the backlog was entirely waste or
+    // drainage tickets.
+    const dominantOpenCategory = (deptName) => {
+      const open = filteredReports.filter(
+        (r) => r.status !== 'Resolved' && r.status !== 'Rejected' &&
+          (r.assigned_department || '').toLowerCase().includes(deptName.toLowerCase())
+      );
+      const counts = {};
+      open.forEach((r) => {
+        const cat = canonicalizeCategory(r.categories || r.ai_prediction);
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      return top ? { category: top[0], count: top[1], total: open.length } : null;
+    };
+
     let worstBacklogDept = 'None';
     let maxBacklog = 0;
-    
+
     if (selectedDept !== 'all') {
       const currentDeptData = deptSLAMetrics.find(d => d.name === selectedDept);
       const backlog = currentDeptData ? currentDeptData.backlog : 0;
       let healthStatus = 'Optimal';
-      let recommendation = `Resources are currently balanced for ${selectedDept}.`;
-      
+      let recommendation = `${selectedDept} isn't backed up right now — no action needed.`;
+
       if (backlog > INSIGHT.backlogAlertTickets) {
         healthStatus = 'Backlog Warning';
-        recommendation = `High backlog detected in ${selectedDept} (${backlog} active tickets). We recommend prioritizing outstanding tasks and allocating emergency budget to accelerate crew operations.`;
+        const top = dominantOpenCategory(selectedDept);
+        const catNote = top ? ` — mostly ${top.category.toLowerCase()} (${top.count} of ${backlog})` : '';
+        recommendation = `${selectedDept} has ${backlog} open tickets${catNote}. Bring in extra crew before wait times get longer.`;
       }
-      
+
       return {
         total,
         active,
@@ -717,14 +750,18 @@ export function AnalyticsPage() {
     });
 
     let healthStatus = 'Optimal';
-    let recommendation = 'Resources are currently balanced across departments.';
-    
+    let recommendation = 'No department has an unusual backlog right now.';
+
     if (maxBacklog > INSIGHT.backlogAlertTickets) {
       healthStatus = 'Resource Overload';
       const helperDept = deptSLAMetrics.find((d) => d.name !== worstBacklogDept && d.backlog <= 2);
-      recommendation = `Backlog detected in ${worstBacklogDept} (${maxBacklog} tickets). Suggest reallocating 15% labor capacity from ${
-        helperDept ? helperDept.name : 'other departments'
-      } to clear pending road repair backlogs.`;
+      const top = dominantOpenCategory(worstBacklogDept);
+      const catNote = top ? `, mostly ${top.category.toLowerCase()}` : '';
+      recommendation = `${worstBacklogDept} has ${maxBacklog} open tickets${catNote} — more than any other department. ${
+        helperDept
+          ? `${helperDept.name} isn't as busy right now and could help.`
+          : 'No other department has room to help right now.'
+      }`;
     }
 
     // Real fastest/slowest resolution times, over departments that actually have
@@ -1216,7 +1253,7 @@ export function AnalyticsPage() {
       <div className="p-6 md:p-8">
         <div className="page-header-title mb-1">Infrastructure Analytics</div>
         <p className="page-header-sub mb-6">
-          Operational wellness scores, predictive hotspots, and response efficiency metrics.
+          How fast the city responds, where problems are clustering, and whether repairs are actually holding.
         </p>
         <div
           className="p-5 rounded-xl flex items-start gap-3 border"
@@ -1274,7 +1311,7 @@ export function AnalyticsPage() {
             Infrastructure Analytics
           </h1>
           <p className="page-header-sub">
-            Operational wellness scores, predictive hotspots, and response efficiency metrics.
+            How fast the city responds, where problems are clustering, and whether repairs are actually holding.
           </p>
         </div>
         <button
@@ -1362,13 +1399,13 @@ export function AnalyticsPage() {
 
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
-                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Avg Resolution SLA</div>
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Average Time to Fix</div>
                   <div className="text-2xl font-black text-[#201f1b] mt-1">
                     {kpiStats.avgDays == null
                       ? <span className="text-base text-[#8a8477]">Insufficient data</span>
                       : `${kpiStats.avgDays} Days`}
                   </div>
-                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Calculated from historical tickets</div>
+                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">From report submitted to problem resolved</div>
                 </div>
               </div>
 
@@ -1376,7 +1413,7 @@ export function AnalyticsPage() {
                 <div>
                   <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Hotspots</div>
                   <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.hotspotsCount} Zones</div>
-                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Clusters with radius &le; {proximityRadius}m</div>
+                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Areas with several reports close together</div>
                 </div>
               </div>
 
@@ -1419,7 +1456,11 @@ export function AnalyticsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-4 shrink-0 self-stretch sm:self-auto">
-                {reliabilityAudit.worst && (
+                {/* Only meaningful as a cross-department comparison. A
+                    department-scoped authority's view has exactly one
+                    department in it, so "needs attention: [their own name]"
+                    is trivially true and confusing rather than informative. */}
+                {reliabilityAudit.worst && reliabilityAudit.rows.length > 1 && (
                   <div className="text-right">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-[#8a8477]">Needs attention</div>
                     <div className="text-sm font-bold" style={{ color: '#c1613f' }}>{reliabilityAudit.worst.name}</div>
@@ -1591,7 +1632,7 @@ export function AnalyticsPage() {
 
                   <div className="border-t border-[#1f1e1a]/8 pt-4">
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
-                      <span>Fastest SLA</span>
+                      <span>Fastest to Resolve</span>
                       <span className="text-[#201f1b]">
                         {kpiStats.fastestSLA
                           ? `${kpiStats.fastestSLA.name} (${kpiStats.fastestSLA.avgResolveDays} days)`
@@ -1599,7 +1640,7 @@ export function AnalyticsPage() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
-                      <span>Slowest SLA</span>
+                      <span>Slowest to Resolve</span>
                       <span className="text-[#201f1b]">
                         {kpiStats.slowestSLA
                           ? `${kpiStats.slowestSLA.name} (${kpiStats.slowestSLA.avgResolveDays} days)`

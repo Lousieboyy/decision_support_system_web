@@ -1,12 +1,18 @@
 import { Info, AlertTriangle } from 'lucide-react';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor } from '../utils/analyticsConstants';
 
+// Keyed directly on the primaryRisk labels AnalyticsPage assigns (see
+// prioritizedDispatchQueue) — these previously used generic Critical/High/
+// Moderate/Low keys that never matched the actual label strings, so every
+// badge silently rendered green regardless of real severity.
 const riskTone = {
-  Critical: { color: '#b91c1c', bg: 'rgba(185,28,28,0.08)' },
-  High: { color: '#c1613f', bg: 'rgba(193,97,63,0.08)' },
-  Moderate: { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
-  Low: { color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
+  'Recurring Problem':   { color: '#b91c1c', bg: 'rgba(185,28,28,0.08)' },
+  'Safety Risk':         { color: '#c1613f', bg: 'rgba(193,97,63,0.08)' },
+  'Long Overdue':        { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
+  'High Public Concern': { color: '#b45309', bg: 'rgba(180,83,9,0.08)' },
+  'Many Reports':        { color: '#15803d', bg: 'rgba(21,128,61,0.08)' },
 };
+const defaultTone = riskTone['Many Reports'];
 
 /**
  * The two analytics that were computed on every render but never displayed.
@@ -37,7 +43,7 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) 
           ) : (
             <div className="space-y-3">
               {dispatchQueue.slice(0, 8).map((item, i) => {
-                const tone = riskTone[item.primaryRisk] || riskTone.Low;
+                const tone = riskTone[item.primaryRisk] || defaultTone;
                 return (
                   <div
                     key={item.id}
@@ -89,10 +95,10 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) 
           )}
           <p className="text-[10px] text-[#8a8477] mt-4 leading-relaxed">
             <Info size={10} className="inline mr-1 -mt-0.5" />
-            Score combines cluster size, citizen upvotes, share of high-priority
-            categories and how long the reports have been open, damped by the spatial
-            compactness of the cluster and the historical reliability of its reporters.
-            Weights are in the constants module.
+            Score combines how many reports are in the cluster, citizen upvotes, how
+            urgent the categories are, and how long they've been open — reports that
+            are tightly clustered together and come from reporters with a track record
+            of accurate reports count for more.
           </p>
         </div>
       </div>

@@ -28,17 +28,17 @@ function StageTooltip({ active, payload }) {
       <div className="text-[#8a8477] mb-2">Owner: {d.owner}</div>
       {d.sufficient ? (
         <div className="space-y-0.5 text-[#4b473d]">
-          <div>Median <strong className="text-[#201f1b]">{fmtDays(d.median)}</strong></div>
-          <div>p25–p90 {fmtDays(d.p25)} – {fmtDays(d.p90)}</div>
-          <div>Mean {fmtDays(d.mean)}</div>
+          <div>Typical case <strong className="text-[#201f1b]">{fmtDays(d.median)}</strong></div>
+          <div>Faster to slower cases: {fmtDays(d.p25)} – {fmtDays(d.p90)}</div>
+          <div>Average {fmtDays(d.mean)}</div>
           <div className="pt-1 text-[#8a8477]">
-            n = {d.n} ({Math.round(d.coverage * 100)}% of reports)
+            Based on {d.n} reports ({Math.round(d.coverage * 100)}% have reached this stage)
           </div>
           {d.target != null && <div className="text-[#8a8477]">Target {fmtDays(d.target)}</div>}
         </div>
       ) : (
         <div className="text-[#8a8477]">
-          Insufficient data — {d.n} of {MIN_N_FOR_STAGE} needed
+          Not enough reports yet — {d.n} of {MIN_N_FOR_STAGE} needed
         </div>
       )}
     </div>
@@ -105,8 +105,8 @@ export function StageFunnel({ reports, dateFilterLabel }) {
 
       <div className="p-5">
         <p className="text-xs text-[#8a8477] mb-4">
-          {dateFilterLabel}. Bars show the <strong className="text-[#4b473d]">median</strong> days
-          in each stage; whiskers span p25–p90.{' '}
+          {dateFilterLabel}. Bars show the <strong className="text-[#4b473d]">typical (median)</strong> days
+          in each stage; the thin line shows the range from faster to slower cases.{' '}
           {cohort === 'all'
             ? 'Each stage covers however many reports have reached it.'
             : 'Resolved reports only, so every stage covers the same reports.'}
@@ -114,7 +114,7 @@ export function StageFunnel({ reports, dateFilterLabel }) {
 
         {!anyMeasured ? (
           <div className="py-12 text-center text-sm text-[#8a8477]">
-            Insufficient data — no stage yet has {MIN_N_FOR_STAGE} reports to measure.
+            Not enough reports yet — no stage has {MIN_N_FOR_STAGE} or more to measure.
           </div>
         ) : (
           <>
@@ -165,8 +165,8 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                   </span>
                   <span className="text-[#8a8477]">
                     {s.sufficient
-                      ? `p90 ${fmtDays(s.p90)} · n=${s.n} · ${Math.round(s.coverage * 100)}%`
-                      : `Insufficient data (n=${s.n})`}
+                      ? `up to ${fmtDays(s.p90)} for slower cases · ${s.n} reports`
+                      : `not enough reports yet (${s.n})`}
                   </span>
                 </div>
               ))}
@@ -180,7 +180,7 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                     Share of end-to-end time
                   </span>
                   <span className="text-[11px] text-[#8a8477]">
-                    mean total {fmtDays(composition.meanTotalDays)} · n={composition.n}
+                    average total {fmtDays(composition.meanTotalDays)} · from {composition.n} reports
                   </span>
                 </div>
                 <div className="flex h-6 rounded-lg overflow-hidden border border-[#1f1e1a]/8">
