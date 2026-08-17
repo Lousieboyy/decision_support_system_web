@@ -76,15 +76,20 @@ export function Sidebar({ isOpen, setIsOpen }) {
     setNotifs([]);
   };
 
+  // Admins and authorities land on analytics (see App.jsx's HomeRoute), so
+  // their "/" nav entry is that page, not a second raw-KPI dashboard — one
+  // link instead of the old "Overview" + "Analytics" pair that both opened
+  // a stats page and often disagreed on the numbers.
+  const isPlanner = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+
   const navItems = [
-    { name: "Overview", path: "/", icon: <LayoutDashboard size={18} /> },
+    isPlanner
+      ? { name: "Insights", path: "/", icon: <BarChart3 size={18} /> }
+      : { name: "Overview", path: "/", icon: <LayoutDashboard size={18} /> },
     { name: "Map View", path: "/map", icon: <MapIcon size={18} /> },
     { name: "Reports", path: "/reports", icon: <ClipboardList size={18} /> },
-    ...(role === 'admin' || role === 'authority' || role?.startsWith('authority_')
-        ? [
-            { name: "Teams", path: "/teams", icon: <HardHat size={18} />, badge: transferPending },
-            { name: "Analytics", path: "/analytics", icon: <BarChart3 size={18} /> },
-          ]
+    ...(isPlanner
+        ? [{ name: "Teams", path: "/teams", icon: <HardHat size={18} />, badge: transferPending }]
         : []),
     ...(role === 'admin' ? [{ name: "Users", path: "/users", icon: <Users size={18} />, badge: pendingCount }] : []),
     ...(role === 'admin' ? [{ name: "AI Dataset", path: "/ai-dataset", icon: <Brain size={18} />, badge: datasetPending }] : []),

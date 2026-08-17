@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchAllReports, getImageUrl } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
@@ -70,7 +71,12 @@ const DATE_PRESETS = [
   { label: 'Last 30 days', value: '30d' },
 ];
 
-const STATUS_TABS = ['All', 'Pending', 'In Review', 'In Process', 'In Maintenance', 'Resolved', 'Rejected'];
+// "Open" groups everything still awaiting a decision or in progress — the
+// list an admin or authority actually has to act on today. Resolved and
+// Rejected tickets are history, not a queue, so they live behind the "All"
+// tab instead of mixing into the default view.
+const OPEN_STATUSES = ['Pending', 'In Review', 'In Process', 'In Maintenance'];
+const STATUS_TABS = ['Open', 'Pending', 'In Review', 'In Process', 'In Maintenance', 'Resolved', 'Rejected', 'All'];
 
 function parseConfidence(conf) {
   if (!conf) return 0;
@@ -87,7 +93,7 @@ export function ReportsPage() {
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('Open');
   const [datePreset, setDatePreset] = useState('all');
   const [minConfidence, setMinConfidence] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
@@ -97,7 +103,7 @@ export function ReportsPage() {
 
   // Compute status counts for the tabs
   const statusCounts = useMemo(() => {
-    const counts = { All: 0, Pending: 0, 'In Review': 0, 'In Process': 0, 'In Maintenance': 0, Resolved: 0, Rejected: 0 };
+    const counts = { All: 0, Open: 0, Pending: 0, 'In Review': 0, 'In Process': 0, 'In Maintenance': 0, Resolved: 0, Rejected: 0 };
     let visibleReports = reports;
     if (myDeptOnly && deptId) {
       visibleReports = reports.filter(r => reportMatchesDept(r, deptId));
@@ -106,6 +112,7 @@ export function ReportsPage() {
       const s = r.status || 'Pending';
       counts.All++;
       if (counts[s] !== undefined) counts[s]++;
+      if (OPEN_STATUSES.includes(s)) counts.Open++;
     });
     return counts;
   }, [reports, myDeptOnly, deptId]);
@@ -154,7 +161,6 @@ export function ReportsPage() {
   };
 
   const activeFilterCount = [
-    statusFilter !== 'All',
     datePreset !== 'all',
     minConfidence > 0,
     myDeptOnly,
@@ -164,7 +170,9 @@ export function ReportsPage() {
     let result = [...reports];
 
     // Status filter
-    if (statusFilter !== 'All') {
+    if (statusFilter === 'Open') {
+      result = result.filter(r => OPEN_STATUSES.includes(r.status || 'Pending'));
+    } else if (statusFilter !== 'All') {
       result = result.filter(r => {
         const s = r.status || 'Pending';
         return s === statusFilter;
@@ -307,15 +315,23 @@ export function ReportsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="page-header-title">Reports Management</h1>
+          <h1 className="page-header-title">Report Queue</h1>
           <div className="page-header-sub mt-1">
             {deptId ? (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-2 flex-wrap">
                 <span className="font-semibold text-[#3d4d34]">{user?.displayName}</span>
                 <span className="text-[#8a8477]">|</span>
                 <span>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()} Department</span>
               </span>
-            ) : 'All city reports — every role can view. Dept tags show admin assignment.'}
+            ) : (
+              <span>Opens on what still needs a decision. Resolved and Rejected history lives under the Resolved / Rejected / All tabs.</span>
+            )}
+            {(currentRole === 'admin' || currentRole === 'authority' || currentRole?.startsWith('authority_')) && (
+              <span className="ml-2">
+                Looking for patterns across the city instead of a single ticket?{' '}
+                <Link to="/" className="font-semibold" style={{ color: '#3d4d34' }}>See Analytics →</Link>
+              </span>
+            )}
           </div>
         </div>
 
@@ -432,7 +448,7 @@ export function ReportsPage() {
           {/* Reset */}
           {activeFilterCount > 0 && (
             <button
-              onClick={() => { setStatusFilter('All'); setDatePreset('all'); setMinConfidence(0); }}
+              onClick={() => { setDatePreset('all'); setMinConfidence(0); }}
               className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors" style={{ color: '#201f1b', borderColor: 'rgba(31,30,26,0.15)', background: 'var(--cream-200)' }}
             >
               <X size={14} /> Reset Filters

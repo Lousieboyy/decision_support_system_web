@@ -18,6 +18,15 @@ function ProtectedRoute({ children, adminOnly = false }) {
   return children;
 }
 
+// Admins and authorities plan the city, so they land on the analytics that
+// support that decision rather than a raw report dump. Workers land on the
+// simple operational dashboard, which is what a field role actually needs.
+function HomeRoute() {
+  const { role } = useAuth();
+  const isPlanner = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+  return isPlanner ? <AnalyticsPage /> : <DashboardPage />;
+}
+
 function AppRoutes() {
   const { role } = useAuth();
 
@@ -30,7 +39,7 @@ function AppRoutes() {
         </>
       ) : (
         <Route path="/" element={<Layout />}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<HomeRoute />} />
           <Route path="map" element={<MapPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route

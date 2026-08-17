@@ -12,12 +12,14 @@ import {
   ZONE_UNMAPPED,
   ZONE_UNASSIGNED,
   SLA_TARGET_DAYS,
+  SLA_END_TO_END_DAYS,
   SPI_WEIGHTS,
   UCI_WEIGHTS,
   UCI_BURDEN_TARGETS,
   AGE_WEIGHT_DAYS,
   MIN_N_FOR_STAGE,
   MIN_N_FOR_SCORE,
+  REINCIDENCE,
 } from './analyticsConstants';
 import { AUTHORITIES } from './authorities';
 
@@ -519,4 +521,101 @@ export function buildBacklogFlow(reports, { weeks = 12, now = Date.now() } = {})
   }
 
   return points;
+}
+
+// ── Repair reliability ───────────────────────────────────────────────────────
+
+/**
+ * Repair reliability per authority — whether a completed fix actually held,
+ * not just how fast the council closed the ticket. The only headline figure
+ * derived from every resolved report rather than only the ones still open.
+ *
+ * Runs over every authority that has resolved at least one ticket, rather
+ * than a fixed shortlist: a report assigned to any of the fourteen agencies
+ * in AUTHORITIES contributes, not just the two or three biggest ones. An
+ * authority absent from the result has simply never closed a ticket yet.
+ *
+ * A repeat incident is an open report that reappeared within
+ * REINCIDENCE.radiusM and REINCIDENCE.windowDays of a previously resolved
+ * report of the same category, attributed to the authority that did the
+ * earlier repair — counted once per repeat report, not once per historical
+ * fix at that spot.
+ */
+export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
+  const resolved = (reports || []).filter((r) => r?.status === 'Resolved');
+  const open = (reports || []).filter((r) => r?.status !== 'Resolved' && r?.status !== 'Rejected');
+
+  const findAuthority = (report) => {
+    const dept = (report?.assigned_department || '').toLowerCase();
+    if (!dept) return null;
+    return AUTHORITIES.find((a) => dept.includes(a.abbr.toLowerCase()) || dept.includes(a.id.toLowerCase())) || null;
+  };
+
+  const byAuthority = new Map();
+  const bucket = (authority) => {
+    if (!byAuthority.has(authority.abbr)) {
+      byAuthority.set(authority.abbr, {
+        key: authority.abbr,
+        name: authority.name,
+        reIncidence: 0,
+        resolvedCount: 0,
+        onTimeCount: 0,
+      });
+    }
+    return byAuthority.get(authority.abbr);
+  };
+
+  for (const r of resolved) {
+    const authority = findAuthority(r);
+    if (!authority) continue;
+    const start = toDate(r.timestamp);
+    const end = toDate(r.resolved_at);
+    if (start == null || end == null) continue;
+    const entry = bucket(authority);
+    entry.resolvedCount += 1;
+    if ((end - start) / MS_PER_DAY <= SLA_END_TO_END_DAYS) entry.onTimeCount += 1;
+  }
+
+  for (const report of open) {
+    const openTime = toDate(report.timestamp);
+    if (openTime == null) continue;
+
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const res of resolved) {
+      const resTime = toDate(res.timestamp);
+      if (resTime == null) continue;
+      const daysDiff = Math.abs(openTime - resTime) / MS_PER_DAY;
+      if (daysDiff > REINCIDENCE.windowDays) continue;
+      if (canonicalizeCategory(report.categories || report.ai_prediction) !==
+          canonicalizeCategory(res.categories || res.ai_prediction)) continue;
+      const dist = calculateDistance(report.latitude, report.longitude, res.latitude, res.longitude);
+      if (dist <= REINCIDENCE.radiusM && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = res;
+      }
+    }
+    if (nearest) {
+      const authority = findAuthority(nearest);
+      if (authority) bucket(authority).reIncidence += 1;
+    }
+  }
+
+  const rows = [...byAuthority.values()]
+    .filter((d) => d.resolvedCount >= minResolved)
+    .map((d) => ({
+      key: d.key,
+      name: d.name,
+      reIncidence: d.reIncidence,
+      resolvedCount: d.resolvedCount,
+      rate: d.resolvedCount ? Math.round((d.onTimeCount / d.resolvedCount) * 100) : null,
+    }))
+    .sort((a, b) => b.resolvedCount - a.resolvedCount);
+
+  const totalResolved = rows.reduce((s, d) => s + d.resolvedCount, 0);
+  const totalReIncidence = rows.reduce((s, d) => s + d.reIncidence, 0);
+  const overallHoldRate = totalResolved ? Math.round((1 - totalReIncidence / totalResolved) * 100) : null;
+  const worst = [...rows].filter((d) => d.reIncidence > 0).sort((a, b) => b.reIncidence - a.reIncidence)[0] || null;
+
+  return { rows, totalResolved, totalReIncidence, overallHoldRate, worst };
 }

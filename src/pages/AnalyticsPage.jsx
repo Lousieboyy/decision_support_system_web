@@ -23,6 +23,7 @@ import {
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
   buildServicePerformance, buildUrbanCondition, buildBacklogFlow, buildFunnel,
+  buildReliabilityAudit,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
@@ -437,107 +438,10 @@ export function AnalyticsPage() {
     return advisories.sort((a, b) => b.size - a.size);
   }, [filteredReports, proximityRadius, minClusterSize, customOverrides]);
 
-  // 1c. Contractor SLA Performance Audit
-  const contractorAudit = useMemo(() => {
-    const resolvedReports = filteredReports.filter(r => r.status === 'Resolved');
-    const unresolvedReports = filteredReports.filter(r => r.status !== 'Resolved' && r.status !== 'Rejected');
-    
-    const reIncidenceCount = { JKR: 0, MBMB: 0, SWCorp: 0 };
-    const totalResolved = { JKR: 0, MBMB: 0, SWCorp: 0 };
-
-    filteredReports.forEach(r => {
-      if (r.status === 'Resolved') {
-        const dept = r.assigned_department || '';
-        if (dept.toLowerCase().includes('jkr')) totalResolved.JKR++;
-        else if (dept.toLowerCase().includes('mbmb')) totalResolved.MBMB++;
-        else if (dept.toLowerCase().includes('swcorp')) totalResolved.SWCorp++;
-      }
-    });
-
-    // A repeat incident is an unresolved report that reappeared near a previously
-    // resolved one of the same category. Each such report counts ONCE, attributed
-    // to the department that did the earlier repair. Counting every matching
-    // (unresolved, resolved) pair — the original behaviour — multiplied a single
-    // recurrence by the number of past fixes at that spot.
-    unresolvedReports.forEach(unres => {
-      // Submission time is `timestamp`; there is no `created_at` on the API payload.
-      // Undated records are skipped rather than defaulted to now(), which would
-      // force daysDiff to ~0 and make every undated pair look co-incident.
-      const unresTime = unres.timestamp ? new Date(unres.timestamp).getTime() : null;
-      if (!unresTime) return;
-
-      let nearest = null;
-      let nearestDist = Infinity;
-      resolvedReports.forEach(res => {
-        const resTime = res.timestamp ? new Date(res.timestamp).getTime() : null;
-        if (!resTime) return;
-        const daysDiff = Math.abs(unresTime - resTime) / (1000 * 60 * 60 * 24);
-        if (daysDiff > REINCIDENCE.windowDays) return;
-        if (canonicalizeCategory(unres.categories || unres.ai_prediction) !==
-            canonicalizeCategory(res.categories || res.ai_prediction)) return;
-
-        const dist = calculateDistance(unres.latitude, unres.longitude, res.latitude, res.longitude);
-        if (dist <= REINCIDENCE.radiusM && dist < nearestDist) {
-          nearestDist = dist;
-          nearest = res;
-        }
-      });
-
-      if (nearest) {
-        const dept = (nearest.assigned_department || '').toLowerCase();
-        if (dept.includes('jkr')) reIncidenceCount.JKR++;
-        else if (dept.includes('mbmb')) reIncidenceCount.MBMB++;
-        else if (dept.includes('swcorp')) reIncidenceCount.SWCorp++;
-      }
-    });
-
-    // Actual SLA resolution rates (resolved within the target), measured from
-    // `timestamp` -> `resolved_at`. Reports missing either date are excluded from
-    // BOTH numerator and denominator — counting them as on-time (the previous
-    // behaviour) made this rate incapable of returning anything but 100 or 92.
-    const onTimeResolved = { JKR: 0, MBMB: 0, SWCorp: 0 };
-    const datedResolved = { JKR: 0, MBMB: 0, SWCorp: 0 };
-    const deptKeyOf = (r) => {
-      const dept = (r.assigned_department || '').toLowerCase();
-      if (dept.includes('jkr')) return 'JKR';
-      if (dept.includes('mbmb')) return 'MBMB';
-      if (dept.includes('swcorp')) return 'SWCorp';
-      return null;
-    };
-
-    resolvedReports.forEach(r => {
-      const key = deptKeyOf(r);
-      if (!key) return;
-      const start = r.timestamp ? new Date(r.timestamp).getTime() : null;
-      const end = r.resolved_at ? new Date(r.resolved_at).getTime() : null;
-      if (!start || !end || isNaN(start) || isNaN(end)) return;
-      datedResolved[key]++;
-      if ((end - start) / (1000 * 60 * 60 * 24) <= SLA_END_TO_END_DAYS) onTimeResolved[key]++;
-    });
-
-    // null (not a number) when there is nothing to measure — the render layer
-    // shows "Insufficient data" rather than a plausible-looking invented rate.
-    const calculateSLARate = (onTime, total) => (
-      total ? Math.round((onTime / total) * 100) : null
-    );
-
-    const rates = {
-      JKR: calculateSLARate(onTimeResolved.JKR, datedResolved.JKR),
-      MBMB: calculateSLARate(onTimeResolved.MBMB, datedResolved.MBMB),
-      SWCorp: calculateSLARate(onTimeResolved.SWCorp, datedResolved.SWCorp),
-    };
-
-    // Names come from the authority table rather than the invented role labels
-    // ("JKR (Road Works)") this used to carry. Grading is left to the shared
-    // rubric in the render layer, so a null rate reads as unmeasured, not F.
-    return ['JKR', 'MBMB', 'SWCorp'].map((key) => ({
-      key,
-      name: AUTHORITIES.find((a) => a.abbr === key)?.name || key,
-      rate: rates[key],
-      reIncidence: reIncidenceCount[key],
-      resolvedCount: datedResolved[key],
-    }));
-  }, [filteredReports]);
+  // 1c. Repair reliability audit — every authority with a resolved ticket,
+  // not a fixed shortlist. See buildReliabilityAudit for the methodology.
+  const reliabilityAudit = useMemo(() => buildReliabilityAudit(filteredReports), [filteredReports]);
+  const contractorAudit = reliabilityAudit.rows;
 
   // 1c.5. Reporter Trust Map calculation based on reports
   const reporterTrustMap = useMemo(() => {
@@ -1486,6 +1390,48 @@ export function AnalyticsPage() {
                     {kpiStats.healthStatus === 'Optimal' ? 'All crew rates balanced' : `${kpiStats.worstBacklogDept} backlog warning`}
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Repair reliability — the one figure built from every resolved
+                report, not just whatever is still open. Answers "does the
+                city actually get better" rather than "how fast do we close
+                tickets", and is why a report keeps mattering after it's fixed. */}
+            <div
+              className="rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
+              style={{ background: 'linear-gradient(135deg, rgba(74,93,63,0.09), rgba(74,93,63,0.02))', border: '1px solid rgba(74,93,63,0.20)' }}
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(74,93,63,0.15)', color: '#3d4d34' }}>
+                  <Activity size={22} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Repair Reliability</div>
+                  <div className="text-2xl font-black text-[#201f1b] mt-0.5">
+                    {reliabilityAudit.overallHoldRate == null
+                      ? <span className="text-base text-[#8a8477]">Insufficient data</span>
+                      : `${reliabilityAudit.overallHoldRate}% of past repairs have held`}
+                  </div>
+                  <div className="text-[11px] text-[#8a8477] font-medium mt-0.5">
+                    Across {reliabilityAudit.totalResolved} resolved tickets, {reliabilityAudit.totalReIncidence} reappeared nearby within {REINCIDENCE.windowDays} days —
+                    the only figure on this tab built from every closed report, not just what's still open.
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 shrink-0 self-stretch sm:self-auto">
+                {reliabilityAudit.worst && (
+                  <div className="text-right">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#8a8477]">Needs attention</div>
+                    <div className="text-sm font-bold" style={{ color: '#c1613f' }}>{reliabilityAudit.worst.name}</div>
+                  </div>
+                )}
+                <button
+                  onClick={() => setActiveViewTab('dispatch')}
+                  className="px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap"
+                  style={{ background: '#3d4d34', color: '#fff' }}
+                >
+                  Full breakdown →
+                </button>
               </div>
             </div>
 
