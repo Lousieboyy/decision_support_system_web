@@ -29,6 +29,7 @@ import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
 import { DispatchAudit } from '../components/DispatchAudit';
+import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 
@@ -1404,39 +1405,46 @@ export function AnalyticsPage() {
                       return (
                         <div
                           key={item.id}
-                          className="rounded-xl p-4 border border-[#1f1e1a]/8 flex gap-4"
+                          className="rounded-xl p-4 border border-[#1f1e1a]/8"
                           style={{ background: 'var(--cream-100)' }}
                         >
-                          <span className="text-2xl font-black text-[#8a8477] shrink-0 w-7 text-center">
-                            {i + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                              <span className="text-sm font-bold text-[#201f1b]">
-                                {item.address || item.category}
-                              </span>
-                              <span
-                                className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide shrink-0"
-                                style={{ color: tone.color, background: tone.bg }}
-                              >
-                                {item.primaryRisk}
-                              </span>
+                          <div className="flex gap-4">
+                            <span className="text-2xl font-black text-[#8a8477] shrink-0 w-7 text-center">
+                              {i + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                <span className="text-sm font-bold text-[#201f1b]">
+                                  {item.address || item.category}
+                                </span>
+                                <span
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide shrink-0"
+                                  style={{ color: tone.color, background: tone.bg }}
+                                >
+                                  {item.primaryRisk}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-[#8a8477] mb-1">
+                                {item.category} · {item.size} report{item.size === 1 ? '' : 's'}
+                                {item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
+                              </div>
+                              <p className="text-xs text-[#4b473d] leading-relaxed">
+                                {item.recommendation}
+                              </p>
                             </div>
-                            <div className="text-[11px] text-[#8a8477] mb-1">
-                              {item.category} · {item.size} report{item.size === 1 ? '' : 's'}
-                              {item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
+                            <div className="text-right shrink-0 flex flex-col items-end gap-2">
+                              <div>
+                                <div className="text-lg font-black text-[#201f1b] leading-none">
+                                  {item.priorityScore}
+                                </div>
+                                <div className="text-[9px] text-[#8a8477] uppercase tracking-wider">
+                                  priority
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-xs text-[#4b473d] leading-relaxed">
-                              {item.recommendation}
-                            </p>
                           </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-lg font-black text-[#201f1b] leading-none">
-                              {item.priorityScore}
-                            </div>
-                            <div className="text-[9px] text-[#8a8477] uppercase tracking-wider">
-                              priority
-                            </div>
+                          <div className="mt-3 pl-11 flex">
+                            <ClusterDispatchAction item={item} onDispatched={loadData} />
                           </div>
                         </div>
                       );
