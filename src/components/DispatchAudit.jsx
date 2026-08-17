@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, RISK_TONE, DEFAULT_RISK_TONE } from '../utils/analyticsConstants';
+import { ClusterDispatchAction } from './ClusterDispatchAction';
 
 const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
 
@@ -34,7 +35,7 @@ function ReliabilityTooltip({ active, payload }) {
  * harder question — whether a completed repair actually held — by looking for a
  * new complaint of the same category near a previously resolved one.
  */
-export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) {
+export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions, onDispatched }) {
   const auditAvailable = auditActions !== null;
 
   return (
@@ -100,6 +101,9 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions }) 
                         {item.dispatchAdvice}
                       </p>
                     )}
+                    <div className="mt-2 pl-9 flex">
+                      <ClusterDispatchAction item={item} onDispatched={onDispatched} />
+                    </div>
                   </div>
                 );
               })}

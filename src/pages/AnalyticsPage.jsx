@@ -1853,6 +1853,9 @@ export function AnalyticsPage() {
                               <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
                                 {h.recommendation}
                               </div>
+                              <div onClick={(e) => e.stopPropagation()} className="flex">
+                                <ClusterDispatchAction item={h} onDispatched={loadData} />
+                              </div>
                             </div>
                           ))
                         )
@@ -1891,6 +1894,9 @@ export function AnalyticsPage() {
                               <div className="text-xs text-[#4b473d] font-bold">{a.address}</div>
                               <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
                                 {a.recommendation}
+                              </div>
+                              <div onClick={(e) => e.stopPropagation()} className="flex">
+                                <ClusterDispatchAction item={a} onDispatched={loadData} />
                               </div>
                             </div>
                           ))
@@ -2263,6 +2269,7 @@ export function AnalyticsPage() {
               dispatchQueue={prioritizedDispatchQueue}
               contractorAudit={contractorAudit}
               auditActions={auditActions}
+              onDispatched={loadData}
             />
           </div>
         )}
