@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import {
   AreaChart, Area, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  ResponsiveContainer, Legend, BarChart, Bar, Cell, LabelList, ReferenceLine,
 } from 'recharts';
-import { Info, X } from 'lucide-react';
+import { Info, X, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, SLA_TARGET_DAYS,
-  AGE_WEIGHT_DAYS, MIN_N_FOR_STAGE, MIN_N_FOR_SCORE, gradeFor,
+  AGE_WEIGHT_DAYS, MIN_N_FOR_STAGE, MIN_N_FOR_SCORE, MIN_N_FOR_INDEX,
+  IFI_WEIGHTS, REINCIDENCE, gradeFor,
 } from '../utils/analyticsConstants';
 
 const HATCH = 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, transparent 6px 12px)';
@@ -83,20 +84,72 @@ function DomainCard({ name, score, primary, secondary }) {
 
 /** Renders the live weights and targets, read from the constants at runtime. */
 function MethodologyPanel({ kind, onClose }) {
-  const isSPI = kind === 'spi';
-  const rows = isSPI
-    ? Object.entries(SPI_WEIGHTS).map(([k, w]) => ({
+  const config = {
+    spi: {
+      title: 'Service Performance Index',
+      subtitle: 'Measures the council. Every input is an action the council controls.',
+      rows: Object.entries(SPI_WEIGHTS).map(([k, w]) => ({
         key: k,
         weight: w,
         detail: SLA_TARGET_DAYS[k] != null
           ? `target ${SLA_TARGET_DAYS[k]}d · score = min(100, target ÷ median × 100)`
           : 'share of dispatched reports never re-pooled',
-      }))
-    : Object.entries(UCI_WEIGHTS).map(([k, w]) => ({
+      })),
+      footer: (
+        <p>
+          A stage needs {MIN_N_FOR_STAGE} reports to be scored. Scores cap at 100 —
+          beating a target is not extra credit, it means the target needs revisiting.
+        </p>
+      ),
+    },
+    uci: {
+      title: 'Urban Condition Index',
+      subtitle: 'Measures the city. Deliberately excludes resolution rate, which describes council throughput rather than the condition of the city.',
+      rows: Object.entries(UCI_WEIGHTS).map(([k, w]) => ({
         key: k,
         weight: w,
         detail: `tolerance ${UCI_BURDEN_TARGETS[k]} age-weighted open defects · score = 100 × (1 − burden ÷ tolerance)`,
-      }));
+      })),
+      footer: (
+        <p>
+          <strong className="text-[#c1613f]">Policy input:</strong> the tolerances above are
+          service standards to agree with the council, not measurements. Each open defect
+          counts as 1, plus 1 more per {AGE_WEIGHT_DAYS} days it stays open.
+        </p>
+      ),
+    },
+    ifi: {
+      title: 'Infrastructure Fragility Index',
+      subtitle: 'Measures the zone, over its full history — the only index here that looks past what is currently open. Neither SPI nor UCI answers where infrastructure is weak by design rather than by bad luck.',
+      rows: Object.entries(IFI_WEIGHTS).map(([k, w]) => ({
+        key: k,
+        weight: w,
+        detail: {
+          reportRate: `reports per 10,000 residents vs. city average · score 50 at the average, 100 at 2×`,
+          failureRate: `% of resolved reports that reoccurred within ${REINCIDENCE.radiusM}m / ${REINCIDENCE.windowDays}d`,
+          mtbf: `mean days between defects in the zone vs. city average · shorter gaps score worse`,
+        }[k],
+      })),
+      footer: (
+        <>
+          <p>
+            <strong className="text-[#c1613f]">Population source:</strong> Department of
+            Statistics Malaysia, district-level 2024 figures — not per-neighborhood. Zones
+            sharing a district share that district's population, so the report-rate
+            component compares fairly within a district but not below it.
+          </p>
+          <p>
+            A zone needs {MIN_N_FOR_INDEX} reports (its full history, not just open ones) to
+            be scored. The headline figure is population-weighted across scored zones, so a
+            fragile but tiny zone can't move the city number as much as a fragile, populous
+            one.
+          </p>
+        </>
+      ),
+    },
+  }[kind];
+
+  const { title, subtitle, rows, footer } = config;
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
@@ -106,14 +159,8 @@ function MethodologyPanel({ kind, onClose }) {
       >
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-black text-[#201f1b]">
-              {isSPI ? 'Service Performance Index' : 'Urban Condition Index'}
-            </h3>
-            <p className="text-xs text-[#8a8477] mt-1">
-              {isSPI
-                ? 'Measures the council. Every input is an action the council controls.'
-                : 'Measures the city. Deliberately excludes resolution rate, which describes council throughput rather than the condition of the city.'}
-            </p>
+            <h3 className="text-lg font-black text-[#201f1b]">{title}</h3>
+            <p className="text-xs text-[#8a8477] mt-1">{subtitle}</p>
           </div>
           <button onClick={onClose} className="text-[#8a8477] hover:text-[#201f1b]">
             <X size={18} />
@@ -151,18 +198,7 @@ function MethodologyPanel({ kind, onClose }) {
             renormalised to 1. The gauge states how many domains were omitted rather than
             substituting a default score.
           </p>
-          {isSPI ? (
-            <p>
-              A stage needs {MIN_N_FOR_STAGE} reports to be scored. Scores cap at 100 —
-              beating a target is not extra credit, it means the target needs revisiting.
-            </p>
-          ) : (
-            <p>
-              <strong className="text-[#c1613f]">Policy input:</strong> the tolerances above are
-              service standards to agree with the council, not measurements. Each open defect
-              counts as 1, plus 1 more per {AGE_WEIGHT_DAYS} days it stays open.
-            </p>
-          )}
+          {footer}
         </div>
       </div>
     </div>
@@ -191,11 +227,15 @@ function BandHeader({ title, subtitle, onMethodology }) {
  * defects accumulated. Band A now measures the council; Band B measures the
  * city.
  */
-export function CityHealthBands({ servicePerformance, urbanCondition, backlogFlow, reportCount }) {
+export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount }) {
   const [methodology, setMethodology] = useState(null);
 
   const spiDomains = Object.values(servicePerformance.domains);
   const uciDomains = Object.values(urbanCondition.domains);
+  const ifiZones = Object.values(infrastructureFragility.domains)
+    .filter((d) => d.score != null)
+    .sort((a, b) => a.score - b.score);
+  const ifiUnscored = Object.keys(infrastructureFragility.domains).length - ifiZones.length;
 
   const flowData = backlogFlow.map((p) => ({
     week: format(new Date(p.weekEnd), 'MMM dd'),
@@ -308,6 +348,102 @@ export function CityHealthBands({ servicePerformance, urbanCondition, backlogFlo
                 secondary="Insufficient data — no reports in this category"
               />
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── BAND C · INFRASTRUCTURE FRAGILITY ──────────────────────── */}
+      <section className="space-y-4 pt-2 border-t border-[#1f1e1a]/10">
+        <BandHeader
+          title="Infrastructure Fragility"
+          subtitle="Where the city is breaking by design, not by bad luck — scored per zone against its own population, over full history rather than just what's open right now."
+          onMethodology={() => setMethodology('ifi')}
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <IndexGauge
+            value={infrastructureFragility.index}
+            label="Fragility"
+            caption={`${ifiZones.length} zone${ifiZones.length === 1 ? '' : 's'} scored`}
+            excludedCount={0}
+            totalDomains={ifiZones.length}
+          />
+
+          <div className="lg:col-span-3 content-card">
+            {ifiZones.length === 0 ? (
+              <div className="p-8 text-center text-sm text-[#8a8477]">
+                No zone has {MIN_N_FOR_INDEX}+ reports with a known district yet — nothing to score.
+              </div>
+            ) : (
+              <div className="p-5">
+                <div style={{ height: Math.max(180, ifiZones.length * 32) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={ifiZones} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
+                      <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} />
+                      <YAxis type="category" dataKey="zone" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0].payload;
+                          return (
+                            <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg max-w-[220px]">
+                              <div className="font-bold text-[#201f1b] mb-1">{d.zone}</div>
+                              <div className="text-[#4b473d] space-y-0.5">
+                                <div>{d.reportCount} reports · {d.district} district</div>
+                                <div>{d.ratePer10k.toFixed(1)} per 10k residents</div>
+                                {d.failureRatePct != null && <div>{d.failureRatePct}% of repairs reoccurred</div>}
+                                {d.mtbfDays != null && <div>{Math.round(d.mtbfDays)}d between defects, avg</div>}
+                                {d.driverLabel && <div className="pt-1 mt-1 border-t border-[#1f1e1a]/6 italic">Driven by: {d.driverLabel}</div>}
+                              </div>
+                            </div>
+                          );
+                        }}
+                        cursor={{ fill: 'rgba(74,93,63,0.05)' }}
+                      />
+                      <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
+                      <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                        {ifiZones.map((z) => (
+                          <Cell key={z.zone} fill={scoreColor(z.score)} />
+                        ))}
+                        <LabelList dataKey="score" position="right" style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-[10px] text-[#8a8477] mt-2">
+                  Score = 100 − fragility, so higher is more durable. Dashed line marks 80, the start of a passing grade.
+                  {ifiUnscored > 0 && ` ${ifiUnscored} zone${ifiUnscored === 1 ? '' : 's'} excluded — fewer than ${MIN_N_FOR_INDEX} reports, or no district mapping.`}
+                </p>
+                {/* The ranking alone doesn't say what to do — name the worst
+                    zone and which of the three signals is actually driving
+                    it, since "slow but holds" and "fast but fails again"
+                    need different fixes. */}
+                {infrastructureFragility.worst && (
+                  <div
+                    className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold"
+                    style={{
+                      background: infrastructureFragility.worst.score < 60 ? 'rgba(185,28,28,0.06)' : 'rgba(21,128,61,0.06)',
+                      color: infrastructureFragility.worst.score < 60 ? '#b91c1c' : '#15803d',
+                    }}
+                  >
+                    {infrastructureFragility.worst.score < 60 ? (
+                      <>
+                        {infrastructureFragility.worst.zone} is the most fragile zone at {infrastructureFragility.worst.score} —
+                        driven mainly by {infrastructureFragility.worst.driverLabel}. That points to
+                        {infrastructureFragility.worst.driver === 'failureRate'
+                          ? ' inspecting installation quality there, not dispatching faster.'
+                          : infrastructureFragility.worst.driver === 'mtbf'
+                          ? ' a proactive inspection schedule for this zone, rather than waiting for the next citizen report.'
+                          : ' checking whether this zone is under-resourced relative to how often it actually breaks.'}
+                      </>
+                    ) : (
+                      <>No zone is critically fragile — the lowest, {infrastructureFragility.worst.zone}, still scores {infrastructureFragility.worst.score}.</>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>

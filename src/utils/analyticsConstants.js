@@ -158,6 +158,59 @@ export const MAX_ZONE_SNAP_KM = 5;
 export const ZONE_UNMAPPED = 'Unmapped area';
 export const ZONE_UNASSIGNED = 'Unassigned';
 
+// ── Infrastructure Fragility Index (IFI) ────────────────────────────────────
+// SPI asks "is the council fast?" and UCI asks "how much is broken right
+// now?" — both operational questions. IFI asks the planning question
+// neither answers: where is infrastructure breaking by design, not by bad
+// luck? A pothole fixed in 2 days that reappears every 3 months is not an
+// ops failure; nothing else in this app says so.
+
+// Real population figures — Department of Statistics Malaysia,
+// "Jadual 1.1: Statistik utama penduduk, Melaka, 2020-2024" (2024
+// preliminary). Only published at DISTRICT granularity (3 districts), not
+// per neighborhood, so every MELAKA_ZONES locality below is mapped to the
+// district it actually sits in and multiple zones share one population
+// figure. That is a real limitation to state plainly, not a reason to
+// invent a fake per-neighborhood number instead.
+export const MELAKA_DISTRICT_POPULATION = {
+  'Melaka Tengah': 630100,
+  'Alor Gajah': 260500,
+  Jasin: 156400,
+};
+
+// Which district each surveyed MELAKA_ZONES locality sits in.
+export const ZONE_DISTRICT = {
+  'Bandar Hilir': 'Melaka Tengah',
+  'Taman Melaka Raya': 'Melaka Tengah',
+  'Bukit Baru': 'Melaka Tengah',
+  'Kota Laksamana': 'Melaka Tengah',
+  'Kampung Morten': 'Melaka Tengah',
+  'Ayer Keroh': 'Melaka Tengah',
+  'Batu Berendam': 'Melaka Tengah',
+  Cheng: 'Melaka Tengah',
+  Krubong: 'Melaka Tengah',
+  'Bukit Katil': 'Melaka Tengah',
+  'Tangga Batu': 'Melaka Tengah',
+  Bachang: 'Melaka Tengah',
+  Klebang: 'Melaka Tengah',
+  'Ujong Pasir': 'Melaka Tengah',
+  'Durian Tunggal': 'Alor Gajah',
+  'Alor Gajah': 'Alor Gajah',
+  'Masjid Tanah': 'Alor Gajah',
+  Jasin: 'Jasin',
+};
+
+// POLICY/METHOD INPUT — how the three fragility signals combine. Weighted
+// toward repair-failure-rate because a repair that doesn't hold is the most
+// direct evidence of fragility available; report-rate is weighted lowest
+// because raw volume conflates population density with actual weakness
+// (the same conflation IFI exists to correct for at the zone level).
+export const IFI_WEIGHTS = {
+  failureRate: 0.4,
+  reportRate: 0.35,
+  mtbf: 0.25,
+};
+
 // ── Dispatch-queue risk tone ─────────────────────────────────────────────────
 // Keyed on the primaryRisk labels AnalyticsPage assigns to a cluster.
 // Shared by the priority panel and the full dispatch table so a badge never
@@ -183,6 +236,15 @@ if (import.meta.env?.DEV) {
   }
   if (!near(sum(UCI_WEIGHTS), 1)) {
     console.error(`[analyticsConstants] UCI_WEIGHTS must sum to 1, got ${sum(UCI_WEIGHTS)}`);
+  }
+  if (!near(sum(IFI_WEIGHTS), 1)) {
+    console.error(`[analyticsConstants] IFI_WEIGHTS must sum to 1, got ${sum(IFI_WEIGHTS)}`);
+  }
+  const zonesMissingDistrict = Object.keys(ZONE_DISTRICT).filter(
+    (z) => !(ZONE_DISTRICT[z] in MELAKA_DISTRICT_POPULATION)
+  );
+  if (zonesMissingDistrict.length) {
+    console.error(`[analyticsConstants] ZONE_DISTRICT entries with no population figure: ${zonesMissingDistrict.join(', ')}`);
   }
   if (!near(sum(SLA_TARGET_DAYS), SLA_END_TO_END_DAYS)) {
     console.error(

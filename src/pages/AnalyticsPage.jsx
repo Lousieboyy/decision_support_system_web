@@ -23,7 +23,7 @@ import {
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
   buildServicePerformance, buildUrbanCondition, buildBacklogFlow, buildFunnel,
-  buildReliabilityAudit,
+  buildReliabilityAudit, buildInfrastructureFragility,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
@@ -820,6 +820,14 @@ export function AnalyticsPage() {
   // council again, which is the conflation this split removes.
   const urbanCondition = useMemo(
     () => buildUrbanCondition(filteredReports),
+    [filteredReports]
+  );
+
+  // Infrastructure Fragility — where the city is breaking by design, not by
+  // bad luck. The one index here scored over full history (including
+  // resolved reports) rather than the current open backlog.
+  const infrastructureFragility = useMemo(
+    () => buildInfrastructureFragility(filteredReports),
     [filteredReports]
   );
 
@@ -2103,6 +2111,7 @@ export function AnalyticsPage() {
             <CityHealthBands
               servicePerformance={servicePerformance}
               urbanCondition={urbanCondition}
+              infrastructureFragility={infrastructureFragility}
               backlogFlow={backlogFlow}
               reportCount={filteredReports.length}
             />

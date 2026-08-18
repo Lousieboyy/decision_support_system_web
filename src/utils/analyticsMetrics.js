@@ -19,7 +19,11 @@ import {
   AGE_WEIGHT_DAYS,
   MIN_N_FOR_STAGE,
   MIN_N_FOR_SCORE,
+  MIN_N_FOR_INDEX,
   REINCIDENCE,
+  IFI_WEIGHTS,
+  ZONE_DISTRICT,
+  MELAKA_DISTRICT_POPULATION,
 } from './analyticsConstants';
 import { AUTHORITIES } from './authorities';
 
@@ -618,4 +622,175 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
   const worst = [...rows].filter((d) => d.reIncidence > 0).sort((a, b) => b.reIncidence - a.reIncidence)[0] || null;
 
   return { rows, totalResolved, totalReIncidence, overallHoldRate, worst };
+}
+
+// ── Infrastructure Fragility Index (IFI) ────────────────────────────────────
+
+/**
+ * Score a zone value against the city-wide average on a 0-100 "how much
+ * worse than typical" scale: matching the average scores 50, twice the
+ * average (or, for a metric where lower is worse, half the average) scores
+ * 100, zero scores 0. A relative scale rather than an absolute policy
+ * target (like UCI_BURDEN_TARGETS) because nobody has the standing to set
+ * "the correct pothole rate for Melaka" — the city's own average is the one
+ * benchmark that needs no one's sign-off.
+ */
+function relativeFragility(zoneValue, cityAvg, { higherIsWorse }) {
+  if (zoneValue == null || cityAvg == null || cityAvg <= 0) return null;
+  const ratio = higherIsWorse ? zoneValue / cityAvg : cityAvg / Math.max(zoneValue, 1e-6);
+  return Math.max(0, Math.min(100, Math.round(ratio * 50)));
+}
+
+const IFI_DRIVER_LABEL = {
+  reportRate: 'reports far above the district average for its population',
+  failureRate: 'repeat failures — repairs here are not holding',
+  mtbf: 'defects recurring in tight succession, little time between failures',
+};
+
+/**
+ * Infrastructure Fragility Index — where is the city breaking by design,
+ * not by bad luck. SPI measures whether the council responds fast; UCI
+ * measures how much is open right now; neither says whether a *zone's*
+ * infrastructure itself is weak. A pothole patched in two days that comes
+ * back every season is not a response-time problem, and nothing else in
+ * this app flags it.
+ *
+ * Three components per zone, computed over full history (including
+ * resolved reports — the only index here that looks past what's currently
+ * open):
+ *   - reportRate:  defect reports per 10,000 residents, relative to the
+ *                  city average. Population-normalized so a zone isn't
+ *                  penalised just for having more people to report.
+ *   - failureRate: share of this zone's resolved reports that reoccurred
+ *                  nearby within REINCIDENCE.windowDays — same matching
+ *                  logic as buildReliabilityAudit, bucketed by zone instead
+ *                  of by authority.
+ *   - mtbf:        mean days between consecutive defect reports in the
+ *                  zone. Short gaps between failures is itself a fragility
+ *                  signal independent of the other two.
+ *
+ * Population comes from MELAKA_DISTRICT_POPULATION — real government
+ * figures, but only at district granularity, so zones sharing a district
+ * share a population figure (see ZONE_DISTRICT). A zone whose district is
+ * unknown, or with fewer than MIN_N_FOR_INDEX reports, is reported as
+ * unmeasured rather than scored on too little data.
+ */
+export function buildInfrastructureFragility(reports, { minN = MIN_N_FOR_INDEX } = {}) {
+  const qualifying = (reports || []).filter((r) => r?.status !== 'Rejected');
+
+  const raw = new Map(); // zone -> { reportCount, timestamps, resolvedCount, reIncidenceCount }
+  const bucket = (zone) => {
+    if (!raw.has(zone)) raw.set(zone, { reportCount: 0, timestamps: [], resolvedCount: 0, reIncidenceCount: 0 });
+    return raw.get(zone);
+  };
+
+  for (const r of qualifying) {
+    const zone = deriveZone(r);
+    const entry = bucket(zone);
+    entry.reportCount += 1;
+    const t = toDate(r.timestamp);
+    if (t != null) entry.timestamps.push(t);
+    if (r.status === 'Resolved') entry.resolvedCount += 1;
+  }
+
+  // Reincidence pass — identical matching rule to buildReliabilityAudit
+  // (same category, within REINCIDENCE.radiusM and .windowDays of a
+  // resolved report), attributed to the zone of the earlier repair.
+  const resolved = qualifying.filter((r) => r.status === 'Resolved');
+  const open = qualifying.filter((r) => r.status !== 'Resolved');
+  for (const report of open) {
+    const openTime = toDate(report.timestamp);
+    if (openTime == null) continue;
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (const res of resolved) {
+      const resTime = toDate(res.timestamp);
+      if (resTime == null) continue;
+      if (Math.abs(openTime - resTime) / MS_PER_DAY > REINCIDENCE.windowDays) continue;
+      if (canonicalizeCategory(report.categories || report.ai_prediction) !==
+          canonicalizeCategory(res.categories || res.ai_prediction)) continue;
+      const dist = calculateDistance(report.latitude, report.longitude, res.latitude, res.longitude);
+      if (dist <= REINCIDENCE.radiusM && dist < nearestDist) {
+        nearestDist = dist;
+        nearest = res;
+      }
+    }
+    if (nearest) bucket(deriveZone(nearest)).reIncidenceCount += 1;
+  }
+
+  // Per-zone raw stats, gated to zones with a known population.
+  const zoneStats = [];
+  for (const [zone, stat] of raw) {
+    const district = ZONE_DISTRICT[zone];
+    const population = district ? MELAKA_DISTRICT_POPULATION[district] : null;
+    if (!population) continue; // unmapped/unassigned zones can't be exposure-normalized
+
+    const sortedT = [...stat.timestamps].sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 1; i < sortedT.length; i++) gaps.push((sortedT[i] - sortedT[i - 1]) / MS_PER_DAY);
+
+    zoneStats.push({
+      zone,
+      district,
+      population,
+      reportCount: stat.reportCount,
+      resolvedCount: stat.resolvedCount,
+      reIncidenceCount: stat.reIncidenceCount,
+      ratePer10k: stat.reportCount / (population / 10000),
+      failureRatePct: stat.resolvedCount >= MIN_N_FOR_SCORE
+        ? Math.min(100, Math.round((stat.reIncidenceCount / stat.resolvedCount) * 100))
+        : null,
+      mtbfDays: gaps.length >= MIN_N_FOR_SCORE - 1 ? mean(gaps) : null,
+    });
+  }
+
+  // City-wide benchmarks. Rate is pooled (total reports / total distinct
+  // district population) rather than a simple mean of zone rates, so a
+  // sparse zone can't skew the benchmark as much as a populous one.
+  const distinctDistrictPop = Object.values(MELAKA_DISTRICT_POPULATION).reduce((s, v) => s + v, 0);
+  const totalReports = zoneStats.reduce((s, z) => s + z.reportCount, 0);
+  const cityAvgRatePer10k = distinctDistrictPop > 0 ? totalReports / (distinctDistrictPop / 10000) : null;
+  const cityAvgMtbfDays = mean(zoneStats.map((z) => z.mtbfDays).filter((v) => v != null));
+
+  const domains = {};
+  for (const z of zoneStats) {
+    if (z.reportCount < minN) {
+      domains[z.zone] = { ...z, score: null, grade: null, components: null, driver: null };
+      continue;
+    }
+
+    const components = {
+      reportRate: relativeFragility(z.ratePer10k, cityAvgRatePer10k, { higherIsWorse: true }),
+      failureRate: z.failureRatePct,
+      mtbf: relativeFragility(z.mtbfDays, cityAvgMtbfDays, { higherIsWorse: false }),
+    };
+
+    const composite = weightedIndex(components, IFI_WEIGHTS);
+    const score = composite.value != null ? 100 - composite.value : null;
+
+    const driver = Object.entries(components)
+      .filter(([, v]) => v != null)
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+    domains[z.zone] = { ...z, score, components, driver, driverLabel: driver ? IFI_DRIVER_LABEL[driver] : null };
+  }
+
+  const scored = Object.values(domains).filter((d) => d.score != null);
+  // Headline figure: population-weighted, so a fragile-but-tiny zone
+  // doesn't move the city number as much as a fragile, populous one.
+  const popWeighted = scored.reduce((s, d) => s + d.population, 0);
+  const index = popWeighted > 0
+    ? Math.round(scored.reduce((s, d) => s + d.score * d.population, 0) / popWeighted)
+    : null;
+
+  const worst = [...scored].sort((a, b) => a.score - b.score)[0] || null;
+
+  return {
+    index,
+    domains,
+    worst,
+    measuredZoneCount: scored.length,
+    cityAvgRatePer10k,
+    cityAvgMtbfDays,
+  };
 }
