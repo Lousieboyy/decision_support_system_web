@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
 import { AUTHORITIES } from '../utils/authorities';
 import { getReportPriority, priorityRank, PRIORITY_TONE } from '../utils/reportPriority';
-import { format, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } from 'date-fns';
+import { format, formatDistanceToNowStrict, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import {
   Search, Filter, RefreshCw, Image as ImageIcon, MapPin,
@@ -64,6 +64,43 @@ function DeptTag({ department }) {
   );
 }
 
+// A crew name (or team name when the whole team shares the pool) plus who,
+// if anyone, has claimed it — the thing an authority actually needs to judge
+// dispatch health, versus a department tag that's always their own dept.
+function TeamCrewCell({ report }) {
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      <span className="text-xs font-semibold" style={{ color: '#201f1b' }}>
+        {report.assigned_crew || report.assigned_team || '—'}
+      </span>
+      {report.assigned_worker ? (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ color: '#3d4d34', background: 'rgba(74,93,63,0.10)', border: '1px solid rgba(74,93,63,0.20)' }}>
+          {report.assigned_worker}
+        </span>
+      ) : report.in_pool ? (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ color: '#b45309', background: 'rgba(180,83,9,0.10)', border: '1px solid rgba(180,83,9,0.25)' }}>
+          Unclaimed
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+// Relative age reads faster than a timestamp when the question is "has this
+// been sitting too long" — the thing a worker or authority actually scans
+// for. Tone escalates the same way a worker would triage by eye.
+function reportAge(timestamp) {
+  if (!timestamp) return { text: '-', tone: null, full: '' };
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return { text: String(timestamp), tone: null, full: '' };
+  const days = (Date.now() - d.getTime()) / 86400000;
+  return {
+    text: formatDistanceToNowStrict(d, { addSuffix: true }),
+    tone: days >= 5 ? 'high' : days >= 2 ? 'medium' : null,
+    full: format(d, 'MMM d, yyyy HH:mm'),
+  };
+}
+
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 const DATE_PRESETS = [
@@ -80,6 +117,14 @@ const DATE_PRESETS = [
 const OPEN_STATUSES = ['Pending', 'In Review', 'In Process', 'In Maintenance'];
 const STATUS_TABS = ['Open', 'Pending', 'In Review', 'In Process', 'In Maintenance', 'Resolved', 'Rejected', 'All'];
 
+// Pending/Rejected are decisions an admin makes before a report ever reaches
+// a worker or authority — showing those tabs to either role is dead weight,
+// not oversight. Each role's tab list is just the statuses they can act on
+// (see ReportDetailModal's role-based action panels) plus Resolved as their
+// completed history.
+const WORKER_TABS = ['In Process', 'In Maintenance', 'Resolved'];
+const AUTHORITY_TABS = ['In Review', 'In Process', 'In Maintenance', 'Resolved'];
+
 function parseConfidence(conf) {
   if (!conf) return 0;
   return parseFloat(conf.replace('%', '')) || 0;
@@ -93,16 +138,21 @@ export function ReportsPage() {
   // Role
   const { role: currentRole, user } = useAuth();
 
+  const deptId = getDeptId(currentRole, user?.username);
+  const isWorker = currentRole === 'worker' || currentRole?.startsWith('worker_');
+  const isAuthority = currentRole === 'authority' || currentRole?.startsWith('authority_');
+  // Drives which status tabs and table columns show — see WORKER_TABS/
+  // AUTHORITY_TABS above for why each role only sees its own statuses.
+  const viewMode = isWorker ? 'worker' : isAuthority ? 'authority' : 'admin';
+  const visibleTabs = viewMode === 'worker' ? WORKER_TABS : viewMode === 'authority' ? AUTHORITY_TABS : STATUS_TABS;
+
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Open');
+  const [statusFilter, setStatusFilter] = useState(() => (viewMode === 'admin' ? 'Open' : visibleTabs[0]));
   const [datePreset, setDatePreset] = useState('all');
   const [minConfidence, setMinConfidence] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
   const [myDeptOnly, setMyDeptOnly] = useState(true);
-
-  const deptId = getDeptId(currentRole, user?.username);
-  const isWorker = currentRole === 'worker' || currentRole?.startsWith('worker_');
 
   // Compute status counts for the tabs
   const statusCounts = useMemo(() => {
@@ -189,6 +239,21 @@ export function ReportsPage() {
     minConfidence > 0,
     myDeptOnly,
   ].filter(Boolean).length;
+
+  // Column visibility by role — the same "only what you'd act on" logic as
+  // the status tabs above. Admin verifies (needs the photo + AI confidence),
+  // authority dispatches (needs crew/claim status + citizen pressure),
+  // worker executes (needs location + priority + the action button, nothing
+  // it can't use).
+  const showImageCol = viewMode === 'admin';
+  const showAiCol = viewMode === 'admin';
+  const showAssignedCol = viewMode !== 'worker';
+  const showUpvotesCol = viewMode !== 'worker';
+  const colCount = 6 // ID, Category, Location, Status, Priority, Reported At
+    + (showImageCol ? 1 : 0)
+    + (showAiCol ? 1 : 0)
+    + (showAssignedCol ? 1 : 0)
+    + (showUpvotesCol ? 1 : 0);
 
   const processedReports = useMemo(() => {
     let result = [...reports];
@@ -349,6 +414,12 @@ export function ReportsPage() {
                 <span className="font-semibold text-[#3d4d34]">{user?.displayName}</span>
                 <span className="text-[#8a8477]">|</span>
                 <span>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()} Department</span>
+                <span className="text-[#8a8477]">|</span>
+                <span>
+                  {viewMode === 'worker'
+                    ? 'Your active jobs and completed history.'
+                    : 'Reports awaiting dispatch, plus what your teams are working.'}
+                </span>
               </span>
             ) : (
               <span>Opens on what still needs a decision. Resolved and Rejected history lives under the Resolved / Rejected / All tabs.</span>
@@ -453,24 +524,26 @@ export function ReportsPage() {
             </div>
           </div>
 
-          {/* Min Confidence */}
-          <div className="min-w-[220px]">
-            <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8a8477' }}>
-              Min AI Confidence: <span style={{ color: '#4b473d' }}>{minConfidence}%</span>
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={minConfidence}
-              onChange={e => setMinConfidence(Number(e.target.value))}
-              className="w-full accent-[#4a5d3f]"
-            />
-            <div className="flex justify-between text-xs text-[#8a8477] mt-1">
-              <span>0%</span><span>50%</span><span>100%</span>
+          {/* Min Confidence — only admin sees the AI Prediction column this filters */}
+          {viewMode === 'admin' && (
+            <div className="min-w-[220px]">
+              <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: '#8a8477' }}>
+                Min AI Confidence: <span style={{ color: '#4b473d' }}>{minConfidence}%</span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={minConfidence}
+                onChange={e => setMinConfidence(Number(e.target.value))}
+                className="w-full accent-[#4a5d3f]"
+              />
+              <div className="flex justify-between text-xs text-[#8a8477] mt-1">
+                <span>0%</span><span>50%</span><span>100%</span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Reset */}
           {activeFilterCount > 0 && (
@@ -487,7 +560,7 @@ export function ReportsPage() {
       {/* Status Tabs Bar & Sort Selector */}
       <div className="mb-6 flex flex-wrap items-center justify-between border-b pb-4 gap-4" style={{ borderColor: 'rgba(31,30,26,0.08)' }}>
         <div className="flex flex-wrap gap-2">
-          {STATUS_TABS.map(tab => {
+          {visibleTabs.map(tab => {
             const isActive = statusFilter === tab;
             const count = statusCounts[tab];
             return (
@@ -532,16 +605,21 @@ export function ReportsPage() {
             >
               Date (Newest)
             </button>
-            <button
-              onClick={() => { setSortField('upvotes'); setSortOrder('desc'); }}
-              className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                sortField === 'upvotes'
-                  ? 'bg-[#4a5d3f] text-white font-extrabold shadow-sm'
-                  : 'text-[#8a8477] hover:text-[#4b473d]'
-              }`}
-            >
-              Upvotes (Criticality)
-            </button>
+            {/* A worker executes what's already been dispatched — community upvote
+                pressure was already weighed by the admin/authority who routed it
+                here, so sorting by it again adds noise, not value. */}
+            {viewMode !== 'worker' && (
+              <button
+                onClick={() => { setSortField('upvotes'); setSortOrder('desc'); }}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                  sortField === 'upvotes'
+                    ? 'bg-[#4a5d3f] text-white font-extrabold shadow-sm'
+                    : 'text-[#8a8477] hover:text-[#4b473d]'
+                }`}
+              >
+                Upvotes (Criticality)
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -559,33 +637,39 @@ export function ReportsPage() {
                   <th className="px-6 py-4 cursor-pointer group transition-colors" onClick={() => toggleSort('id')}>
                     <div className="flex items-center gap-1">ID <SortIcon field="id" /></div>
                   </th>
-                  <th className="px-6 py-4">Image</th>
+                  {showImageCol && <th className="px-6 py-4">Image</th>}
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('categories')}>
                     <div className="flex items-center gap-1">Category <SortIcon field="categories" /></div>
                   </th>
                   <th className="px-6 py-4">Location</th>
-                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('ai_prediction')}>
-                    <div className="flex items-center gap-1">AI Prediction <SortIcon field="ai_prediction" /></div>
-                  </th>
-                  <th className="px-6 py-4">Assigned To</th>
+                  {showAiCol && (
+                    <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('ai_prediction')}>
+                      <div className="flex items-center gap-1">AI Prediction <SortIcon field="ai_prediction" /></div>
+                    </th>
+                  )}
+                  {showAssignedCol && (
+                    <th className="px-6 py-4">{viewMode === 'authority' ? 'Team & Crew' : 'Assigned To'}</th>
+                  )}
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
                   </th>
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('priority')}>
                     <div className="flex items-center gap-1">Priority <SortIcon field="priority" /></div>
                   </th>
-                  <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('upvotes')}>
-                    <div className="flex items-center gap-1">Upvotes <SortIcon field="upvotes" /></div>
-                  </th>
+                  {showUpvotesCol && (
+                    <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('upvotes')}>
+                      <div className="flex items-center gap-1">Upvotes <SortIcon field="upvotes" /></div>
+                    </th>
+                  )}
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('timestamp')}>
-                    <div className="flex items-center gap-1">Reported At <SortIcon field="timestamp" /></div>
+                    <div className="flex items-center gap-1">Reported <SortIcon field="timestamp" /></div>
                   </th>
                 </tr>
               </thead>
               <tbody style={{ borderColor: 'rgba(31,30,26,0.06)' }} className="divide-y">
                 {loading && reports.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="px-6 py-12 text-center" style={{ color: '#8a8477' }}>
+                    <td colSpan={colCount} className="px-6 py-12 text-center" style={{ color: '#8a8477' }}>
                       <div className="flex flex-col items-center justify-center">
                         <div className="w-8 h-8 border-4 border-[#1f1e1a]/10 border-t-[#4a5d3f] rounded-full animate-spin mb-4" />
                         Loading reports...
@@ -594,7 +678,7 @@ export function ReportsPage() {
                   </tr>
                 ) : paginatedReports.length === 0 ? (
                   <tr>
-                    <td colSpan="10" className="px-6 py-12 text-center font-medium" style={{ color: '#8a8477' }}>
+                    <td colSpan={colCount} className="px-6 py-12 text-center font-medium" style={{ color: '#8a8477' }}>
                       No reports found matching your criteria.
                     </td>
                   </tr>
@@ -609,25 +693,27 @@ export function ReportsPage() {
                       }`}
                     >
                       <td className="px-6 py-4 font-mono" style={{ color: '#8a8477' }}>#{report.id}</td>
-                      <td className="px-6 py-4">
-                        {report.image_path ? (
-                          <div className="w-10 h-10 rounded-lg overflow-hidden" style={{ border: '1px solid rgba(31,30,26,0.10)' }}>
-                            <img
-                              src={getImageUrl(report.image_path)}
-                              alt="thumbnail"
-                              className="w-full h-full object-cover"
-                              onError={e => e.target.style.display = 'none'}
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)' }}>
-                            <ImageIcon size={16} style={{ color: '#8a8477' }} />
-                          </div>
-                        )}
-                      </td>
+                      {showImageCol && (
+                        <td className="px-6 py-4">
+                          {report.image_path ? (
+                            <div className="w-10 h-10 rounded-lg overflow-hidden" style={{ border: '1px solid rgba(31,30,26,0.10)' }}>
+                              <img
+                                src={getImageUrl(report.image_path)}
+                                alt="thumbnail"
+                                className="w-full h-full object-cover"
+                                onError={e => e.target.style.display = 'none'}
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)' }}>
+                              <ImageIcon size={16} style={{ color: '#8a8477' }} />
+                            </div>
+                          )}
+                        </td>
+                      )}
                       <td className="px-6 py-4">
                         <p className="font-bold" style={{ color: '#201f1b' }}>{report.categories || '-'}</p>
-                        {isMyDept && deptId && (
+                        {viewMode === 'admin' && isMyDept && deptId && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full mt-1 inline-block" style={{ color: '#3d4d34', background: 'rgba(74,93,63,0.10)', border: '1px solid rgba(74,93,63,0.20)' }}>
                             YOUR DEPT
                           </span>
@@ -639,22 +725,26 @@ export function ReportsPage() {
                           <span className="truncate" style={{ color: '#4b473d' }}>{report.address || 'Unknown'}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        {report.ai_prediction ? (
-                          <div>
-                            <p className="font-semibold" style={{ color: '#201f1b' }}>{report.ai_prediction}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.08)' }}>
-                                <div className="h-full bg-[#4a5d3f] rounded-full" style={{ width: report.confidence || '0%' }} />
+                      {showAiCol && (
+                        <td className="px-6 py-4">
+                          {report.ai_prediction ? (
+                            <div>
+                              <p className="font-semibold" style={{ color: '#201f1b' }}>{report.ai_prediction}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="w-16 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.08)' }}>
+                                  <div className="h-full bg-[#4a5d3f] rounded-full" style={{ width: report.confidence || '0%' }} />
+                                </div>
+                                <span className="text-xs" style={{ color: '#8a8477' }}>{report.confidence}</span>
                               </div>
-                              <span className="text-xs" style={{ color: '#8a8477' }}>{report.confidence}</span>
                             </div>
-                          </div>
-                        ) : <span className="text-[#8a8477]">-</span>}
-                      </td>
-                      <td className="px-6 py-4">
-                        <DeptTag department={report.assigned_department} />
-                      </td>
+                          ) : <span className="text-[#8a8477]">-</span>}
+                        </td>
+                      )}
+                      {showAssignedCol && (
+                        <td className="px-6 py-4">
+                          {viewMode === 'authority' ? <TeamCrewCell report={report} /> : <DeptTag department={report.assigned_department} />}
+                        </td>
+                      )}
                       <td className="px-6 py-4">
                         <StatusBadge status={report.status} />
                         {isWorker && report.in_pool && (
@@ -691,19 +781,33 @@ export function ReportsPage() {
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5 font-bold">
-                          <span className={report.upvotes > 0 ? "text-amber-600" : "text-[#8a8477]"}>
-                            {report.upvotes || 0}
-                          </span>
-                        </div>
-                      </td>
+                      {showUpvotesCol && (
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <span className={report.upvotes > 0 ? "text-amber-600" : "text-[#8a8477]"}>
+                              {report.upvotes || 0}
+                            </span>
+                          </div>
+                        </td>
+                      )}
                       <td className="px-6 py-4 text-sm" style={{ color: '#8a8477' }}>
-                        {(() => {
-                          if (!report.timestamp) return '-';
-                          const d = new Date(report.timestamp);
-                          if (isNaN(d.getTime())) return String(report.timestamp);
-                          return format(d, 'MMM d, yyyy HH:mm');
+                        {viewMode === 'admin' ? (
+                          (() => {
+                            if (!report.timestamp) return '-';
+                            const d = new Date(report.timestamp);
+                            if (isNaN(d.getTime())) return String(report.timestamp);
+                            return format(d, 'MMM d, yyyy HH:mm');
+                          })()
+                        ) : (() => {
+                          const age = reportAge(report.timestamp);
+                          return (
+                            <span
+                              title={age.full}
+                              className={age.tone === 'high' ? 'text-red-700 font-bold' : age.tone === 'medium' ? 'text-amber-700 font-semibold' : ''}
+                            >
+                              {age.text}
+                            </span>
+                          );
                         })()}
                       </td>
                     </tr>
