@@ -6,7 +6,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   BarChart, Bar, LabelList,
 } from 'recharts';
-import { RefreshCw, MapPin, CheckCircle2, Clock, AlertTriangle, TrendingUp, Building2, Activity, Download, AlertCircle } from 'lucide-react';
+import { RefreshCw, MapPin, CheckCircle2, Clock, AlertTriangle, TrendingUp, Building2, Activity, Download, AlertCircle, Users, HardHat, Inbox } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
@@ -90,6 +90,8 @@ export function DashboardPage() {
 
   const deptId = getDeptId(role, user?.username);
   const canSeeTeams = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
+  const isWorker = role === 'worker' || role?.startsWith('worker_');
+  const [allReports, setAllReports] = useState([]);
 
   // Team load + release requests. Workers are refused these endpoints by the
   // backend, so failures are swallowed rather than breaking the dashboard.
@@ -160,10 +162,19 @@ export function DashboardPage() {
       
       setStats(finalStats);
       setTimeline(finalTimeline);
+      setAllReports(finalReports);
       const sorted = [...finalReports].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 20);
       setRecentReports(sorted);
-      
-      const resolvedReports = finalReports.filter(r => r.status === 'Resolved' && r.resolved_at && r.timestamp);
+
+      // A worker's SLA numbers should be about their own jobs, not the whole
+      // department's — "3 dept reports are stuck" isn't actionable to a
+      // worker who only owns one of them, but "1 of your jobs is stuck" is.
+      const myUsername = (user?.username || '').toLowerCase();
+      const slaBase = isWorker
+        ? finalReports.filter(r => (r.assigned_worker || '').toLowerCase() === myUsername)
+        : finalReports;
+
+      const resolvedReports = slaBase.filter(r => r.status === 'Resolved' && r.resolved_at && r.timestamp);
       let totalHours = 0;
       resolvedReports.forEach(r => {
         const start = new Date(r.timestamp);
@@ -174,7 +185,7 @@ export function DashboardPage() {
 
       const threeDaysAgo = new Date();
       threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-      const bottlenecks = finalReports.filter(r => r.status !== 'Resolved' && new Date(r.timestamp) < threeDaysAgo).length;
+      const bottlenecks = slaBase.filter(r => r.status !== 'Resolved' && new Date(r.timestamp) < threeDaysAgo).length;
 
       setSlaMetrics({ avgDays, bottlenecks });
       setError(null);
@@ -228,6 +239,35 @@ export function DashboardPage() {
     return recentReports.filter(r => reportMatchesDept(r, deptId));
   }, [recentReports, deptId]);
 
+  // Jobs actually claimed by this worker — from the full dept list, not the
+  // top-20 slice, so "My Resolved" isn't silently capped once history grows.
+  const myJobs = useMemo(() => {
+    if (!isWorker) return [];
+    const myUsername = (user?.username || '').toLowerCase();
+    return allReports.filter(r => (r.assigned_worker || '').toLowerCase() === myUsername);
+  }, [allReports, isWorker, user]);
+
+  // There's no "who am I" endpoint that returns a worker's own crew — GET
+  // /agencies/{id}/crews is authority/admin-only (main.py: _require_agency_
+  // owner). Every report already carries assigned_crew though, so the most
+  // recent one of the worker's own jobs tells us the same thing without a
+  // new backend route.
+  const myCrew = useMemo(() => {
+    if (!isWorker) return null;
+    const withCrew = [...myJobs]
+      .filter(r => r.assigned_crew)
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    return withCrew[0]?.assigned_crew || null;
+  }, [myJobs, isWorker]);
+
+  const myStats = useMemo(() => {
+    if (!isWorker) return null;
+    const active = myJobs.filter(r => ['In Process', 'In Maintenance'].includes(r.status)).length;
+    const resolved = myJobs.filter(r => r.status === 'Resolved').length;
+    const unclaimedInPool = allReports.filter(r => r.in_pool).length;
+    return { active, resolved, unclaimedInPool };
+  }, [myJobs, allReports, isWorker]);
+
 
   if (error) {
     return (
@@ -245,13 +285,19 @@ export function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="page-header-title">Overview Dashboard</h1>
+          <h1 className="page-header-title">{isWorker ? 'My Workflow' : 'Overview Dashboard'}</h1>
           <div className="page-header-sub mt-1">
             {deptId ? (
               <span className="flex items-center gap-2">
                 <span className="font-semibold text-[#3d4d34]">{user?.displayName}</span>
                 <span className="text-[#8a8477]">|</span>
                 <span>{AUTHORITIES.find(a => a.id === deptId)?.abbr || deptId.toUpperCase()} Department</span>
+                {isWorker && (
+                  <>
+                    <span className="text-[#8a8477]">|</span>
+                    <span>{myCrew ? `${myCrew} Crew` : 'General pool'}</span>
+                  </>
+                )}
                 {lastRefreshed && <span className="ml-2 text-xs text-[#8a8477]">· Last updated: {format(lastRefreshed, 'HH:mm:ss')}</span>}
               </span>
             ) : (
@@ -294,7 +340,11 @@ export function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#201f1b' }}>Bottleneck Alert</h3>
-                  <p className="text-sm font-medium" style={{ color: '#8a8477' }}>{slaMetrics.bottlenecks} report(s) have been stuck for over 3 days.</p>
+                  <p className="text-sm font-medium" style={{ color: '#8a8477' }}>
+                    {isWorker
+                      ? `${slaMetrics.bottlenecks} of your job(s) have been stuck for over 3 days.`
+                      : `${slaMetrics.bottlenecks} report(s) have been stuck for over 3 days.`}
+                  </p>
                 </div>
               </div>
               <div className="flex-1 rounded-2xl p-5 flex items-center gap-4" style={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.08)', boxShadow: '0 8px 32px rgba(31,30,26,0.06)' }}>
@@ -302,8 +352,12 @@ export function DashboardPage() {
                   <Clock size={28} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#201f1b' }}>SLA Performance</h3>
-                  <p className="text-sm font-medium" style={{ color: '#8a8477' }}>Average resolution time is {slaMetrics.avgDays} days.</p>
+                  <h3 className="text-sm font-bold uppercase tracking-wider mb-0.5" style={{ color: '#201f1b' }}>{isWorker ? 'Your Completion Speed' : 'SLA Performance'}</h3>
+                  <p className="text-sm font-medium" style={{ color: '#8a8477' }}>
+                    {isWorker
+                      ? `You resolve jobs in ${slaMetrics.avgDays} days on average.`
+                      : `Average resolution time is ${slaMetrics.avgDays} days.`}
+                  </p>
                 </div>
               </div>
             </div>
@@ -346,47 +400,94 @@ export function DashboardPage() {
             </div>
           )}
 
-          {/* Stat Cards */}
+          {/* Stat Cards — a worker's own output, not the department's totals */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-            <StatCard
-              title="Total Reports"
-              value={stats.total}
-              icon={<MapPin size={22} />}
-              iconColor="text-[#4a5d3f]"
-              bgColor="bg-[#4a5d3f]/10"
-              borderColor="border-[#4a5d3f]/20"
-              subtitle="All-time submissions"
-            />
-            <StatCard
-              title="Pending"
-              value={stats.pending}
-              icon={<AlertTriangle size={22} />}
-              iconColor="text-amber-600"
-              bgColor="bg-amber-500/10"
-              borderColor="border-amber-500/25"
-              subtitle="Awaiting admin review"
-            />
-            <StatCard
-              title="Active Work"
-              value={(stats.in_review || 0) + (stats.in_process || 0) + (stats.in_maintenance || 0)}
-              icon={<Activity size={22} />}
-              iconColor="text-blue-600"
-              bgColor="bg-blue-500/10"
-              borderColor="border-blue-500/25"
-              subtitle="In review / process / maint."
-            />
-            <StatCard
-              title="Resolved"
-              value={stats.resolved}
-              icon={<CheckCircle2 size={22} />}
-              iconColor="text-emerald-600"
-              bgColor="bg-emerald-500/10"
-              borderColor="border-emerald-500/25"
-              subtitle={`${resolutionRate}% resolution rate`}
-            />
+            {isWorker ? (
+              <>
+                <StatCard
+                  title="My Active Jobs"
+                  value={myStats.active}
+                  icon={<Activity size={22} />}
+                  iconColor="text-blue-600"
+                  bgColor="bg-blue-500/10"
+                  borderColor="border-blue-500/25"
+                  subtitle="In process / maintenance"
+                />
+                <StatCard
+                  title="Waiting In Pool"
+                  value={myStats.unclaimedInPool}
+                  icon={<Inbox size={22} />}
+                  iconColor="text-amber-600"
+                  bgColor="bg-amber-500/10"
+                  borderColor="border-amber-500/25"
+                  subtitle="Nobody's claimed these yet"
+                />
+                <StatCard
+                  title="My Resolved"
+                  value={myStats.resolved}
+                  icon={<CheckCircle2 size={22} />}
+                  iconColor="text-emerald-600"
+                  bgColor="bg-emerald-500/10"
+                  borderColor="border-emerald-500/25"
+                  subtitle="Completed by you"
+                />
+                <StatCard
+                  title="My Total Jobs"
+                  value={myJobs.length}
+                  icon={<HardHat size={22} />}
+                  iconColor="text-[#4a5d3f]"
+                  bgColor="bg-[#4a5d3f]/10"
+                  borderColor="border-[#4a5d3f]/20"
+                  subtitle="Ever assigned to you"
+                />
+              </>
+            ) : (
+              <>
+                <StatCard
+                  title="Total Reports"
+                  value={stats.total}
+                  icon={<MapPin size={22} />}
+                  iconColor="text-[#4a5d3f]"
+                  bgColor="bg-[#4a5d3f]/10"
+                  borderColor="border-[#4a5d3f]/20"
+                  subtitle="All-time submissions"
+                />
+                <StatCard
+                  title="Pending"
+                  value={stats.pending}
+                  icon={<AlertTriangle size={22} />}
+                  iconColor="text-amber-600"
+                  bgColor="bg-amber-500/10"
+                  borderColor="border-amber-500/25"
+                  subtitle="Awaiting admin review"
+                />
+                <StatCard
+                  title="Active Work"
+                  value={(stats.in_review || 0) + (stats.in_process || 0) + (stats.in_maintenance || 0)}
+                  icon={<Activity size={22} />}
+                  iconColor="text-blue-600"
+                  bgColor="bg-blue-500/10"
+                  borderColor="border-blue-500/25"
+                  subtitle="In review / process / maint."
+                />
+                <StatCard
+                  title="Resolved"
+                  value={stats.resolved}
+                  icon={<CheckCircle2 size={22} />}
+                  iconColor="text-emerald-600"
+                  bgColor="bg-emerald-500/10"
+                  borderColor="border-emerald-500/25"
+                  subtitle={`${resolutionRate}% resolution rate`}
+                />
+              </>
+            )}
           </div>
 
-          {/* Charts Row */}
+          {/* Charts Row + Status Breakdown — city/dept-wide trend data a
+              worker doesn't act on. Their own numbers are already in the
+              stat cards above. */}
+          {!isWorker && (
+          <>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
             {/* Timeline */}
             <div className="content-card lg:col-span-2">
@@ -472,6 +573,8 @@ export function DashboardPage() {
               })}
             </div>
           </div>
+          </>
+          )}
 
           {/* Department Performance Chart — Admin only */}
           {role === 'admin' && deptPerformanceData.length > 0 && (
@@ -505,17 +608,26 @@ export function DashboardPage() {
             </div>
           )}
 
-          {/* Recent Reports */}
+          {/* My Jobs (worker) / Recent Reports (admin, authority) */}
           <div className="content-card">
             <div className="content-card-header">
-              <div className="content-card-title">Recent Reports</div>
-              <span className="text-xs text-[#8a8477] font-medium">Showing 20 most recent reports · Tags show assigned dept.</span>
+              <div className="content-card-title">{isWorker ? 'My Jobs' : 'Recent Reports'}</div>
+              <span className="text-xs text-[#8a8477] font-medium">
+                {isWorker
+                  ? 'Everything currently claimed by you, most recent first.'
+                  : 'Showing 20 most recent reports · Tags show assigned dept.'}
+              </span>
             </div>
-            {recentReports.length === 0 ? (
-              <div className="flex items-center justify-center py-12 text-sm" style={{ color: 'rgba(138,132,119,0.85)' }}>No reports found.</div>
+            {(isWorker ? myJobs : recentReports).length === 0 ? (
+              <div className="flex items-center justify-center py-12 text-sm" style={{ color: 'rgba(138,132,119,0.85)' }}>
+                {isWorker ? "You haven't claimed any jobs yet." : 'No reports found.'}
+              </div>
             ) : (
               <div className="divide-y" style={{ borderColor: 'rgba(31,30,26,0.06)' }}>
-                {recentReports.map(report => {
+                {(isWorker
+                  ? [...myJobs].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 20)
+                  : recentReports
+                ).map(report => {
                   const isMyDept = deptId ? reportMatchesDept(report, deptId) : false;
                   const statusStyles = {
                     'Pending':        'bg-amber-500/10 border border-amber-500/30 text-amber-700',
@@ -536,8 +648,8 @@ export function DashboardPage() {
                       <span className="text-xs font-mono w-12 shrink-0" style={{ color: 'rgba(138,132,119,0.85)' }}>#{report.id}</span>
                       <span className="text-sm font-semibold flex-1 truncate" style={{ color: '#201f1b' }}>{report.categories || 'Uncategorized'}</span>
                       <span className="text-xs truncate max-w-[160px] hidden md:block" style={{ color: 'rgba(75,71,61,0.75)' }}>{report.address || 'Unknown'}</span>
-                      {report.assigned_department && <DeptTag department={report.assigned_department} />}
-                      {isMyDept && deptId && (
+                      {!isWorker && report.assigned_department && <DeptTag department={report.assigned_department} />}
+                      {!isWorker && isMyDept && deptId && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style={{ color: '#4338ca', background: 'rgba(79,70,229,0.12)', border: '1px solid rgba(79,70,229,0.25)' }}>YOUR DEPT</span>
                       )}
                       <span className={`px-2.5 py-0.5 text-xs font-bold rounded-lg shrink-0 ${statusCls}`}>{report.status || 'Pending'}</span>
