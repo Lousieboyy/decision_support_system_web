@@ -909,6 +909,24 @@ export function AnalyticsPage() {
       }
     });
 
+    // 1c. Fragile zones — not a speed or backlog problem, a "this keeps
+    // breaking" problem, so it needs a different fix and belongs in the same
+    // feed as the SPI/UCI warnings above rather than only inside its own band.
+    Object.entries(infrastructureFragility.domains).forEach(([zone, d]) => {
+      if (d.score != null && d.score < 60) {
+        insights.push({
+          id: `ifi-${zone}`, type: 'critical', title: `${zone} — fragile infrastructure`,
+          description: `Fragility score ${d.score}/100, driven mainly by ${d.driverLabel}.`,
+          zone,
+          action: d.driver === 'failureRate'
+            ? `Inspect installation/repair quality in ${zone} — repairs there aren't holding, so faster dispatch won't fix it.`
+            : d.driver === 'mtbf'
+            ? `Schedule a proactive inspection for ${zone} instead of waiting for the next citizen report.`
+            : `Check whether ${zone} is under-resourced relative to how often it actually breaks.`,
+        });
+      }
+    });
+
     // 2. Top performing zone — only among zones with enough reports to grade.
     const topZone = zoneScorecard.find(z => z.sufficient && z.resolutionRate >= 80);
     if (topZone) {
@@ -1005,7 +1023,7 @@ export function AnalyticsPage() {
 
     const priority = { critical: 0, warning: 1, info: 2, success: 3 };
     return insights.sort((a, b) => (priority[a.type] ?? 4) - (priority[b.type] ?? 4));
-  }, [filteredReports, servicePerformance, urbanCondition, zoneScorecard, deptSLAMetrics, rootCauseAdvisories]);
+  }, [filteredReports, servicePerformance, urbanCondition, infrastructureFragility, zoneScorecard, deptSLAMetrics, rootCauseAdvisories]);
 
   // 6. Coordinates list for density Heatmap
   const heatmapPoints = useMemo(() => {
