@@ -572,9 +572,13 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
     },
     ...(report.status !== 'Rejected' ? [
       { 
-        label: report.in_process_at 
-          ? (isCitizen ? 'Task Assigned to Worker' : `Assigned to Worker: ${report.assigned_worker || 'Unknown'}`) 
-          : 'Awaiting Worker Assignment', 
+        label: report.in_process_at
+          ? (isCitizen
+              ? 'Task Assigned to Worker'
+              : report.assigned_worker
+                ? `Assigned to Worker: ${report.assigned_worker}`
+                : 'Unclaimed — Sitting in Team Pool')
+          : 'Awaiting Worker Assignment',
         icon: <HardHat size={14} />, 
         time: fmtDate(report.in_process_at), 
         done: !!report.in_process_at 
