@@ -1,7 +1,7 @@
 describe('Map Page', () => {
   beforeEach(() => {
-    cy.login('admin', 'admin1234');
-    cy.contains('a', 'Map').click();
+    cy.login('admin', 'password');
+    cy.contains('a', 'Map View').click();
   });
 
   it('loads Leaflet map container and markers', () => {

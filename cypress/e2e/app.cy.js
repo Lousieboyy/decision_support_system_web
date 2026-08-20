@@ -37,12 +37,13 @@ describe('Decision Support System - E2E Test Suite', () => {
     it('logs in successfully with admin demo credentials', () => {
       // Enter demo admin credentials
       cy.get('input[type="text"]').type('admin');
-      cy.get('input[type="password"]').type('admin1234');
+      cy.get('input[type="password"]').type('password');
       cy.get('button[type="submit"]').click();
 
-      // Verify successful redirection to Dashboard
+      // Admin/authority land on the Analytics page (App.jsx's HomeRoute) —
+      // DashboardPage is worker-only, so "Dashboard" text never appears here.
       cy.url().should('eq', `${Cypress.config('baseUrl')}/`);
-      cy.contains('Dashboard').should('be.visible');
+      cy.contains('Infrastructure Analytics').should('be.visible');
     });
   });
 
@@ -50,13 +51,13 @@ describe('Decision Support System - E2E Test Suite', () => {
     beforeEach(() => {
       // Log in before each test in this block
       cy.get('input[type="text"]').type('admin');
-      cy.get('input[type="password"]').type('admin1234');
+      cy.get('input[type="password"]').type('password');
       cy.get('button[type="submit"]').click();
       cy.url().should('eq', `${Cypress.config('baseUrl')}/`);
     });
 
     it('navigates to the Interactive Map page', () => {
-      cy.contains('a', 'Map').click();
+      cy.contains('a', 'Map View').click();
       cy.url().should('include', '/map');
     });
 
@@ -65,9 +66,10 @@ describe('Decision Support System - E2E Test Suite', () => {
       cy.contains('a', 'Reports').click();
       cy.url().should('include', '/reports');
 
-      // Navigate to Analytics
-      cy.contains('a', 'Analytics').click();
-      cy.url().should('include', '/analytics');
+      // Analytics has no dedicated sidebar link for admin (it's what "Insights"
+      // at "/" already shows), but the route itself still exists directly.
+      cy.visit('/analytics');
+      cy.contains('Infrastructure Analytics').should('be.visible');
     });
 
     it('logs out successfully', () => {

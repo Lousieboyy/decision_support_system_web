@@ -14,11 +14,20 @@ describe('Account Request & Admin Workflow', () => {
   });
 
   it('admin approves the new account in User Management', () => {
-    cy.login('admin', 'admin1234');
-    cy.contains('User Management').click();
+    cy.login('admin', 'password');
+    cy.contains('a', 'Users').click();
 
-    // Verify pending user request appears and approve it
+    // Approving doesn't render the word "Approved" anywhere on this page —
+    // the row just leaves the Pending Requests list, and the account's
+    // status column reads "Active" (DBStaff.status, not "approved") once
+    // you switch to All Accounts.
     cy.contains(newUsername).parents('tr').contains('button', 'Approve').click();
-    cy.contains('Approved').should('be.visible');
+    cy.contains(newUsername).should('not.exist');
+
+    cy.contains('button', 'All Accounts').click();
+    // The status column sits past the table's horizontal scroll at this
+    // viewport width — scroll it into view rather than asserting existence
+    // alone, so this still catches a real rendering regression.
+    cy.contains(newUsername).parents('tr').contains('Active').scrollIntoView().should('be.visible');
   });
 });
