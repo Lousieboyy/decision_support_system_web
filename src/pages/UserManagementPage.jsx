@@ -12,16 +12,26 @@ const ROLE_COLORS = {
   worker: 'bg-stone-100 text-stone-700 border-stone-200',
 };
 
-function parseRole(role) {
+// Two shapes reach this function: backend-served accounts, where role is
+// plain ('authority' / 'worker') and the department lives in a separate
+// `agency` field (main.py's _serialize_staff); and the local demo-account
+// fallback, which bakes the department into the role string itself
+// ('authority_mbmb'). Handling only the second shape is what made every
+// real account except admin show up as "Unknown".
+function parseRole(role, agency) {
   if (role === 'admin') return { type: 'admin', dept: null };
+  if (role === 'authority') return { type: 'authority', dept: agency };
   if (role?.startsWith('authority_')) return { type: 'authority', dept: role.split('_').slice(1).join('_') };
+  if (role === 'worker') return { type: 'worker', dept: agency };
   if (role?.startsWith('worker_')) return { type: 'worker', dept: role.split('_').slice(1).join('_') };
   return { type: 'unknown', dept: null };
 }
 
-function RoleBadge({ role }) {
-  const { type, dept } = parseRole(role);
-  const authority = dept ? AUTHORITIES.find(a => a.id === dept) : null;
+function RoleBadge({ role, agency }) {
+  const { type, dept } = parseRole(role, agency);
+  // dept may be a short id ('mbmb', from the demo format) or a full agency
+  // name (from the backend), so match against whichever field actually fits.
+  const authority = dept ? AUTHORITIES.find(a => a.id === dept || a.name === dept || a.abbr === dept) : null;
 
   const cls = (type === 'authority' || type === 'worker') && authority?.color
     ? authority.color
@@ -189,7 +199,7 @@ export function UserManagementPage() {
                    <tr key={acc.id} className="transition-colors hover:bg-[#4a5d3f]/5">
                      <td className="px-6 py-4 font-mono font-medium" style={{ color: '#8a8477' }}>{acc.username}</td>
                      <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.agency || '—'}</td>
-                    <td className="px-6 py-4"><RoleBadge role={acc.role} /></td>
+                    <td className="px-6 py-4"><RoleBadge role={acc.role} agency={acc.agency} /></td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
@@ -232,7 +242,7 @@ export function UserManagementPage() {
                 <tr key={acc.id} className="transition-colors hover:bg-[#4a5d3f]/5">
                   <td className="px-6 py-4 font-mono font-medium" style={{ color: '#8a8477' }}>{acc.username}</td>
                   <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.agency || '—'}</td>
-                  <td className="px-6 py-4"><RoleBadge role={acc.role} /></td>
+                  <td className="px-6 py-4"><RoleBadge role={acc.role} agency={acc.agency} /></td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                       acc.status === 'active'  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700'  :
