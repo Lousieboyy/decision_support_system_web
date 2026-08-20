@@ -86,6 +86,33 @@ function TeamCrewCell({ report }) {
   );
 }
 
+// Crew work is shared — start-maintenance and complete-task both accept any
+// crew member, not just whoever claimed it first (see _require_crew_member
+// in main.py). A worker's queue can now include a teammate's claimed job,
+// so this makes it obvious at a glance whether a row is theirs or one
+// they're free to jump in and help with.
+function WorkerCell({ report, myUsername }) {
+  if (!report.assigned_worker) {
+    return (
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-block" style={{ color: '#b45309', background: 'rgba(180,83,9,0.10)', border: '1px solid rgba(180,83,9,0.25)' }}>
+        Unclaimed
+      </span>
+    );
+  }
+  const isMine = report.assigned_worker === myUsername;
+  return (
+    <span
+      className="text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-block"
+      style={isMine
+        ? { color: '#3d4d34', background: 'rgba(74,93,63,0.10)', border: '1px solid rgba(74,93,63,0.20)' }
+        : { color: '#4b473d', background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)' }}
+      title={isMine ? 'Your job' : `${report.assigned_worker}'s job — you're on the same crew, you can help`}
+    >
+      {isMine ? 'You' : report.assigned_worker}
+    </span>
+  );
+}
+
 // Relative age reads faster than a timestamp when the question is "has this
 // been sitting too long" — the thing a worker or authority actually scans
 // for. Tone escalates the same way a worker would triage by eye.
@@ -244,10 +271,12 @@ export function ReportsPage() {
   // the status tabs above. Admin verifies (needs the photo + AI confidence),
   // authority dispatches (needs crew/claim status + citizen pressure),
   // worker executes (needs location + priority + the action button, nothing
-  // it can't use).
+  // it can't use). Worker still gets this column — crew work is shared, so
+  // their queue can include a teammate's claimed job, and they need to tell
+  // "mine" from "theirs, I can help" at a glance.
   const showImageCol = viewMode === 'admin';
   const showAiCol = viewMode === 'admin';
-  const showAssignedCol = viewMode !== 'worker';
+  const showAssignedCol = true;
   const showUpvotesCol = viewMode !== 'worker';
   const colCount = 6 // ID, Category, Location, Status, Priority, Reported At
     + (showImageCol ? 1 : 0)
@@ -648,7 +677,9 @@ export function ReportsPage() {
                     </th>
                   )}
                   {showAssignedCol && (
-                    <th className="px-6 py-4">{viewMode === 'authority' ? 'Team & Crew' : 'Assigned To'}</th>
+                    <th className="px-6 py-4">
+                      {viewMode === 'authority' ? 'Team & Crew' : viewMode === 'worker' ? 'Worker' : 'Assigned To'}
+                    </th>
                   )}
                   <th className="px-6 py-4 cursor-pointer group" onClick={() => toggleSort('status')}>
                     <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
@@ -742,7 +773,11 @@ export function ReportsPage() {
                       )}
                       {showAssignedCol && (
                         <td className="px-6 py-4">
-                          {viewMode === 'authority' ? <TeamCrewCell report={report} /> : <DeptTag department={report.assigned_department} />}
+                          {viewMode === 'authority'
+                            ? <TeamCrewCell report={report} />
+                            : viewMode === 'worker'
+                              ? <WorkerCell report={report} myUsername={user?.username} />
+                              : <DeptTag department={report.assigned_department} />}
                         </td>
                       )}
                       <td className="px-6 py-4">

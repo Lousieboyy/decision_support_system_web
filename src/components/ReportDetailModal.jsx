@@ -391,7 +391,7 @@ function TimelineStep({ icon, label, time, active, last }) {
 
 export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'admin' }) {
   const isCitizen = currentRole?.toLowerCase() === 'citizen';
-  const { logStatusChange } = useAuth();
+  const { logStatusChange, user } = useAuth();
   const [manualStatus, setManualStatus] = useState(report?.status || 'Pending');
   const [updating, setUpdating] = useState(false);
 
@@ -1145,10 +1145,22 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                       {actionLoading ? 'Accepting...' : 'Accept Task'}
                     </button>
                   </>
-                ) : (
+                ) : report.assigned_worker === user?.username ? (
                   <>
                     <h3 className="font-bold text-[#201f1b] mb-2">You've been assigned this task</h3>
                     <p className="text-sm text-[#8a8477] mb-4">Click below when you have arrived at the location and are starting the maintenance work.</p>
+                    <button onClick={handleWorkerStart} disabled={actionLoading} className="w-full py-3 bg-[#4a5d3f] text-white font-bold text-sm rounded-xl hover:bg-[#3d4d34] border border-[#4a5d3f] disabled:opacity-50 cursor-pointer">
+                      {actionLoading ? 'Updating...' : 'Start Work'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Crew work is shared: start-maintenance and complete-task
+                        both accept any crew member, not just whoever claimed it
+                        first (see _require_crew_member in main.py) — so this
+                        button is real, not a dead end for a teammate's job. */}
+                    <h3 className="font-bold text-[#201f1b] mb-2">{report.assigned_worker || 'A teammate'} is on this — you can help too</h3>
+                    <p className="text-sm text-[#8a8477] mb-4">This is shared crew work, not solo work. Anyone on the crew can pitch in, not just whoever accepted it first.</p>
                     <button onClick={handleWorkerStart} disabled={actionLoading} className="w-full py-3 bg-[#4a5d3f] text-white font-bold text-sm rounded-xl hover:bg-[#3d4d34] border border-[#4a5d3f] disabled:opacity-50 cursor-pointer">
                       {actionLoading ? 'Updating...' : 'Start Work'}
                     </button>
