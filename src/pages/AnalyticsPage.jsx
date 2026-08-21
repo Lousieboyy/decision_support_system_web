@@ -1417,63 +1417,6 @@ export function AnalyticsPage() {
           <div className="space-y-6 animate-fade-in">
             {filterBar}
 
-            {/* Today's Priorities — the ranked "what to actually do" list.
-                Previously the landing tab was five passive stat cards, and
-                the only place an evidence-backed action list existed was
-                the Dispatch & Audit tab, three clicks away. Same ranking
-                prioritizedDispatchQueue already computes — just surfaced
-                where the page opens instead of buried where it doesn't. */}
-            <div className="content-card">
-              <div className="content-card-header">
-                <div className="content-card-title">Today's Priorities</div>
-                <span className="text-[11px] text-[#8a8477]">
-                  Ranked by how much this needs attention right now
-                </span>
-              </div>
-              <div className="p-5">
-                {prioritizedDispatchQueue.length === 0 ? (
-                  <div className="py-6 text-center text-sm text-[#8a8477]">
-                    Nothing urgent right now — no cluster meets the current size threshold.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {prioritizedDispatchQueue.slice(0, 3).map((item, i) => {
-                      return (
-                        <div
-                          key={item.id}
-                          className="rounded-xl p-4 border border-[#1f1e1a]/8"
-                          style={{ background: 'var(--cream-100)' }}
-                        >
-                          <div className="flex gap-4 items-center">
-                            <span className="text-2xl font-black text-[#8a8477] shrink-0 w-7 text-center">
-                              {i + 1}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <span className="text-sm font-bold text-[#201f1b]">
-                                {item.address || item.category}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="mt-3 pl-11 flex">
-                            <ClusterDispatchAction item={item} onDispatched={loadData} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                {prioritizedDispatchQueue.length > 3 && (
-                  <button
-                    onClick={() => setActiveViewTab('dispatch')}
-                    className="mt-4 text-xs font-bold flex items-center gap-1"
-                    style={{ color: '#3d4d34' }}
-                  >
-                    See all {prioritizedDispatchQueue.length} <ChevronRight size={13} />
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
