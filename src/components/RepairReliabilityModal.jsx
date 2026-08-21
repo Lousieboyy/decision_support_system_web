@@ -1,4 +1,5 @@
-import { X, Info, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { X, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
@@ -40,6 +41,11 @@ function ReliabilityTooltip({ active, payload }) {
  */
 export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents = [], auditActions, onClose }) {
   const auditAvailable = auditActions !== null;
+  const [selectedAuthority, setSelectedAuthority] = useState(null);
+
+  const visibleIncidents = selectedAuthority
+    ? reincidenceIncidents.filter((inc) => inc.authority === selectedAuthority)
+    : reincidenceIncidents;
 
   return (
     <>
@@ -70,27 +76,45 @@ export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents =
             {contractorAudit.length === 0 ? (
               <div className="text-center text-[#8a8477] py-8 text-sm">No department data available</div>
             ) : (
-              <div style={{ height: Math.max(120, contractorAudit.length * 44) }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={contractorAudit} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
-                    <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
-                    <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={170} />
-                    <Tooltip content={<ReliabilityTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
-                    <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={26}>
-                      {contractorAudit.map((d) => (
-                        <Cell key={d.name} fill={rateColor(d.rate)} />
-                      ))}
-                      <LabelList
+              <>
+                <div style={{ height: Math.max(120, contractorAudit.length * 44) }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={contractorAudit} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
+                      <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
+                      <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={170} />
+                      <Tooltip content={<ReliabilityTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
+                      <Bar
                         dataKey="rate"
-                        position="right"
-                        formatter={(v) => (v == null ? 'no data' : `${v}%`)}
-                        style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+                        radius={[0, 4, 4, 0]}
+                        maxBarSize={26}
+                        cursor="pointer"
+                        onClick={(d) => {
+                          const name = d?.payload?.name ?? d?.name;
+                          setSelectedAuthority((prev) => (prev === name ? null : name));
+                        }}
+                      >
+                        {contractorAudit.map((d) => (
+                          <Cell
+                            key={d.name}
+                            fill={rateColor(d.rate)}
+                            fillOpacity={!selectedAuthority || selectedAuthority === d.name ? 1 : 0.3}
+                          />
+                        ))}
+                        <LabelList
+                          dataKey="rate"
+                          position="right"
+                          formatter={(v) => (v == null ? 'no data' : `${v}%`)}
+                          style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-[10px] text-[#8a8477] -mt-1 mb-2">
+                  Click a bar to filter the incidents below to that department.
+                </p>
+              </>
             )}
 
             <p className="text-[10px] text-[#8a8477] mt-3 leading-relaxed">
@@ -124,18 +148,33 @@ export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents =
 
             {reincidenceIncidents.length > 0 && (
               <div className="mt-6 pt-5 border-t border-[#1f1e1a]/8">
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                   <div className="text-xs font-black text-[#201f1b] uppercase tracking-wide">Repeat-failure incidents</div>
                   <span className="text-[11px] text-[#8a8477]">
-                    {reincidenceIncidents.length} case{reincidenceIncidents.length === 1 ? '' : 's'}, most recent first
+                    {visibleIncidents.length} case{visibleIncidents.length === 1 ? '' : 's'}, most recent first
                   </span>
                 </div>
-                <p className="text-xs text-[#8a8477] mb-4 leading-relaxed">
+                <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
                   Every pair behind the counts above — the resolved repair, and the new complaint
                   of the same category that showed up nearby afterward.
                 </p>
+                {selectedAuthority && (
+                  <button
+                    onClick={() => setSelectedAuthority(null)}
+                    className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+                    style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
+                  >
+                    {selectedAuthority}
+                    <X size={11} />
+                  </button>
+                )}
+                {visibleIncidents.length === 0 ? (
+                  <div className="text-center text-[#8a8477] py-6 text-xs">
+                    No repeat-failure incidents for {selectedAuthority}.
+                  </div>
+                ) : (
                 <div className="space-y-3">
-                  {reincidenceIncidents.map((inc) => (
+                  {visibleIncidents.map((inc) => (
                     <div key={inc.id} className="rounded-xl p-4 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
                       <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                         <span className="text-xs font-bold text-[#201f1b]">{inc.category}</span>
@@ -156,6 +195,7 @@ export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents =
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             )}
           </div>
