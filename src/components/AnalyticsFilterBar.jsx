@@ -12,11 +12,18 @@
 export function AnalyticsFilterBar({
   dateFilter,
   onDateFilterChange,
+  customStart,
+  customEnd,
+  onCustomStartChange,
+  onCustomEndChange,
   selectedDept,
   onDeptChange,
   departments,
   canChooseDept,
 }) {
+  const dateInputClass =
+    "bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-3 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors";
+
   return (
     <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-5">
       <div className="flex flex-wrap items-center gap-6 text-left">
@@ -32,8 +39,34 @@ export function AnalyticsFilterBar({
             <option value="all">All Time</option>
             <option value="7d">Last 7 Days</option>
             <option value="30d">Last 30 Days</option>
+            <option value="custom">Custom Range</option>
           </select>
         </div>
+
+        {dateFilter === 'custom' && (
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">
+              Date Range
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customStart}
+                max={customEnd || undefined}
+                onChange={(e) => onCustomStartChange(e.target.value)}
+                className={dateInputClass}
+              />
+              <span className="text-[#8a8477] text-xs">to</span>
+              <input
+                type="date"
+                value={customEnd}
+                min={customStart || undefined}
+                onChange={(e) => onCustomEndChange(e.target.value)}
+                className={dateInputClass}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">

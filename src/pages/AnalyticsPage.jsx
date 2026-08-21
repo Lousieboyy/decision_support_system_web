@@ -15,7 +15,7 @@ import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
   CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck
 } from 'lucide-react';
-import { format, parseISO, subDays } from 'date-fns';
+import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor, RISK_TONE, DEFAULT_RISK_TONE,
@@ -118,6 +118,8 @@ export function AnalyticsPage() {
 
   // Scoping and Filter State
   const [dateFilter, setDateFilter] = useState('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   
   // Initialize department filter based on user role and username
   const initialDept = useMemo(() => {
@@ -214,7 +216,13 @@ export function AnalyticsPage() {
     if (!reportTimestamp) return false;
     const date = new Date(reportTimestamp);
     if (isNaN(date.getTime())) return false;
-    
+
+    if (dateFilter === 'custom') {
+      if (customStart && date < new Date(customStart)) return false;
+      if (customEnd && date > endOfDay(new Date(customEnd))) return false;
+      return true;
+    }
+
     const daysAgo = dateFilter === '7d' ? 7 : 30;
     const cutOff = subDays(new Date(), daysAgo);
     return date >= cutOff;
@@ -234,7 +242,7 @@ export function AnalyticsPage() {
       
       return true;
     });
-  }, [reports, selectedDept, dateFilter]);
+  }, [reports, selectedDept, dateFilter, customStart, customEnd]);
 
   // 1. Proximity Clustering for Hotspot Detection
   const hotspots = useMemo(() => {
@@ -1296,6 +1304,14 @@ export function AnalyticsPage() {
   // than it is — the standard survivorship trap in SLA reporting.
   const dateFilterLabel = dateFilter === 'all'
     ? 'All reports, cohorted by submission date'
+    : dateFilter === 'custom'
+    ? customStart && customEnd
+      ? `Reports submitted ${format(new Date(customStart), 'd MMM yyyy')} – ${format(new Date(customEnd), 'd MMM yyyy')}`
+      : customStart
+      ? `Reports submitted from ${format(new Date(customStart), 'd MMM yyyy')} onward`
+      : customEnd
+      ? `Reports submitted through ${format(new Date(customEnd), 'd MMM yyyy')}`
+      : 'All reports, cohorted by submission date (no custom range set)'
     : `Reports submitted in the last ${dateFilter === '7d' ? '7' : '30'} days`;
 
   // One instance rendered on every tab. City Health previously had no filter UI
@@ -1305,6 +1321,10 @@ export function AnalyticsPage() {
     <AnalyticsFilterBar
       dateFilter={dateFilter}
       onDateFilterChange={setDateFilter}
+      customStart={customStart}
+      customEnd={customEnd}
+      onCustomStartChange={setCustomStart}
+      onCustomEndChange={setCustomEnd}
       selectedDept={selectedDept}
       onDeptChange={setSelectedDept}
       departments={departmentOptions}
