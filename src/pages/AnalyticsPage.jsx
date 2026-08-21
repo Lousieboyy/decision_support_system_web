@@ -2234,7 +2234,6 @@ export function AnalyticsPage() {
       {showReliabilityModal && (
         <RepairReliabilityModal
           contractorAudit={contractorAudit}
-          reincidenceIncidents={reliabilityAudit.incidents}
           auditActions={auditActions}
           onClose={() => setShowReliabilityModal(false)}
         />

@@ -39,13 +39,14 @@ function ReliabilityTooltip({ active, payload }) {
  * rather than a tab switch — this used to live on the Dispatch & Audit tab,
  * three clicks from the card that references it.
  */
-export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents = [], auditActions, onClose }) {
+export function RepairReliabilityModal({ contractorAudit, auditActions, onClose }) {
   const auditAvailable = auditActions !== null;
   const [selectedAuthority, setSelectedAuthority] = useState(null);
 
-  const visibleIncidents = selectedAuthority
-    ? reincidenceIncidents.filter((inc) => inc.authority === selectedAuthority)
-    : reincidenceIncidents;
+  const selectedRow = selectedAuthority
+    ? contractorAudit.find((d) => d.name === selectedAuthority)
+    : null;
+  const selectedGrade = selectedRow?.rate == null ? null : gradeFor(selectedRow.rate);
 
   return (
     <>
@@ -112,7 +113,7 @@ export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents =
                   </ResponsiveContainer>
                 </div>
                 <p className="text-[10px] text-[#8a8477] -mt-1 mb-2">
-                  Click a bar to filter the incidents below to that department.
+                  Click a bar to see every resolved ticket behind that department's numbers.
                 </p>
               </>
             )}
@@ -146,58 +147,75 @@ export function RepairReliabilityModal({ contractorAudit, reincidenceIncidents =
               </p>
             )}
 
-            {reincidenceIncidents.length > 0 && (
-              <div className="mt-6 pt-5 border-t border-[#1f1e1a]/8">
-                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-                  <div className="text-xs font-black text-[#201f1b] uppercase tracking-wide">Repeat-failure incidents</div>
-                  <span className="text-[11px] text-[#8a8477]">
-                    {visibleIncidents.length} case{visibleIncidents.length === 1 ? '' : 's'}, most recent first
-                  </span>
+            <div className="mt-6 pt-5 border-t border-[#1f1e1a]/8">
+              {!selectedAuthority ? (
+                <div className="text-center text-[#8a8477] py-8 text-xs leading-relaxed">
+                  Click a department bar above to see the evidence behind its numbers —<br />
+                  every resolved ticket, which ones missed the SLA, and which ones came back.
                 </div>
-                <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
-                  Every pair behind the counts above — the resolved repair, and the new complaint
-                  of the same category that showed up nearby afterward.
-                </p>
-                {selectedAuthority && (
-                  <button
-                    onClick={() => setSelectedAuthority(null)}
-                    className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
-                    style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
-                  >
-                    {selectedAuthority}
-                    <X size={11} />
-                  </button>
-                )}
-                {visibleIncidents.length === 0 ? (
-                  <div className="text-center text-[#8a8477] py-6 text-xs">
-                    No repeat-failure incidents for {selectedAuthority}.
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                    <div className="text-xs font-black text-[#201f1b] uppercase tracking-wide">Evidence — {selectedAuthority}</div>
+                    <button
+                      onClick={() => setSelectedAuthority(null)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+                      style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
+                    >
+                      Clear <X size={11} />
+                    </button>
                   </div>
-                ) : (
-                <div className="space-y-3">
-                  {visibleIncidents.map((inc) => (
-                    <div key={inc.id} className="rounded-xl p-4 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
-                      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                        <span className="text-xs font-bold text-[#201f1b]">{inc.category}</span>
-                        <span className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wide">{inc.authority}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        <div>
-                          <div className="text-[9px] font-bold text-[#8a8477] uppercase tracking-wider mb-0.5">Original repair</div>
-                          <div className="text-[#4b473d] font-semibold">{inc.originalAddress}</div>
-                          <div className="text-[#8a8477]">Resolved {fmtDate(inc.originalResolvedAt)}</div>
-                        </div>
-                        <div>
-                          <div className="text-[9px] font-bold text-[#c1613f] uppercase tracking-wider mb-0.5">Reappeared</div>
-                          <div className="text-[#4b473d] font-semibold">{inc.newAddress}</div>
-                          <div className="text-[#8a8477]">Reported {fmtDate(inc.newReportedAt)} · {inc.distanceM}m away</div>
-                        </div>
-                      </div>
+                  <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
+                    {selectedRow?.resolvedCount ?? 0} resolved ticket{selectedRow?.resolvedCount === 1 ? '' : 's'}
+                    {' · '}
+                    {selectedRow?.reIncidence > 0 ? (
+                      <span className="text-[#c1613f] font-bold">{selectedRow.reIncidence} repeat failure{selectedRow.reIncidence === 1 ? '' : 's'}</span>
+                    ) : 'no repeat failures'}
+                    {selectedGrade && <> · Grade <strong style={{ color: rateColor(selectedRow.rate) }}>{selectedGrade.grade}</strong></>}
+                    {' — every ticket below, most recently resolved first.'}
+                  </p>
+                  {!selectedRow?.tickets?.length ? (
+                    <div className="text-center text-[#8a8477] py-6 text-xs">
+                      No resolved tickets with both a submitted and resolved date for {selectedAuthority}.
                     </div>
-                  ))}
-                </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                      {selectedRow.tickets.map((t) => (
+                        <div key={t.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
+                          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                            <span className="text-xs font-bold text-[#201f1b]">{t.address}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
+                                style={t.onTime
+                                  ? { color: '#15803d', background: 'rgba(21,128,61,0.1)' }
+                                  : { color: '#b45309', background: 'rgba(180,83,9,0.1)' }}
+                              >
+                                {t.onTime ? 'On time' : 'Late'}
+                              </span>
+                              {t.reappeared && (
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide" style={{ color: '#b91c1c', background: 'rgba(185,28,28,0.1)' }}>
+                                  Repeat failure
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-[#8a8477]">
+                            {t.category} · Resolved {fmtDate(t.resolvedAt)} · {t.daysToResolve}d to fix
+                          </div>
+                          {t.reappeared && (
+                            <div className="mt-2 pt-2 border-t border-[#1f1e1a]/8 text-[10px]">
+                              <span className="font-bold text-[#c1613f]">Reappeared</span>{' '}
+                              at {t.reappearedAddress}, reported {fmtDate(t.reappearedAt)} · {t.reappearedDistanceM}m away
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

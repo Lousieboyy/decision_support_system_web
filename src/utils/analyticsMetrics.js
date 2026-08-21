@@ -569,6 +569,13 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
     return byAuthority.get(authority.abbr);
   };
 
+  // Every resolved ticket behind the aggregate counts, keyed by report id so
+  // the reincidence pass below can mark which ones turned out not to hold —
+  // the evidence trail behind "15 resolved, 7 repeat failures, Grade F"
+  // rather than just the three numbers.
+  const ticketById = new Map();
+  const ticketsByAuthority = new Map();
+
   for (const r of resolved) {
     const authority = findAuthority(r);
     if (!authority) continue;
@@ -577,7 +584,26 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
     if (start == null || end == null) continue;
     const entry = bucket(authority);
     entry.resolvedCount += 1;
-    if ((end - start) / MS_PER_DAY <= SLA_END_TO_END_DAYS) entry.onTimeCount += 1;
+    const daysToResolve = (end - start) / MS_PER_DAY;
+    const onTime = daysToResolve <= SLA_END_TO_END_DAYS;
+    if (onTime) entry.onTimeCount += 1;
+
+    const ticket = {
+      id: r.id,
+      address: r.address || r.location || 'Unknown location',
+      category: canonicalizeCategory(r.categories || r.ai_prediction),
+      submittedAt: r.timestamp,
+      resolvedAt: r.resolved_at,
+      daysToResolve: Math.round(daysToResolve * 10) / 10,
+      onTime,
+      reappeared: false,
+      reappearedAt: null,
+      reappearedAddress: null,
+      reappearedDistanceM: null,
+    };
+    ticketById.set(r.id, ticket);
+    if (!ticketsByAuthority.has(authority.abbr)) ticketsByAuthority.set(authority.abbr, []);
+    ticketsByAuthority.get(authority.abbr).push(ticket);
   }
 
   const incidents = [];
@@ -605,6 +631,13 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
       const authority = findAuthority(nearest);
       if (authority) {
         bucket(authority).reIncidence += 1;
+        const ticket = ticketById.get(nearest.id);
+        if (ticket) {
+          ticket.reappeared = true;
+          ticket.reappearedAt = report.timestamp;
+          ticket.reappearedAddress = report.address || report.location || 'Unknown location';
+          ticket.reappearedDistanceM = Math.round(nearestDist);
+        }
         incidents.push({
           id: `${nearest.id}-${report.id}`,
           authority: authority.name,
@@ -627,6 +660,9 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
       reIncidence: d.reIncidence,
       resolvedCount: d.resolvedCount,
       rate: d.resolvedCount ? Math.round((d.onTimeCount / d.resolvedCount) * 100) : null,
+      tickets: (ticketsByAuthority.get(d.key) || [])
+        .slice()
+        .sort((a, b) => (toDate(b.resolvedAt) || 0) - (toDate(a.resolvedAt) || 0)),
     }))
     .sort((a, b) => b.resolvedCount - a.resolvedCount);
 
