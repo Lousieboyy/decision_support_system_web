@@ -3,16 +3,10 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ErrorBar, Cell, ReferenceLine,
 } from 'recharts';
-import { AlertTriangle, Info, X } from 'lucide-react';
-import { format } from 'date-fns';
+import { AlertTriangle, Info } from 'lucide-react';
 import { buildFunnel, buildComposition } from '../utils/analyticsMetrics';
 import { SLA_TARGET_DAYS, SLA_END_TO_END_DAYS, MIN_N_FOR_STAGE } from '../utils/analyticsConstants';
-
-const fmtDate = (v) => {
-  if (!v) return 'unknown date';
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy HH:mm');
-};
+import { StageEvidenceModal } from './StageEvidenceModal';
 
 const SEGMENT_COLORS = {
   triage: '#6366f1',
@@ -207,43 +201,11 @@ export function StageFunnel({ reports, dateFilterLabel }) {
             </p>
 
             {selectedStage && (
-              <div className="mt-4 pt-4 border-t border-[#1f1e1a]/8">
-                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-                  <div className="text-xs font-black text-[#201f1b] uppercase tracking-wide">
-                    Evidence — {selectedStage.label}
-                  </div>
-                  <button
-                    onClick={() => setSelectedStageKey(null)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
-                    style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
-                  >
-                    Clear <X size={11} />
-                  </button>
-                </div>
-                <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
-                  {selectedStage.n} report{selectedStage.n === 1 ? '' : 's'} have reached this stage
-                  {selectedStage.sufficient && <> · median {fmtDays(selectedStage.median)}</>}
-                  {' — every one below, slowest first.'}
-                </p>
-                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                  {selectedStage.reports.map((r) => (
-                    <div key={r.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
-                      <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-                        <span className="text-xs font-bold text-[#201f1b]">{r.address}</span>
-                        <span className="text-xs font-black" style={{ color: SEGMENT_COLORS[selectedStage.key] }}>
-                          {fmtDays(r.value)}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-[#8a8477]">
-                        {r.category} · {r.status}
-                      </div>
-                      <div className="text-[10px] text-[#8a8477] mt-0.5">
-                        {fmtDate(r.fromAt)} → {fmtDate(r.toAt)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <StageEvidenceModal
+                stage={selectedStage}
+                color={SEGMENT_COLORS[selectedStage.key]}
+                onClose={() => setSelectedStageKey(null)}
+              />
             )}
 
             {/* Composition strip — means, because only means are additive. */}
