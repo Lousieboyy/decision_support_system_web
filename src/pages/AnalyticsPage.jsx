@@ -117,7 +117,7 @@ export function AnalyticsPage() {
   const [mapReady, setMapReady] = useState(false);
 
   // Scoping and Filter State
-  const [dateFilter, setDateFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('custom');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   
