@@ -1,50 +1,14 @@
-import { Info, AlertTriangle } from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
-} from 'recharts';
-import { format } from 'date-fns';
-import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, RISK_TONE, DEFAULT_RISK_TONE } from '../utils/analyticsConstants';
+import { Info } from 'lucide-react';
+import { RISK_TONE, DEFAULT_RISK_TONE } from '../utils/analyticsConstants';
 import { ClusterDispatchAction } from './ClusterDispatchAction';
 
-const fmtDate = (v) => {
-  if (!v) return 'unknown date';
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy');
-};
-
-const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
-
-function ReliabilityTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const grade = d.rate == null ? null : gradeFor(d.rate);
-  return (
-    <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
-      <div className="font-bold text-[#201f1b] mb-1">{d.name}</div>
-      <div className="text-[#4b473d] space-y-0.5">
-        <div>{d.resolvedCount ?? 0} resolved tickets</div>
-        <div>
-          {d.reIncidence > 0 ? (
-            <span className="text-[#c1613f] font-bold">{d.reIncidence} repeat failure{d.reIncidence === 1 ? '' : 's'}</span>
-          ) : 'No repeat failures'}
-        </div>
-        {grade && <div>Grade <strong style={{ color: rateColor(d.rate) }}>{grade.grade}</strong></div>}
-      </div>
-    </div>
-  );
-}
-
 /**
- * The two analytics that were computed on every render but never displayed.
- *
  * The dispatch queue ranks clusters by criticality so a duty officer can decide
- * where to send the next crew. The contractor audit answers a different and
- * harder question — whether a completed repair actually held — by looking for a
- * new complaint of the same category near a previously resolved one.
+ * where to send the next crew. The repair-reliability breakdown (was a second
+ * section on this tab) now lives in its own modal off the Repair Reliability
+ * card, opened without leaving the Overview tab.
  */
-export function DispatchAudit({ dispatchQueue, contractorAudit, reincidenceIncidents = [], auditActions, onDispatched }) {
-  const auditAvailable = auditActions !== null;
-
+export function DispatchAudit({ dispatchQueue, onDispatched }) {
   return (
     <div className="space-y-6">
       {/* ── Dispatch priority queue ─────────────────────────────── */}
@@ -125,126 +89,6 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, reincidenceIncid
           </p>
         </div>
       </div>
-
-      {/* ── Repeat-failure audit ────────────────────────────────── */}
-      <div className="content-card">
-        <div className="content-card-header">
-          <div className="content-card-title">Repeat-failure audit</div>
-          <span className="text-[11px] text-[#8a8477]">
-            Did the fix hold?
-          </span>
-        </div>
-        <div className="p-5">
-          <p className="text-xs text-[#8a8477] mb-4 leading-relaxed">
-            A new complaint of the same category within {REINCIDENCE.radiusM}m and{' '}
-            {REINCIDENCE.windowDays} days of a resolved one suggests the earlier repair did
-            not hold. This is the closest thing available to a measure of the city's actual
-            condition rather than the council's response speed.
-          </p>
-
-          {contractorAudit.length === 0 ? (
-            <div className="text-center text-[#8a8477] py-8 text-sm">No department data available</div>
-          ) : (
-            <div style={{ height: Math.max(120, contractorAudit.length * 44) }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={contractorAudit} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
-                  <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
-                  <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={170} />
-                  <Tooltip content={<ReliabilityTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
-                  <Bar dataKey="rate" radius={[0, 4, 4, 0]} maxBarSize={26}>
-                    {contractorAudit.map((d) => (
-                      <Cell key={d.name} fill={rateColor(d.rate)} />
-                    ))}
-                    <LabelList
-                      dataKey="rate"
-                      position="right"
-                      formatter={(v) => (v == null ? 'no data' : `${v}%`)}
-                      style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
-                    />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          <p className="text-[10px] text-[#8a8477] mt-3 leading-relaxed">
-            On-time rate is the share of resolved tickets closed within{' '}
-            {SLA_END_TO_END_DAYS} days, measured from submission. Tickets missing either
-            date are excluded from both sides of the ratio rather than counted as on time.
-          </p>
-
-          {/* A percentage alone doesn't say what to do — name whoever has
-              actual repeat failures, since that's a different problem than
-              a low on-time rate (repairs that don't hold vs. repairs that
-              are just slow). */}
-          {contractorAudit.length > 0 && (() => {
-            const worst = [...contractorAudit].sort((a, b) => (b.reIncidence || 0) - (a.reIncidence || 0))[0];
-            return worst.reIncidence > 0 ? (
-              <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(185,28,28,0.06)', color: '#b91c1c' }}>
-                {worst.name} has the most repeat failures ({worst.reIncidence}) — worth checking whether the problem
-                is how it repairs, not just how fast.
-              </div>
-            ) : (
-              <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}>
-                No department has a repeat failure right now — repairs are holding.
-              </div>
-            );
-          })()}
-
-          {!auditAvailable && (
-            <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
-              <AlertTriangle size={10} className="inline mr-1 -mt-0.5 text-amber-700" />
-              Estimated from report timestamps. Per-cycle detail — who handled each
-              attempt, and how long each abandoned cycle took — requires the workflow
-              audit endpoint, which this backend does not serve.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Repeat-failure incidents — the "time, place" evidence behind the
-          percentages above. Each row is one specific repair that didn't
-          hold: where the original fix was, when it was resolved, and where
-          and when the same category reappeared nearby. ─────────────────── */}
-      {reincidenceIncidents.length > 0 && (
-        <div className="content-card">
-          <div className="content-card-header">
-            <div className="content-card-title">Repeat-failure incidents</div>
-            <span className="text-[11px] text-[#8a8477]">
-              {reincidenceIncidents.length} case{reincidenceIncidents.length === 1 ? '' : 's'}, most recent first
-            </span>
-          </div>
-          <div className="p-5">
-            <p className="text-xs text-[#8a8477] mb-4 leading-relaxed">
-              Every pair behind the repeat-failure counts above — the resolved repair, and
-              the new complaint of the same category that showed up nearby afterward.
-            </p>
-            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-              {reincidenceIncidents.map((inc) => (
-                <div key={inc.id} className="rounded-xl p-4 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
-                  <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                    <span className="text-xs font-bold text-[#201f1b]">{inc.category}</span>
-                    <span className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wide">{inc.authority}</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <div className="text-[9px] font-bold text-[#8a8477] uppercase tracking-wider mb-0.5">Original repair</div>
-                      <div className="text-[#4b473d] font-semibold">{inc.originalAddress}</div>
-                      <div className="text-[#8a8477]">Resolved {fmtDate(inc.originalResolvedAt)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[9px] font-bold text-[#c1613f] uppercase tracking-wider mb-0.5">Reappeared</div>
-                      <div className="text-[#4b473d] font-semibold">{inc.newAddress}</div>
-                      <div className="text-[#8a8477]">Reported {fmtDate(inc.newReportedAt)} · {inc.distanceM}m away</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

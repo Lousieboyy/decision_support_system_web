@@ -29,6 +29,7 @@ import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
 import { DispatchAudit } from '../components/DispatchAudit';
+import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
@@ -171,6 +172,7 @@ export function AnalyticsPage() {
   const [auditActions, setAuditActions] = useState(null);
   const [activeTab, setActiveTab] = useState('single');
   const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'dispatch'
+  const [showReliabilityModal, setShowReliabilityModal] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -1497,7 +1499,7 @@ export function AnalyticsPage() {
                   </div>
                 )}
                 <button
-                  onClick={() => setActiveViewTab('dispatch')}
+                  onClick={() => setShowReliabilityModal(true)}
                   className="px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap"
                   style={{ background: '#3d4d34', color: '#fff' }}
                 >
@@ -2222,15 +2224,21 @@ export function AnalyticsPage() {
             {filterBar}
             <DispatchAudit
               dispatchQueue={prioritizedDispatchQueue}
-              contractorAudit={contractorAudit}
-              reincidenceIncidents={reliabilityAudit.incidents}
-              auditActions={auditActions}
               onDispatched={loadData}
             />
           </div>
         )}
 
       </div>
+
+      {showReliabilityModal && (
+        <RepairReliabilityModal
+          contractorAudit={contractorAudit}
+          reincidenceIncidents={reliabilityAudit.incidents}
+          auditActions={auditActions}
+          onClose={() => setShowReliabilityModal(false)}
+        />
+      )}
     </div>
   );
 }
