@@ -3,9 +3,16 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ErrorBar, Cell, ReferenceLine,
 } from 'recharts';
-import { AlertTriangle, Info } from 'lucide-react';
+import { AlertTriangle, Info, X } from 'lucide-react';
+import { format } from 'date-fns';
 import { buildFunnel, buildComposition } from '../utils/analyticsMetrics';
 import { SLA_TARGET_DAYS, SLA_END_TO_END_DAYS, MIN_N_FOR_STAGE } from '../utils/analyticsConstants';
+
+const fmtDate = (v) => {
+  if (!v) return 'unknown date';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy HH:mm');
+};
 
 const SEGMENT_COLORS = {
   triage: '#6366f1',
@@ -61,12 +68,14 @@ function StageTooltip({ active, payload }) {
  */
 export function StageFunnel({ reports, dateFilterLabel }) {
   const [cohort, setCohort] = useState('all');
+  const [selectedStageKey, setSelectedStageKey] = useState(null);
 
   const funnel = useMemo(
     () => buildFunnel(reports, { cohort, minN: MIN_N_FOR_STAGE }),
     [reports, cohort]
   );
   const composition = useMemo(() => buildComposition(reports), [reports]);
+  const selectedStage = selectedStageKey ? funnel.stages.find((s) => s.key === selectedStageKey) : null;
 
   const chartData = funnel.stages.map((s) => ({
     ...s,
@@ -144,9 +153,22 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                     strokeDasharray="4 4"
                     label={{ value: `${SLA_END_TO_END_DAYS}d end-to-end target`, fill: '#b91c1c', fontSize: 9, position: 'top' }}
                   />
-                  <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                  <Bar
+                    dataKey="value"
+                    radius={[0, 6, 6, 0]}
+                    maxBarSize={22}
+                    cursor="pointer"
+                    onClick={(d) => {
+                      const key = d?.payload?.key ?? d?.key;
+                      setSelectedStageKey((prev) => (prev === key ? null : key));
+                    }}
+                  >
                     {chartData.map((d) => (
-                      <Cell key={d.key} fill={SEGMENT_COLORS[d.key] || '#4a5d3f'} />
+                      <Cell
+                        key={d.key}
+                        fill={SEGMENT_COLORS[d.key] || '#4a5d3f'}
+                        fillOpacity={!selectedStageKey || selectedStageKey === d.key ? 1 : 0.3}
+                      />
                     ))}
                     <ErrorBar dataKey="errorRange" width={4} strokeWidth={1.5} stroke="#8a8477" direction="x" />
                   </Bar>
@@ -154,10 +176,19 @@ export function StageFunnel({ reports, dateFilterLabel }) {
               </ResponsiveContainer>
             </div>
 
-            {/* Per-stage n and coverage, so a thin stage can be discounted. */}
+            {/* Per-stage n and coverage, so a thin stage can be discounted.
+                Each row is clickable — reaches the evidence list below even
+                for a stage with too few reports to plot a bar. */}
             <div className="mt-4 grid gap-1.5">
               {funnel.stages.map((s) => (
-                <div key={s.key} className="flex items-center gap-3 text-[11px]">
+                <button
+                  key={s.key}
+                  onClick={() => s.n > 0 && setSelectedStageKey((prev) => (prev === s.key ? null : s.key))}
+                  disabled={s.n === 0}
+                  className={`flex items-center gap-3 text-[11px] text-left rounded-lg px-1.5 py-1 -mx-1.5 transition-colors ${
+                    s.n > 0 ? 'hover:bg-[#4a5d3f]/5 cursor-pointer' : 'cursor-default'
+                  } ${selectedStageKey === s.key ? 'bg-[#4a5d3f]/8' : ''}`}
+                >
                   <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: SEGMENT_COLORS[s.key] }} />
                   <span className="w-36 text-[#4b473d] font-semibold truncate">{s.label}</span>
                   <span className="w-16 font-bold text-[#201f1b]">
@@ -168,9 +199,52 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                       ? `up to ${fmtDays(s.p90)} for slower cases · ${s.n} reports`
                       : `not enough reports yet (${s.n})`}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
+            <p className="text-[10px] text-[#8a8477] mt-1.5">
+              Click a stage (bar or row) to see the individual reports behind it.
+            </p>
+
+            {selectedStage && (
+              <div className="mt-4 pt-4 border-t border-[#1f1e1a]/8">
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                  <div className="text-xs font-black text-[#201f1b] uppercase tracking-wide">
+                    Evidence — {selectedStage.label}
+                  </div>
+                  <button
+                    onClick={() => setSelectedStageKey(null)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+                    style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
+                  >
+                    Clear <X size={11} />
+                  </button>
+                </div>
+                <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
+                  {selectedStage.n} report{selectedStage.n === 1 ? '' : 's'} have reached this stage
+                  {selectedStage.sufficient && <> · median {fmtDays(selectedStage.median)}</>}
+                  {' — every one below, slowest first.'}
+                </p>
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {selectedStage.reports.map((r) => (
+                    <div key={r.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
+                        <span className="text-xs font-bold text-[#201f1b]">{r.address}</span>
+                        <span className="text-xs font-black" style={{ color: SEGMENT_COLORS[selectedStage.key] }}>
+                          {fmtDays(r.value)}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-[#8a8477]">
+                        {r.category} · {r.status}
+                      </div>
+                      <div className="text-[10px] text-[#8a8477] mt-0.5">
+                        {fmtDate(r.fromAt)} → {fmtDate(r.toAt)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Composition strip — means, because only means are additive. */}
             {composition.n > 0 && (

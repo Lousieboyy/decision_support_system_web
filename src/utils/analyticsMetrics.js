@@ -204,11 +204,15 @@ export const STAGES = [
 export function stageDurations(report) {
   const eligible = report?.status !== 'Rejected';
   const durations = {};
+  const boundaries = {};
   let nonMonotonic = 0;
 
   if (!eligible) {
-    for (const s of STAGES) durations[s.key] = null;
-    return { durations, nonMonotonic, eligible };
+    for (const s of STAGES) {
+      durations[s.key] = null;
+      boundaries[s.key] = null;
+    }
+    return { durations, nonMonotonic, eligible, boundaries };
   }
 
   for (const stage of STAGES) {
@@ -216,8 +220,10 @@ export function stageDurations(report) {
     const to = toDate(report?.[stage.to]);
     if (from == null || to == null) {
       durations[stage.key] = null;
+      boundaries[stage.key] = null;
       continue;
     }
+    boundaries[stage.key] = { from: report[stage.from], to: report[stage.to] };
     const days = (to - from) / MS_PER_DAY;
     if (days < 0) {
       nonMonotonic += 1;
@@ -227,7 +233,7 @@ export function stageDurations(report) {
     }
   }
 
-  return { durations, nonMonotonic, eligible };
+  return { durations, nonMonotonic, eligible, boundaries };
 }
 
 /** End-to-end days from submission to resolution, or null. */
@@ -260,17 +266,28 @@ export function buildFunnel(reports, { cohort = 'all', minN = 5 } = {}) {
   let nonMonotonic = 0;
 
   for (const report of scoped) {
-    const { durations, nonMonotonic: nm } = stageDurations(report);
+    const { durations, nonMonotonic: nm, boundaries } = stageDurations(report);
     nonMonotonic += nm;
     for (const s of STAGES) {
       const v = durations[s.key];
-      if (v != null) samples[s.key].push(v);
+      if (v != null) {
+        samples[s.key].push({
+          value: v,
+          id: report.id,
+          address: report.address || report.location || 'Unknown location',
+          category: canonicalizeCategory(report.categories || report.ai_prediction),
+          status: report.status,
+          fromAt: boundaries[s.key]?.from ?? null,
+          toAt: boundaries[s.key]?.to ?? null,
+        });
+      }
     }
   }
 
   const eligibleCount = scoped.length;
   const stages = STAGES.map((s) => {
-    const values = samples[s.key];
+    const samplesForStage = samples[s.key];
+    const values = samplesForStage.map((x) => x.value);
     const n = values.length;
     const sufficient = n >= minN;
     return {
@@ -284,6 +301,9 @@ export function buildFunnel(reports, { cohort = 'all', minN = 5 } = {}) {
       p25: sufficient ? percentile(values, 25) : null,
       p90: sufficient ? percentile(values, 90) : null,
       mean: sufficient ? mean(values) : null,
+      // Slowest first — the reports worth checking are the outliers dragging
+      // the median up, not the ones already inside target.
+      reports: samplesForStage.slice().sort((a, b) => b.value - a.value),
     };
   });
 
