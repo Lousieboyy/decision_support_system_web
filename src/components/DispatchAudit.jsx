@@ -2,8 +2,15 @@ import { Info, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
+import { format } from 'date-fns';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, RISK_TONE, DEFAULT_RISK_TONE } from '../utils/analyticsConstants';
 import { ClusterDispatchAction } from './ClusterDispatchAction';
+
+const fmtDate = (v) => {
+  if (!v) return 'unknown date';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy');
+};
 
 const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
 
@@ -35,7 +42,7 @@ function ReliabilityTooltip({ active, payload }) {
  * harder question — whether a completed repair actually held — by looking for a
  * new complaint of the same category near a previously resolved one.
  */
-export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions, onDispatched }) {
+export function DispatchAudit({ dispatchQueue, contractorAudit, reincidenceIncidents = [], auditActions, onDispatched }) {
   const auditAvailable = auditActions !== null;
 
   return (
@@ -195,6 +202,49 @@ export function DispatchAudit({ dispatchQueue, contractorAudit, auditActions, on
           )}
         </div>
       </div>
+
+      {/* ── Repeat-failure incidents — the "time, place" evidence behind the
+          percentages above. Each row is one specific repair that didn't
+          hold: where the original fix was, when it was resolved, and where
+          and when the same category reappeared nearby. ─────────────────── */}
+      {reincidenceIncidents.length > 0 && (
+        <div className="content-card">
+          <div className="content-card-header">
+            <div className="content-card-title">Repeat-failure incidents</div>
+            <span className="text-[11px] text-[#8a8477]">
+              {reincidenceIncidents.length} case{reincidenceIncidents.length === 1 ? '' : 's'}, most recent first
+            </span>
+          </div>
+          <div className="p-5">
+            <p className="text-xs text-[#8a8477] mb-4 leading-relaxed">
+              Every pair behind the repeat-failure counts above — the resolved repair, and
+              the new complaint of the same category that showed up nearby afterward.
+            </p>
+            <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+              {reincidenceIncidents.map((inc) => (
+                <div key={inc.id} className="rounded-xl p-4 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
+                  <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                    <span className="text-xs font-bold text-[#201f1b]">{inc.category}</span>
+                    <span className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wide">{inc.authority}</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="text-[9px] font-bold text-[#8a8477] uppercase tracking-wider mb-0.5">Original repair</div>
+                      <div className="text-[#4b473d] font-semibold">{inc.originalAddress}</div>
+                      <div className="text-[#8a8477]">Resolved {fmtDate(inc.originalResolvedAt)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[9px] font-bold text-[#c1613f] uppercase tracking-wider mb-0.5">Reappeared</div>
+                      <div className="text-[#4b473d] font-semibold">{inc.newAddress}</div>
+                      <div className="text-[#8a8477]">Reported {fmtDate(inc.newReportedAt)} · {inc.distanceM}m away</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2223,6 +2223,7 @@ export function AnalyticsPage() {
             <DispatchAudit
               dispatchQueue={prioritizedDispatchQueue}
               contractorAudit={contractorAudit}
+              reincidenceIncidents={reliabilityAudit.incidents}
               auditActions={auditActions}
               onDispatched={loadData}
             />

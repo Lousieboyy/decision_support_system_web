@@ -580,6 +580,8 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
     if ((end - start) / MS_PER_DAY <= SLA_END_TO_END_DAYS) entry.onTimeCount += 1;
   }
 
+  const incidents = [];
+
   for (const report of open) {
     const openTime = toDate(report.timestamp);
     if (openTime == null) continue;
@@ -601,7 +603,19 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
     }
     if (nearest) {
       const authority = findAuthority(nearest);
-      if (authority) bucket(authority).reIncidence += 1;
+      if (authority) {
+        bucket(authority).reIncidence += 1;
+        incidents.push({
+          id: `${nearest.id}-${report.id}`,
+          authority: authority.name,
+          category: canonicalizeCategory(report.categories || report.ai_prediction),
+          originalAddress: nearest.address || nearest.location || 'Unknown location',
+          originalResolvedAt: nearest.resolved_at,
+          newAddress: report.address || report.location || 'Unknown location',
+          newReportedAt: report.timestamp,
+          distanceM: Math.round(nearestDist),
+        });
+      }
     }
   }
 
@@ -621,7 +635,10 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
   const overallHoldRate = totalResolved ? Math.round((1 - totalReIncidence / totalResolved) * 100) : null;
   const worst = [...rows].filter((d) => d.reIncidence > 0).sort((a, b) => b.reIncidence - a.reIncidence)[0] || null;
 
-  return { rows, totalResolved, totalReIncidence, overallHoldRate, worst };
+  // Most recent repeat failure first — that's the one worth checking today.
+  incidents.sort((a, b) => (toDate(b.newReportedAt) || 0) - (toDate(a.newReportedAt) || 0));
+
+  return { rows, totalResolved, totalReIncidence, overallHoldRate, worst, incidents };
 }
 
 // ── Infrastructure Fragility Index (IFI) ────────────────────────────────────
