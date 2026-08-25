@@ -13,7 +13,7 @@ import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck
+  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck, X
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
@@ -167,6 +167,11 @@ export function AnalyticsPage() {
   }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
+  // What the Overview charts' "click to see the reports behind this" points
+  // at right now — a day from the trend chart, a slice from the category
+  // chart, or a department bar from the SLA chart. One shared spotlight
+  // instead of three separate pieces of state since only one can be open.
+  const [spotlight, setSpotlight] = useState(null);
   // null = endpoint absent or forbidden; [] = present but empty. The two mean
   // different things to the UI, so they must stay distinguishable.
   const [auditActions, setAuditActions] = useState(null);
@@ -797,9 +802,23 @@ export function AnalyticsPage() {
 
     return Object.entries(daysMap).map(([date, count]) => ({
       date: format(parseISO(date), 'MMM dd'),
+      rawDate: date,
       Complaints: count,
     }));
   }, [filteredReports]);
+
+  // Week-over-week change and the single busiest day — the two facts that
+  // turn "here's a line" into "here's what changed and when it spiked."
+  const trendInsight = useMemo(() => {
+    if (trendChartData.length < 14) return null;
+    const last7 = trendChartData.slice(-7);
+    const prior7 = trendChartData.slice(-14, -7);
+    const last7Sum = last7.reduce((s, d) => s + d.Complaints, 0);
+    const prior7Sum = prior7.reduce((s, d) => s + d.Complaints, 0);
+    const pctChange = prior7Sum > 0 ? Math.round(((last7Sum - prior7Sum) / prior7Sum) * 100) : null;
+    const peak = [...trendChartData].sort((a, b) => b.Complaints - a.Complaints)[0];
+    return { last7Sum, prior7Sum, pctChange, peak: peak.Complaints > 0 ? peak : null };
+  }, [trendChartData]);
 
   // 5. Category distribution chart data
   const categoryChartData = useMemo(() => {
@@ -814,6 +833,33 @@ export function AnalyticsPage() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 6);
   }, [filteredReports]);
+
+  // The reports behind whichever chart element the admin just clicked — one
+  // shared lookup for the trend, category, and SLA charts' spotlight.
+  const spotlightReports = useMemo(() => {
+    if (!spotlight) return [];
+    if (spotlight.type === 'date') {
+      return filteredReports.filter((r) => r.timestamp && r.timestamp.split('T')[0] === spotlight.value);
+    }
+    if (spotlight.type === 'category') {
+      return filteredReports.filter((r) => (r.categories || 'Other') === spotlight.value);
+    }
+    if (spotlight.type === 'department') {
+      const needle = spotlight.value.toLowerCase();
+      return filteredReports.filter((r) => (r.assigned_department || '').toLowerCase().includes(needle));
+    }
+    if (spotlight.type === 'status') {
+      // filteredReports is already scoped to the selected department here,
+      // so this only needs to bucket by status the same way deptStatusData does.
+      return filteredReports.filter((r) => {
+        if (spotlight.status === 'Resolved') return r.status === 'Resolved';
+        if (spotlight.status === 'Rejected') return r.status === 'Rejected';
+        if (spotlight.status === 'Pending') return r.status === 'Pending';
+        return r.status !== 'Resolved' && r.status !== 'Rejected' && r.status !== 'Pending';
+      });
+    }
+    return [];
+  }, [spotlight, filteredReports]);
 
   // ==================== CITY HEALTH & WELLNESS COMPUTATIONS ====================
 
@@ -1522,9 +1568,29 @@ export function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="p-5">
-                  <div style={{ height: '260px', width: '100%' }}>
+                  {trendInsight && (
+                    <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: trendInsight.pctChange > 0 ? '#8a4b0a' : '#3d4d34' }}>
+                      {trendInsight.pctChange != null && (
+                        <>This week: {trendInsight.pctChange >= 0 ? 'up' : 'down'} {Math.abs(trendInsight.pctChange)}% vs last week
+                        ({trendInsight.last7Sum} vs {trendInsight.prior7Sum} reports).{' '}</>
+                      )}
+                      {trendInsight.peak && (
+                        <>Busiest day: <button onClick={() => setSpotlight({ type: 'date', value: trendInsight.peak.rawDate, label: `Reports from ${trendInsight.peak.date}` })} className="underline decoration-dotted underline-offset-2 hover:opacity-70">{trendInsight.peak.date} ({trendInsight.peak.Complaints})</button>.</>
+                      )}
+                    </p>
+                  )}
+                  <div style={{ height: '260px', width: '100%', cursor: 'pointer' }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={trendChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <AreaChart
+                        data={trendChartData}
+                        margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                        onClick={(e) => {
+                          const point = e?.activePayload?.[0]?.payload;
+                          if (point && point.Complaints > 0) {
+                            setSpotlight((prev) => (prev?.value === point.rawDate ? null : { type: 'date', value: point.rawDate, label: `Reports from ${point.date}` }));
+                          }
+                        }}
+                      >
                         <defs>
                           <linearGradient id="colorTrend" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#6366f1" stopOpacity={0.35}/>
@@ -1539,6 +1605,7 @@ export function AnalyticsPage() {
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
+                  <p className="text-[10px] text-[#8a8477] mt-1.5">Click a point on the line to see that day's reports.</p>
                 </div>
               </div>
 
@@ -1550,7 +1617,13 @@ export function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="p-5">
-                  <div className="relative flex items-center justify-center" style={{ height: '260px', width: '100%' }}>
+                  {categoryChartData.length > 0 && filteredReports.length > 0 && (
+                    <p className="text-xs font-semibold leading-relaxed mb-2" style={{ color: '#8a4b0a' }}>
+                      {categoryChartData[0].name} is the most reported —{' '}
+                      {Math.round((categoryChartData[0].value / filteredReports.length) * 100)}% of all reports in this window.
+                    </p>
+                  )}
+                  <div className="relative flex items-center justify-center" style={{ height: '230px', width: '100%' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -1561,24 +1634,38 @@ export function AnalyticsPage() {
                           outerRadius={80}
                           paddingAngle={3}
                           dataKey="value"
+                          cursor="pointer"
+                          onClick={(d) => {
+                            const name = d?.name ?? d?.payload?.name;
+                            if (name) setSpotlight((prev) => (prev?.value === name ? null : { type: 'category', value: name, label: `${name} reports` }));
+                          }}
                         >
                           {categoryChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={COLORS[index % COLORS.length]}
+                              fillOpacity={!spotlight || (spotlight.type === 'category' && spotlight.value === entry.name) ? 1 : 0.35}
+                            />
                           ))}
                         </Pie>
                         <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                       </PieChart>
                     </ResponsiveContainer>
-                    
-                    {/* Legends Custom */}
-                    <div className="absolute bottom-2 left-0 right-0 flex flex-wrap justify-center gap-x-3 gap-y-1 px-4 text-[10px] text-[#201f1b] font-semibold">
-                      {categoryChartData.map((entry, index) => (
-                        <div key={entry.name} className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ background: COLORS[index % COLORS.length] }} />
-                          <span className="truncate max-w-[80px]">{entry.name}</span>
-                        </div>
-                      ))}
-                    </div>
+                  </div>
+                  {/* Legend — real counts, and each entry is its own spotlight trigger
+                      so the chart isn't the only clickable surface. */}
+                  <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 px-2 mt-2">
+                    {categoryChartData.map((entry, index) => (
+                      <button
+                        key={entry.name}
+                        onClick={() => setSpotlight((prev) => (prev?.value === entry.name ? null : { type: 'category', value: entry.name, label: `${entry.name} reports` }))}
+                        className="flex items-center gap-1.5 text-[10px] font-semibold hover:opacity-70"
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[index % COLORS.length] }} />
+                        <span className="truncate max-w-[100px]">{entry.name}</span>
+                        <span className="text-[#8a8477]">{entry.value}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1596,7 +1683,22 @@ export function AnalyticsPage() {
                   </div>
                 </div>
                 <div className="p-5">
-                  <div style={{ height: '260px', width: '100%' }}>
+                  {selectedDept === 'all' && (() => {
+                    const worst = [...measurableSLAMetrics]
+                      .filter((d) => d.avgResolveDays > SLA_END_TO_END_DAYS)
+                      .sort((a, b) => b.avgResolveDays - a.avgResolveDays)[0];
+                    return worst ? (
+                      <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: '#b91c1c' }}>
+                        {worst.fullName} is {(worst.avgResolveDays - SLA_END_TO_END_DAYS).toFixed(1)} days over target —
+                        click its bar to see what's still open there.
+                      </p>
+                    ) : (
+                      <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: '#15803d' }}>
+                        Every department with a measurable resolve time is inside the {SLA_END_TO_END_DAYS}-day target.
+                      </p>
+                    );
+                  })()}
+                  <div style={{ height: '260px', width: '100%', cursor: 'pointer' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       {selectedDept === 'all' ? (
                         <BarChart data={measurableSLAMetrics} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -1605,7 +1707,15 @@ export function AnalyticsPage() {
                           <YAxis stroke="#8a8477" fontSize={11} tickLine={false} label={{ value: 'Days', angle: -90, position: 'insideLeft', stroke: '#8a8477', fontSize: 10 }} />
                           <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
                           <ReferenceLine y={SLA_END_TO_END_DAYS} stroke="#ef4444" strokeDasharray="4 4" label={{ value: 'Target SLA', fill: '#ef4444', fontSize: 9, position: 'top' }} />
-                          <Bar dataKey="avgResolveDays" radius={[6, 6, 0, 0]} maxBarSize={45}>
+                          <Bar
+                            dataKey="avgResolveDays"
+                            radius={[6, 6, 0, 0]}
+                            maxBarSize={45}
+                            onClick={(d) => {
+                              const entry = d?.payload ?? d;
+                              if (entry?.name) setSpotlight((prev) => (prev?.value === entry.name ? null : { type: 'department', value: entry.name, label: `${entry.fullName || entry.name} reports` }));
+                            }}
+                          >
                             {measurableSLAMetrics.map((entry, index) => {
                               const exceedsSLA = entry.avgResolveDays > SLA_END_TO_END_DAYS;
                               return <Cell key={`cell-${index}`} fill={exceedsSLA ? '#ef4444' : '#10b981'} />;
@@ -1618,7 +1728,15 @@ export function AnalyticsPage() {
                           <XAxis type="number" stroke="#8a8477" fontSize={10} tickLine={false} />
                           <YAxis dataKey="name" type="category" stroke="#8a8477" fontSize={11} tickLine={false} />
                           <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                          <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={30}>
+                          <Bar
+                            dataKey="value"
+                            radius={[0, 6, 6, 0]}
+                            maxBarSize={30}
+                            onClick={(d) => {
+                              const entry = d?.payload ?? d;
+                              if (entry?.name) setSpotlight((prev) => (prev?.value === `${selectedDept}|${entry.name}` ? null : { type: 'status', value: `${selectedDept}|${entry.name}`, dept: selectedDept, status: entry.name, label: `${selectedDept} — ${entry.name}` }));
+                            }}
+                          >
                             {deptStatusData.map((entry, index) => {
                               let color = '#3b82f6';
                               if (entry.name === 'Pending') color = '#f59e0b';
@@ -1632,6 +1750,7 @@ export function AnalyticsPage() {
                       )}
                     </ResponsiveContainer>
                   </div>
+                  <p className="text-[10px] text-[#8a8477] mt-1.5">Click a bar to see the reports behind it.</p>
                 </div>
               </div>
 
@@ -1665,28 +1784,94 @@ export function AnalyticsPage() {
                   <div className="border-t border-[#1f1e1a]/8 pt-4">
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
                       <span>Fastest to Resolve</span>
-                      <span className="text-[#201f1b]">
-                        {kpiStats.fastestSLA
-                          ? `${kpiStats.fastestSLA.name} (${kpiStats.fastestSLA.avgResolveDays} days)`
-                          : 'Insufficient data'}
-                      </span>
+                      {kpiStats.fastestSLA ? (
+                        <button
+                          onClick={() => setSpotlight((prev) => (prev?.value === kpiStats.fastestSLA.name ? null : { type: 'department', value: kpiStats.fastestSLA.name, label: `${kpiStats.fastestSLA.fullName || kpiStats.fastestSLA.name} reports` }))}
+                          className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
+                        >
+                          {kpiStats.fastestSLA.name} ({kpiStats.fastestSLA.avgResolveDays} days)
+                        </button>
+                      ) : (
+                        <span className="text-[#201f1b]">Insufficient data</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
                       <span>Slowest to Resolve</span>
-                      <span className="text-[#201f1b]">
-                        {kpiStats.slowestSLA
-                          ? `${kpiStats.slowestSLA.name} (${kpiStats.slowestSLA.avgResolveDays} days)`
-                          : 'Insufficient data'}
-                      </span>
+                      {kpiStats.slowestSLA ? (
+                        <button
+                          onClick={() => setSpotlight((prev) => (prev?.value === kpiStats.slowestSLA.name ? null : { type: 'department', value: kpiStats.slowestSLA.name, label: `${kpiStats.slowestSLA.fullName || kpiStats.slowestSLA.name} reports` }))}
+                          className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
+                        >
+                          {kpiStats.slowestSLA.name} ({kpiStats.slowestSLA.avgResolveDays} days)
+                        </button>
+                      ) : (
+                        <span className="text-[#201f1b]">Insufficient data</span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
                       <span>Largest Backlog</span>
-                      <span className="text-[#8a8477]">{kpiStats.worstBacklogDept}</span>
+                      {kpiStats.worstBacklogDept !== 'None' ? (
+                        <button
+                          onClick={() => setSpotlight((prev) => (prev?.value === kpiStats.worstBacklogDept ? null : { type: 'department', value: kpiStats.worstBacklogDept, label: `${kpiStats.worstBacklogDept} reports` }))}
+                          className="text-[#8a8477] underline decoration-dotted underline-offset-2 hover:opacity-70"
+                        >
+                          {kpiStats.worstBacklogDept}
+                        </button>
+                      ) : (
+                        <span className="text-[#8a8477]">None</span>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Spotlight — the reports behind whichever chart element was just
+                clicked (a day, a category, a department, a status bucket). */}
+            {spotlight && (
+              <div className="content-card">
+                <div className="content-card-header">
+                  <div className="content-card-title">{spotlight.label}</div>
+                  <button
+                    onClick={() => setSpotlight(null)}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+                    style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
+                  >
+                    Clear <X size={11} />
+                  </button>
+                </div>
+                <div className="p-5">
+                  <p className="text-xs text-[#8a8477] mb-3">
+                    {spotlightReports.length} report{spotlightReports.length === 1 ? '' : 's'}
+                  </p>
+                  {spotlightReports.length === 0 ? (
+                    <div className="text-center text-[#8a8477] py-6 text-xs">No reports match.</div>
+                  ) : (
+                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                      {spotlightReports.map((r) => (
+                        <div key={r.id} className="rounded-xl p-3 border border-[#1f1e1a]/8 flex items-center justify-between gap-3" style={{ background: 'var(--cream-100)' }}>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-[#201f1b] truncate">{r.address || r.location || 'Unknown location'}</div>
+                            <div className="text-[10px] text-[#8a8477]">
+                              {r.categories || 'Other'} · {r.assigned_department || 'Unassigned'}
+                              {/* Date-only parse, not new Date(fullTimestamp) — the trend
+                                  chart buckets by the raw UTC date string, and converting
+                                  the full timestamp to local time here could roll the
+                                  displayed day forward/back across the same boundary,
+                                  showing "16 Aug" under a "Reports from Aug 15" header. */}
+                              {r.timestamp && ` · ${format(parseISO(r.timestamp.split('T')[0]), 'd MMM yyyy')}`}
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-black uppercase tracking-wide shrink-0" style={{ color: r.status === 'Resolved' ? '#15803d' : r.status === 'Rejected' ? '#8a8477' : '#b45309' }}>
+                            {r.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
