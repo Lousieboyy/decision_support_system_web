@@ -7,6 +7,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from '
 import L from 'leaflet';
 import { format } from 'date-fns';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor } from '../utils/analyticsConstants';
+import { calculateDistance } from '../utils/analyticsMetrics';
 
 const fmtDate = (v) => {
   if (!v) return 'unknown date';
@@ -17,6 +18,18 @@ const fmtDate = (v) => {
 const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
 
 const isValidPoint = (lat, lng) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+
+// Pure proximity, no category/time matching — a looser radius than
+// REINCIDENCE's 50m (which is specifically the repeat-failure detection
+// rule) so ordinary spatial clustering among all tickets is still visible.
+const AREA_RADIUS_M = 100;
+
+const STATUS_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'onTime', label: 'On time' },
+  { key: 'late', label: 'Late' },
+  { key: 'repeat', label: 'Repeat failures' },
+];
 
 // Blank-grey-tiles fix: a map mounted inside a modal has no real size on its
 // first render, so Leaflet measures a 0x0 box unless told to recheck once
@@ -72,6 +85,7 @@ function ReliabilityTooltip({ active, payload }) {
 export function RepairReliabilityModal({ contractorAudit, auditActions, onClose }) {
   const auditAvailable = auditActions !== null;
   const [selectedAuthority, setSelectedAuthority] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const selectedRow = selectedAuthority
     ? contractorAudit.find((d) => d.name === selectedAuthority)
@@ -80,13 +94,35 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
 
   const mappable = (selectedRow?.tickets || []).filter((t) => isValidPoint(t.latitude, t.longitude));
   const unmapped = (selectedRow?.tickets?.length || 0) - mappable.length;
-  const boundsPoints = mappable.flatMap((t) => {
+  const filteredMappable = mappable.filter((t) => {
+    if (statusFilter === 'onTime') return t.onTime;
+    if (statusFilter === 'late') return !t.onTime;
+    if (statusFilter === 'repeat') return t.reappeared;
+    return true;
+  });
+  const boundsPoints = filteredMappable.flatMap((t) => {
     const pts = [[t.latitude, t.longitude]];
     if (t.reappeared && isValidPoint(t.reappearedLatitude, t.reappearedLongitude)) {
       pts.push([t.reappearedLatitude, t.reappearedLongitude]);
     }
     return pts;
   });
+
+  // Every pair of tickets close enough to plausibly be the same trouble
+  // spot, independent of the reincidence rule's category/time matching —
+  // this surfaces area-level clustering the repeat-failure count alone
+  // wouldn't show (e.g. two different-category tickets on the same corner).
+  const areaConnections = [];
+  for (let i = 0; i < filteredMappable.length; i++) {
+    for (let j = i + 1; j < filteredMappable.length; j++) {
+      const a = filteredMappable[i];
+      const b = filteredMappable[j];
+      const dist = calculateDistance(a.latitude, a.longitude, b.latitude, b.longitude);
+      if (dist <= AREA_RADIUS_M) {
+        areaConnections.push({ id: `${a.id}-${b.id}`, positions: [[a.latitude, a.longitude], [b.latitude, b.longitude]] });
+      }
+    }
+  }
 
   return (
     <>
@@ -224,13 +260,41 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                     </div>
                   ) : (
                     <>
+                      <div className="flex items-center gap-2 mb-2">
+                        {STATUS_FILTERS.map((f) => (
+                          <button
+                            key={f.key}
+                            onClick={() => setStatusFilter(f.key)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                              statusFilter === f.key
+                                ? 'bg-[#4a5d3f] text-white'
+                                : 'bg-[#f5f1e6] text-[#4b473d] hover:bg-[#4a5d3f]/10'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                      {filteredMappable.length === 0 ? (
+                        <div className="text-center text-[#8a8477] py-6 text-xs">
+                          No {STATUS_FILTERS.find((f) => f.key === statusFilter)?.label.toLowerCase()} tickets for {selectedAuthority}.
+                        </div>
+                      ) : (
+                      <>
                       <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 420 }}>
                         <MapContainer center={[2.1896, 102.2501]} zoom={12.5} style={{ height: '100%', width: '100%' }}>
                           <TileLayer
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                           />
-                          {mappable.map((t) => {
+                          {areaConnections.map((c) => (
+                            <Polyline
+                              key={c.id}
+                              positions={c.positions}
+                              pathOptions={{ color: '#8a8477', weight: 1.5, opacity: 0.6, dashArray: '2 6' }}
+                            />
+                          ))}
+                          {filteredMappable.map((t) => {
                             const color = t.reappeared ? '#b91c1c' : t.onTime ? '#15803d' : '#b45309';
                             const hasReappearPoint = t.reappeared && isValidPoint(t.reappearedLatitude, t.reappearedLongitude);
                             return (
@@ -241,10 +305,15 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                                   pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 2 }}
                                 >
                                   <Popup>
-                                    <div style={{ fontSize: 12, minWidth: 160 }}>
+                                    <div style={{ fontSize: 12, minWidth: 180 }}>
                                       <div style={{ fontWeight: 700 }}>{t.address}</div>
-                                      <div style={{ color: '#8a8477' }}>{t.category} · {t.onTime ? 'On time' : 'Late'} · {t.daysToResolve}d to fix</div>
+                                      <div style={{ color: '#8a8477', marginTop: 2 }}>Category: {t.category}</div>
+                                      <div style={{ color: '#8a8477' }}>Status: {t.status}</div>
+                                      <div style={{ color: '#8a8477' }}>Submitted {fmtDate(t.submittedAt)}</div>
                                       <div style={{ color: '#8a8477' }}>Resolved {fmtDate(t.resolvedAt)}</div>
+                                      <div style={{ color: t.onTime ? '#15803d' : '#b45309', fontWeight: 700 }}>
+                                        {t.onTime ? 'On time' : 'Late'} · {t.daysToResolve}d to fix
+                                      </div>
                                       {t.reappeared && (
                                         <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #eee', color: '#b91c1c', fontWeight: 700 }}>
                                           Reappeared {t.reappearedDistanceM}m away, {fmtDate(t.reappearedAt)}
@@ -284,9 +353,12 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       <div className="flex items-center gap-4 flex-wrap mt-2 text-[10px] text-[#8a8477]">
                         <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#15803d' }} /> On time</span>
                         <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Late</span>
-                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b91c1c' }} /> Repeat failure (dashed line to where it reappeared)</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b91c1c' }} /> Repeat failure (red dashed line to where it reappeared)</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-3 h-0 border-t border-dashed inline-block" style={{ borderColor: '#8a8477' }} /> Within {AREA_RADIUS_M}m of another ticket</span>
                         {unmapped > 0 && <span>{unmapped} ticket{unmapped === 1 ? '' : 's'} without usable coordinates not shown</span>}
                       </div>
+                      </>
+                      )}
                     </>
                   )}
                 </>

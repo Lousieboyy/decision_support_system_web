@@ -612,6 +612,7 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
       id: r.id,
       address: r.address || r.location || 'Unknown location',
       category: canonicalizeCategory(r.categories || r.ai_prediction),
+      status: r.status,
       submittedAt: r.timestamp,
       resolvedAt: r.resolved_at,
       daysToResolve: Math.round(daysToResolve * 10) / 10,
