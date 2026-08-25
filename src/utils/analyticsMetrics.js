@@ -277,6 +277,8 @@ export function buildFunnel(reports, { cohort = 'all', minN = 5 } = {}) {
           address: report.address || report.location || 'Unknown location',
           category: canonicalizeCategory(report.categories || report.ai_prediction),
           status: report.status,
+          latitude: report.latitude,
+          longitude: report.longitude,
           fromAt: boundaries[s.key]?.from ?? null,
           toAt: boundaries[s.key]?.to ?? null,
         });
