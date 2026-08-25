@@ -95,6 +95,12 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
     ? contractorAudit.find((d) => d.name === selectedAuthority)
     : null;
   const selectedGrade = selectedRow?.rate == null ? null : gradeFor(selectedRow.rate);
+  // reIncidence counts every new complaint that reappeared near a resolved
+  // one; a single problem site that keeps failing racks up several of
+  // those against just one original ticket, so this can be smaller than
+  // reIncidence — that's not a discrepancy, it's the same handful of
+  // locations failing repeatedly rather than many different ones.
+  const flaggedTicketCount = (selectedRow?.tickets || []).filter((t) => t.reappearances.length > 0).length;
 
   const mappable = (selectedRow?.tickets || []).filter((t) => isValidPoint(t.latitude, t.longitude));
   const unmapped = (selectedRow?.tickets?.length || 0) - mappable.length;
@@ -338,7 +344,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       </button>
                     </div>
                   </div>
-                  <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
+                  <p className="text-xs text-[#8a8477] mb-1 leading-relaxed">
                     {selectedRow?.resolvedCount ?? 0} resolved ticket{selectedRow?.resolvedCount === 1 ? '' : 's'}
                     {' · '}
                     {selectedRow?.reIncidence > 0 ? (
@@ -347,6 +353,13 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                     {selectedGrade && <> · Grade <strong style={{ color: rateColor(selectedRow.rate) }}>{selectedGrade.grade}</strong></>}
                     {' — every ticket below, most recently resolved first.'}
                   </p>
+                  {selectedRow?.reIncidence > 0 && flaggedTicketCount !== selectedRow.reIncidence && (
+                    <p className="text-[11px] text-[#8a8477] mb-3 leading-relaxed">
+                      That's {selectedRow.reIncidence} repeat-failure incident{selectedRow.reIncidence === 1 ? '' : 's'} landing on just{' '}
+                      <strong className="text-[#201f1b]">{flaggedTicketCount}</strong> original repair{flaggedTicketCount === 1 ? '' : 's'} — the red marker{flaggedTicketCount === 1 ? '' : 's'} below,
+                      each with more than one dashed line if it failed more than once. Same site breaking repeatedly, not many different sites.
+                    </p>
+                  )}
                   {!selectedRow?.tickets?.length ? (
                     <div className="text-center text-[#8a8477] py-6 text-xs">
                       No resolved tickets with both a submitted and resolved date for {selectedAuthority}.
