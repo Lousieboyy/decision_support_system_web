@@ -86,6 +86,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
   const auditAvailable = auditActions !== null;
   const [selectedAuthority, setSelectedAuthority] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -96,10 +97,12 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
 
   const mappable = (selectedRow?.tickets || []).filter((t) => isValidPoint(t.latitude, t.longitude));
   const unmapped = (selectedRow?.tickets?.length || 0) - mappable.length;
+  const categories = [...new Set(mappable.map((t) => t.category).filter(Boolean))].sort();
   const filteredMappable = mappable.filter((t) => {
     if (statusFilter === 'onTime' && !t.onTime) return false;
     if (statusFilter === 'late' && t.onTime) return false;
     if (statusFilter === 'repeat' && !t.reappeared) return false;
+    if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
     // Dated by resolution, matching how the rest of this modal already
     // cohorts ("resolved tickets") rather than by submission date.
     if (dateFrom || dateTo) {
@@ -288,6 +291,18 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                             {f.label}
                           </button>
                         ))}
+                        {categories.length > 1 && (
+                          <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-lg px-2 py-1 text-[11px] font-bold text-[#201f1b] outline-none custom-select"
+                          >
+                            <option value="all">All categories</option>
+                            {categories.map((c) => (
+                              <option key={c} value={c}>{c}</option>
+                            ))}
+                          </select>
+                        )}
                         <span className="w-px h-4 bg-[#1f1e1a]/10 mx-1" />
                         <input
                           type="date"
@@ -316,7 +331,8 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       <p className="text-[10px] text-[#8a8477] -mt-1 mb-2">Date range filters by resolved date.</p>
                       {filteredMappable.length === 0 ? (
                         <div className="text-center text-[#8a8477] py-6 text-xs">
-                          No {STATUS_FILTERS.find((f) => f.key === statusFilter)?.label.toLowerCase()} tickets
+                          No {STATUS_FILTERS.find((f) => f.key === statusFilter)?.label.toLowerCase()}
+                          {categoryFilter !== 'all' ? ` ${categoryFilter}` : ''} tickets
                           {(dateFrom || dateTo) ? ' in this date range' : ''} for {selectedAuthority}.
                         </div>
                       ) : (
