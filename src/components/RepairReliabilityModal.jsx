@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, FileDown } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor } from '../utils/analyticsConstants';
 import { calculateDistance } from '../utils/analyticsMetrics';
@@ -141,6 +142,75 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
     }
   }
 
+  // Text-and-table PDF, not a map screenshot — the app's other export
+  // (AnalyticsPage's Executive Brief) already moved off html2canvas because
+  // rasterised map tiles were unreliable and produced no selectable text.
+  // The map's evidence is exactly what the ticket table already shows.
+  const exportEvidencePDF = () => {
+    const doc = new jsPDF();
+    const M = 14;
+    const BOTTOM = 275;
+    let y = 20;
+
+    const nextPage = () => { doc.addPage(); y = 20; };
+    const room = (needed = 8) => { if (y + needed > BOTTOM) nextPage(); };
+    const heading = (text) => {
+      room(14);
+      y += 4;
+      doc.setFontSize(12); doc.setFont(undefined, 'bold');
+      doc.text(text, M, y); y += 7;
+      doc.setFontSize(9); doc.setFont(undefined, 'normal');
+    };
+    const line = (text) => { room(); doc.text(String(text), M, y); y += 5; };
+    const row = (cols, widths, bold = false) => {
+      room();
+      doc.setFont(undefined, bold ? 'bold' : 'normal');
+      let x = M;
+      cols.forEach((c, i) => { doc.text(String(c), x, y); x += widths[i]; });
+      doc.setFont(undefined, 'normal');
+      y += 5;
+    };
+    const truncate = (s, n) => (s && s.length > n ? s.slice(0, n - 1) + '.' : (s || '-'));
+
+    doc.setFontSize(16); doc.setFont(undefined, 'bold');
+    doc.text('Repair Reliability - Evidence Report', M, y); y += 8;
+    doc.setFontSize(9); doc.setFont(undefined, 'normal');
+    doc.text('Generated ' + format(new Date(), 'd MMM yyyy HH:mm'), M, y); y += 5;
+    doc.text('Department: ' + selectedAuthority, M, y); y += 5;
+    const filterParts = [
+      'Status: ' + (STATUS_FILTERS.find((f) => f.key === statusFilter)?.label || 'All'),
+      'Category: ' + (categoryFilter === 'all' ? 'All' : categoryFilter),
+    ];
+    if (dateFrom || dateTo) filterParts.push('Resolved ' + (dateFrom || 'any') + ' to ' + (dateTo || 'any'));
+    doc.text('Filters - ' + filterParts.join('  |  '), M, y); y += 6;
+    doc.setDrawColor(180); doc.line(M, y, 196, y); y += 2;
+
+    heading('Summary');
+    line((selectedRow?.resolvedCount ?? 0) + ' resolved tickets total, ' + filteredMappable.length + ' shown after filters');
+    line((selectedRow?.reIncidence ?? 0) + ' repeat failure(s) overall' + (selectedGrade ? ', Grade ' + selectedGrade.grade : ''));
+
+    heading('Tickets (' + filteredMappable.length + ')');
+    row(['Address', 'Category', 'Status', 'Resolved', 'Days'], [65, 40, 20, 30, 20], true);
+    filteredMappable.forEach((t) => {
+      row([
+        truncate(t.address, 36),
+        truncate(t.category, 22),
+        t.onTime ? 'On time' : 'Late',
+        fmtDate(t.resolvedAt),
+        t.daysToResolve + 'd',
+      ], [65, 40, 20, 30, 20]);
+      if (t.reappeared) {
+        room();
+        doc.setFont(undefined, 'italic'); doc.setTextColor(185, 28, 28);
+        doc.text('  -> Reappeared ' + t.reappearedDistanceM + 'm away at ' + truncate(t.reappearedAddress, 50) + ', ' + fmtDate(t.reappearedAt), M, y);
+        y += 5;
+        doc.setFont(undefined, 'normal'); doc.setTextColor(0, 0, 0);
+      }
+    });
+
+    doc.save('repair-reliability-' + selectedAuthority.replace(/\s+/g, '-').toLowerCase() + '.pdf');
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
@@ -250,13 +320,23 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                 <>
                   <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                     <div className="text-xs font-black text-[#201f1b] uppercase tracking-wide">Evidence — {selectedAuthority}</div>
-                    <button
-                      onClick={() => setSelectedAuthority(null)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
-                      style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
-                    >
-                      Clear <X size={11} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={exportEvidencePDF}
+                        disabled={!selectedRow?.tickets?.length}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ background: '#3d4d34', color: '#fff' }}
+                      >
+                        <FileDown size={11} /> Export PDF
+                      </button>
+                      <button
+                        onClick={() => setSelectedAuthority(null)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+                        style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
+                      >
+                        Clear <X size={11} />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-[#8a8477] mb-3 leading-relaxed">
                     {selectedRow?.resolvedCount ?? 0} resolved ticket{selectedRow?.resolvedCount === 1 ? '' : 's'}
