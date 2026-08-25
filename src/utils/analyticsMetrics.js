@@ -619,12 +619,12 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
       onTime,
       latitude: r.latitude,
       longitude: r.longitude,
-      reappeared: false,
-      reappearedAt: null,
-      reappearedAddress: null,
-      reappearedDistanceM: null,
-      reappearedLatitude: null,
-      reappearedLongitude: null,
+      // One original repair can attract more than one later complaint —
+      // a single boolean+fields here used to silently overwrite earlier
+      // matches, so a ticket that reappeared 5 times looked identical to
+      // one that reappeared once, and the count above this list could run
+      // ahead of how many tickets actually showed as flagged.
+      reappearances: [],
     };
     ticketById.set(r.id, ticket);
     if (!ticketsByAuthority.has(authority.abbr)) ticketsByAuthority.set(authority.abbr, []);
@@ -658,12 +658,14 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
         bucket(authority).reIncidence += 1;
         const ticket = ticketById.get(nearest.id);
         if (ticket) {
-          ticket.reappeared = true;
-          ticket.reappearedAt = report.timestamp;
-          ticket.reappearedAddress = report.address || report.location || 'Unknown location';
-          ticket.reappearedDistanceM = Math.round(nearestDist);
-          ticket.reappearedLatitude = report.latitude;
-          ticket.reappearedLongitude = report.longitude;
+          ticket.reappearances.push({
+            id: report.id,
+            at: report.timestamp,
+            address: report.address || report.location || 'Unknown location',
+            distanceM: Math.round(nearestDist),
+            latitude: report.latitude,
+            longitude: report.longitude,
+          });
         }
         incidents.push({
           id: `${nearest.id}-${report.id}`,

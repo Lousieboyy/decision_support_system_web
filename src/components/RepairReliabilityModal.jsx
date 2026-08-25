@@ -102,7 +102,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
   const filteredMappable = mappable.filter((t) => {
     if (statusFilter === 'onTime' && !t.onTime) return false;
     if (statusFilter === 'late' && t.onTime) return false;
-    if (statusFilter === 'repeat' && !t.reappeared) return false;
+    if (statusFilter === 'repeat' && t.reappearances.length === 0) return false;
     if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
     // Dated by resolution, matching how the rest of this modal already
     // cohorts ("resolved tickets") rather than by submission date.
@@ -120,8 +120,8 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
   });
   const boundsPoints = filteredMappable.flatMap((t) => {
     const pts = [[t.latitude, t.longitude]];
-    if (t.reappeared && isValidPoint(t.reappearedLatitude, t.reappearedLongitude)) {
-      pts.push([t.reappearedLatitude, t.reappearedLongitude]);
+    for (const rep of t.reappearances) {
+      if (isValidPoint(rep.latitude, rep.longitude)) pts.push([rep.latitude, rep.longitude]);
     }
     return pts;
   });
@@ -199,13 +199,13 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
         fmtDate(t.resolvedAt),
         t.daysToResolve + 'd',
       ], [65, 40, 20, 30, 20]);
-      if (t.reappeared) {
+      t.reappearances.forEach((rep) => {
         room();
         doc.setFont(undefined, 'italic'); doc.setTextColor(185, 28, 28);
-        doc.text('  -> Reappeared ' + t.reappearedDistanceM + 'm away at ' + truncate(t.reappearedAddress, 50) + ', ' + fmtDate(t.reappearedAt), M, y);
+        doc.text('  -> Reappeared ' + rep.distanceM + 'm away at ' + truncate(rep.address, 50) + ', ' + fmtDate(rep.at), M, y);
         y += 5;
         doc.setFont(undefined, 'normal'); doc.setTextColor(0, 0, 0);
-      }
+      });
     });
 
     doc.save('repair-reliability-' + selectedAuthority.replace(/\s+/g, '-').toLowerCase() + '.pdf');
@@ -431,8 +431,9 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                             />
                           ))}
                           {filteredMappable.map((t) => {
-                            const color = t.reappeared ? '#b91c1c' : t.onTime ? '#15803d' : '#b45309';
-                            const hasReappearPoint = t.reappeared && isValidPoint(t.reappearedLatitude, t.reappearedLongitude);
+                            const hasReappeared = t.reappearances.length > 0;
+                            const color = hasReappeared ? '#b91c1c' : t.onTime ? '#15803d' : '#b45309';
+                            const validReappearances = t.reappearances.filter((rep) => isValidPoint(rep.latitude, rep.longitude));
                             return (
                               <Fragment key={t.id}>
                                 <CircleMarker
@@ -450,35 +451,42 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                                       <div style={{ color: t.onTime ? '#15803d' : '#b45309', fontWeight: 700 }}>
                                         {t.onTime ? 'On time' : 'Late'} · {t.daysToResolve}d to fix
                                       </div>
-                                      {t.reappeared && (
-                                        <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #eee', color: '#b91c1c', fontWeight: 700 }}>
-                                          Reappeared {t.reappearedDistanceM}m away, {fmtDate(t.reappearedAt)}
+                                      {hasReappeared && (
+                                        <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #eee' }}>
+                                          <div style={{ color: '#b91c1c', fontWeight: 700 }}>
+                                            Reappeared {t.reappearances.length} time{t.reappearances.length === 1 ? '' : 's'}
+                                          </div>
+                                          {t.reappearances.map((rep) => (
+                                            <div key={rep.id} style={{ color: '#8a8477' }}>
+                                              {rep.distanceM}m away, {fmtDate(rep.at)}
+                                            </div>
+                                          ))}
                                         </div>
                                       )}
                                     </div>
                                   </Popup>
                                 </CircleMarker>
-                                {hasReappearPoint && (
-                                  <>
+                                {validReappearances.map((rep) => (
+                                  <Fragment key={rep.id}>
                                     <Polyline
-                                      positions={[[t.latitude, t.longitude], [t.reappearedLatitude, t.reappearedLongitude]]}
+                                      positions={[[t.latitude, t.longitude], [rep.latitude, rep.longitude]]}
                                       pathOptions={{ color: '#b91c1c', weight: 2, dashArray: '4 4' }}
                                     />
                                     <CircleMarker
-                                      center={[t.reappearedLatitude, t.reappearedLongitude]}
+                                      center={[rep.latitude, rep.longitude]}
                                       radius={5}
                                       pathOptions={{ color: '#b91c1c', fillColor: '#fff', fillOpacity: 1, weight: 2 }}
                                     >
                                       <Popup>
                                         <div style={{ fontSize: 12, minWidth: 160 }}>
-                                          <div style={{ fontWeight: 700 }}>{t.reappearedAddress}</div>
-                                          <div style={{ color: '#8a8477' }}>New report, {fmtDate(t.reappearedAt)}</div>
-                                          <div style={{ color: '#8a8477' }}>{t.reappearedDistanceM}m from the original repair</div>
+                                          <div style={{ fontWeight: 700 }}>{rep.address}</div>
+                                          <div style={{ color: '#8a8477' }}>New report, {fmtDate(rep.at)}</div>
+                                          <div style={{ color: '#8a8477' }}>{rep.distanceM}m from the original repair</div>
                                         </div>
                                       </Popup>
                                     </CircleMarker>
-                                  </>
-                                )}
+                                  </Fragment>
+                                ))}
                               </Fragment>
                             );
                           })}
