@@ -1,11 +1,7 @@
 import { useMemo, useState } from 'react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ErrorBar, Cell, ReferenceLine,
-} from 'recharts';
 import { AlertTriangle, Info } from 'lucide-react';
 import { buildFunnel, buildComposition } from '../utils/analyticsMetrics';
-import { SLA_TARGET_DAYS, SLA_END_TO_END_DAYS, MIN_N_FOR_STAGE } from '../utils/analyticsConstants';
+import { MIN_N_FOR_STAGE } from '../utils/analyticsConstants';
 import { StageEvidenceModal } from './StageEvidenceModal';
 
 const SEGMENT_COLORS = {
@@ -18,47 +14,33 @@ const SEGMENT_COLORS = {
   verify: '#14b8a6',
 };
 
-const fmtDays = (v) => (v == null ? '—' : `${v.toFixed(1)}d`);
-
-function StageTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
-      <div className="font-bold text-[#201f1b] mb-1">{d.label}</div>
-      <div className="text-[#8a8477] mb-2">Owner: {d.owner}</div>
-      {d.sufficient ? (
-        <div className="space-y-0.5 text-[#4b473d]">
-          <div>Typical case <strong className="text-[#201f1b]">{fmtDays(d.median)}</strong></div>
-          <div>Faster to slower cases: {fmtDays(d.p25)} – {fmtDays(d.p90)}</div>
-          <div>Average {fmtDays(d.mean)}</div>
-          <div className="pt-1 text-[#8a8477]">
-            Based on {d.n} reports ({Math.round(d.coverage * 100)}% have reached this stage)
-          </div>
-          {d.target != null && <div className="text-[#8a8477]">Target {fmtDays(d.target)}</div>}
-        </div>
-      ) : (
-        <div className="text-[#8a8477]">
-          Not enough reports yet — {d.n} of {MIN_N_FOR_STAGE} needed
-        </div>
-      )}
-    </div>
-  );
-}
+// Plain time units instead of fractional days — "0.3d" means nothing to a
+// reader without doing the multiplication themselves.
+const fmtDuration = (v) => {
+  if (v == null) return '—';
+  if (v <= 0) return '0 min';
+  const hrs = v * 24;
+  if (hrs < 1) return Math.max(1, Math.round(hrs * 60)) + ' min';
+  if (v < 1) return Math.round(hrs) + ' hrs';
+  const rounded = Math.round(v * 10) / 10;
+  return rounded + (rounded === 1 ? ' day' : ' days');
+};
 
 /**
- * Where the days actually go, between a citizen submitting a report and the
- * council signing it off.
+ * Where the time actually goes, between a citizen submitting a report and
+ * the council signing it off — rebuilt as plain labeled bars in real time
+ * units (minutes/hours/days) rather than a statistics chart, because
+ * "0.3d" and a p25–p90 whisker line mean nothing to a reader who hasn't
+ * been told what a percentile is. Stages without enough reports to trust a
+ * typical time collapse into one line instead of an empty row each.
  *
- * Medians are plotted rather than means because municipal durations are heavily
- * right-skewed: a handful of tickets waiting on budget approval move a mean by
- * days without changing what a typical citizen experiences. The p25–p90 whisker
- * puts the tail on the same row as the typical case, and p90 is the figure worth
- * alerting on.
+ * Medians (not means) still drive the bars: municipal durations are heavily
+ * right-skewed, and a handful of tickets awaiting budget approval would move
+ * a mean by days without changing what a typical citizen experiences.
  *
- * The composition strip below the bars deliberately switches to means, because
- * only means decompose additively — a stacked bar of medians would assert a
- * breakdown that the arithmetic does not support.
+ * The composition strip below deliberately switches to means, because only
+ * means decompose additively — a stacked bar of medians would assert a
+ * breakdown the arithmetic doesn't support.
  */
 export function StageFunnel({ reports, dateFilterLabel }) {
   const [cohort, setCohort] = useState('all');
@@ -71,17 +53,16 @@ export function StageFunnel({ reports, dateFilterLabel }) {
   const composition = useMemo(() => buildComposition(reports), [reports]);
   const selectedStage = selectedStageKey ? funnel.stages.find((s) => s.key === selectedStageKey) : null;
 
-  const chartData = funnel.stages.map((s) => ({
-    ...s,
-    target: SLA_TARGET_DAYS[s.key] ?? null,
-    // Recharts needs a numeric value; unmeasured stages plot nothing.
-    value: s.sufficient ? s.median : null,
-    // ErrorBar takes [distance below, distance above] from the bar value.
-    errorRange: s.sufficient && s.median != null ? [s.median - s.p25, s.p90 - s.median] : null,
-  }));
-
   const anyMeasured = funnel.stages.some((s) => s.sufficient);
   const censored = funnel.stages.filter((s) => s.coverage < 0.5 && s.n > 0);
+  const measuredStages = funnel.stages.filter((s) => s.sufficient);
+  const thinStages = funnel.stages.filter((s) => !s.sufficient && s.n > 0);
+  const maxMedian = Math.max(...measuredStages.map((s) => s.median), 0.0001);
+  // The slowest measured stage, named plainly — "which step should I
+  // actually look at" is the one thing this whole panel needs to answer.
+  const bottleneck = measuredStages.length
+    ? [...measuredStages].sort((a, b) => b.median - a.median)[0]
+    : null;
 
   return (
     <div className="content-card">
@@ -108,10 +89,9 @@ export function StageFunnel({ reports, dateFilterLabel }) {
 
       <div className="p-5">
         <p className="text-xs text-[#8a8477] mb-4">
-          {dateFilterLabel}. Bars show the <strong className="text-[#4b473d]">typical (median)</strong> days
-          in each stage; the thin line shows the range from faster to slower cases.{' '}
+          {dateFilterLabel}. Each bar is the typical time reports spend in that step.{' '}
           {cohort === 'all'
-            ? 'Each stage covers however many reports have reached it.'
+            ? 'Each stage covers however many reports have reached it so far.'
             : 'Resolved reports only, so every stage covers the same reports.'}
         </p>
 
@@ -121,83 +101,65 @@ export function StageFunnel({ reports, dateFilterLabel }) {
           </div>
         ) : (
           <>
-            <div style={{ height: 300 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
-                  <XAxis
-                    type="number"
-                    stroke="#8a8477"
-                    fontSize={11}
-                    tickLine={false}
-                    label={{ value: 'Days', position: 'insideBottom', offset: -2, fill: '#8a8477', fontSize: 10 }}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="label"
-                    stroke="#8a8477"
-                    fontSize={11}
-                    tickLine={false}
-                    width={140}
-                  />
-                  <Tooltip content={<StageTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
-                  <ReferenceLine
-                    x={SLA_END_TO_END_DAYS}
-                    stroke="#b91c1c"
-                    strokeDasharray="4 4"
-                    label={{ value: `${SLA_END_TO_END_DAYS}d end-to-end target`, fill: '#b91c1c', fontSize: 9, position: 'top' }}
-                  />
-                  <Bar
-                    dataKey="value"
-                    radius={[0, 6, 6, 0]}
-                    maxBarSize={22}
-                    cursor="pointer"
-                    onClick={(d) => {
-                      const key = d?.payload?.key ?? d?.key;
-                      setSelectedStageKey((prev) => (prev === key ? null : key));
-                    }}
-                  >
-                    {chartData.map((d) => (
-                      <Cell
-                        key={d.key}
-                        fill={SEGMENT_COLORS[d.key] || '#4a5d3f'}
-                        fillOpacity={!selectedStageKey || selectedStageKey === d.key ? 1 : 0.3}
-                      />
-                    ))}
-                    <ErrorBar dataKey="errorRange" width={4} strokeWidth={1.5} stroke="#8a8477" direction="x" />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {bottleneck && (
+              <div
+                className="rounded-xl px-3 py-2.5 mb-4 text-xs font-semibold leading-relaxed"
+                style={{ background: 'rgba(180,83,9,0.06)', color: '#8a4b0a' }}
+              >
+                <strong>{bottleneck.label}</strong> takes the longest — typically{' '}
+                <strong>{fmtDuration(bottleneck.median)}</strong>, up to {fmtDuration(bottleneck.p90)} for
+                slower cases. That's the step worth checking first.
+              </div>
+            )}
 
-            {/* Per-stage n and coverage, so a thin stage can be discounted.
-                Each row is clickable — reaches the evidence list below even
-                for a stage with too few reports to plot a bar. */}
-            <div className="mt-4 grid gap-1.5">
-              {funnel.stages.map((s) => (
+            <div className="space-y-3">
+              {measuredStages.map((s) => (
                 <button
                   key={s.key}
-                  onClick={() => s.n > 0 && setSelectedStageKey((prev) => (prev === s.key ? null : s.key))}
-                  disabled={s.n === 0}
-                  className={`flex items-center gap-3 text-[11px] text-left rounded-lg px-1.5 py-1 -mx-1.5 transition-colors ${
-                    s.n > 0 ? 'hover:bg-[#4a5d3f]/5 cursor-pointer' : 'cursor-default'
-                  } ${selectedStageKey === s.key ? 'bg-[#4a5d3f]/8' : ''}`}
+                  onClick={() => setSelectedStageKey((prev) => (prev === s.key ? null : s.key))}
+                  className={`w-full text-left rounded-lg px-1.5 py-1 -mx-1.5 transition-colors hover:bg-[#4a5d3f]/5 ${
+                    selectedStageKey === s.key ? 'bg-[#4a5d3f]/8' : ''
+                  }`}
                 >
-                  <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: SEGMENT_COLORS[s.key] }} />
-                  <span className="w-36 text-[#4b473d] font-semibold truncate">{s.label}</span>
-                  <span className="w-16 font-bold text-[#201f1b]">
-                    {s.sufficient ? fmtDays(s.median) : '—'}
-                  </span>
-                  <span className="text-[#8a8477]">
-                    {s.sufficient
-                      ? `up to ${fmtDays(s.p90)} for slower cases · ${s.n} reports`
-                      : `not enough reports yet (${s.n})`}
-                  </span>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-bold text-[#201f1b]">{s.label}</span>
+                    <span className="text-xs font-black" style={{ color: SEGMENT_COLORS[s.key] }}>
+                      {fmtDuration(s.median)}
+                    </span>
+                  </div>
+                  <div className="h-2.5 rounded-full overflow-hidden" style={{ background: '#f5f1e6' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{ width: `${Math.max(4, (s.median / maxMedian) * 100)}%`, background: SEGMENT_COLORS[s.key] }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-[#8a8477] mt-1">
+                    Up to {fmtDuration(s.p90)} for slower cases · {s.n} report{s.n === 1 ? '' : 's'}
+                  </div>
                 </button>
               ))}
             </div>
-            <p className="text-[10px] text-[#8a8477] mt-1.5">
-              Click a stage (bar or row) to see the individual reports behind it.
+
+            {thinStages.length > 0 && (
+              <p className="text-[11px] text-[#8a8477] mt-3 leading-relaxed">
+                Not enough reports yet to show a typical time for{' '}
+                {thinStages.map((s, i) => (
+                  <span key={s.key}>
+                    <button
+                      onClick={() => setSelectedStageKey((prev) => (prev === s.key ? null : s.key))}
+                      className="font-semibold underline decoration-dotted underline-offset-2 hover:text-[#201f1b]"
+                    >
+                      {s.label} ({s.n})
+                    </button>
+                    {i < thinStages.length - 1 ? (i === thinStages.length - 2 ? ' and ' : ', ') : ''}
+                  </span>
+                ))}
+                .
+              </p>
+            )}
+
+            <p className="text-[10px] text-[#8a8477] mt-2">
+              Click any stage to see the individual reports behind it.
             </p>
 
             {selectedStage && (
@@ -216,7 +178,7 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                     Share of end-to-end time
                   </span>
                   <span className="text-[11px] text-[#8a8477]">
-                    average total {fmtDays(composition.meanTotalDays)} · from {composition.n} reports
+                    average total {fmtDuration(composition.meanTotalDays)} · from {composition.n} reports
                   </span>
                 </div>
                 <div className="flex h-6 rounded-lg overflow-hidden border border-[#1f1e1a]/8">
@@ -224,7 +186,7 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                     seg.share > 0 ? (
                       <div
                         key={seg.key}
-                        title={`${seg.label}: ${fmtDays(seg.meanDays)} (${Math.round(seg.share * 100)}%)`}
+                        title={`${seg.label}: ${fmtDuration(seg.meanDays)} (${Math.round(seg.share * 100)}%)`}
                         style={{ width: `${seg.share * 100}%`, background: SEGMENT_COLORS[seg.key] }}
                       />
                     ) : null
