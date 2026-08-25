@@ -86,6 +86,8 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
   const auditAvailable = auditActions !== null;
   const [selectedAuthority, setSelectedAuthority] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const selectedRow = selectedAuthority
     ? contractorAudit.find((d) => d.name === selectedAuthority)
@@ -95,9 +97,21 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
   const mappable = (selectedRow?.tickets || []).filter((t) => isValidPoint(t.latitude, t.longitude));
   const unmapped = (selectedRow?.tickets?.length || 0) - mappable.length;
   const filteredMappable = mappable.filter((t) => {
-    if (statusFilter === 'onTime') return t.onTime;
-    if (statusFilter === 'late') return !t.onTime;
-    if (statusFilter === 'repeat') return t.reappeared;
+    if (statusFilter === 'onTime' && !t.onTime) return false;
+    if (statusFilter === 'late' && t.onTime) return false;
+    if (statusFilter === 'repeat' && !t.reappeared) return false;
+    // Dated by resolution, matching how the rest of this modal already
+    // cohorts ("resolved tickets") rather than by submission date.
+    if (dateFrom || dateTo) {
+      const resolved = t.resolvedAt ? new Date(t.resolvedAt) : null;
+      if (!resolved || isNaN(resolved.getTime())) return false;
+      if (dateFrom && resolved < new Date(dateFrom)) return false;
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        if (resolved > end) return false;
+      }
+    }
     return true;
   });
   const boundsPoints = filteredMappable.flatMap((t) => {
@@ -260,7 +274,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         {STATUS_FILTERS.map((f) => (
                           <button
                             key={f.key}
@@ -274,10 +288,36 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                             {f.label}
                           </button>
                         ))}
+                        <span className="w-px h-4 bg-[#1f1e1a]/10 mx-1" />
+                        <input
+                          type="date"
+                          value={dateFrom}
+                          max={dateTo || undefined}
+                          onChange={(e) => setDateFrom(e.target.value)}
+                          className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-lg px-2 py-1 text-[11px] font-semibold text-[#201f1b] outline-none"
+                        />
+                        <span className="text-[11px] text-[#8a8477]">to</span>
+                        <input
+                          type="date"
+                          value={dateTo}
+                          min={dateFrom || undefined}
+                          onChange={(e) => setDateTo(e.target.value)}
+                          className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-lg px-2 py-1 text-[11px] font-semibold text-[#201f1b] outline-none"
+                        />
+                        {(dateFrom || dateTo) && (
+                          <button
+                            onClick={() => { setDateFrom(''); setDateTo(''); }}
+                            className="text-[11px] font-bold text-[#8a8477] hover:text-[#201f1b]"
+                          >
+                            Clear dates
+                          </button>
+                        )}
                       </div>
+                      <p className="text-[10px] text-[#8a8477] -mt-1 mb-2">Date range filters by resolved date.</p>
                       {filteredMappable.length === 0 ? (
                         <div className="text-center text-[#8a8477] py-6 text-xs">
-                          No {STATUS_FILTERS.find((f) => f.key === statusFilter)?.label.toLowerCase()} tickets for {selectedAuthority}.
+                          No {STATUS_FILTERS.find((f) => f.key === statusFilter)?.label.toLowerCase()} tickets
+                          {(dateFrom || dateTo) ? ' in this date range' : ''} for {selectedAuthority}.
                         </div>
                       ) : (
                       <>
