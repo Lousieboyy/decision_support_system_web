@@ -13,7 +13,7 @@ import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck, X
+  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
@@ -30,6 +30,7 @@ import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
 import { DispatchAudit } from '../components/DispatchAudit';
 import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
+import { ChartSpotlightModal } from '../components/ChartSpotlightModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
@@ -1827,50 +1828,15 @@ export function AnalyticsPage() {
             </div>
 
             {/* Spotlight — the reports behind whichever chart element was just
-                clicked (a day, a category, a department, a status bucket). */}
+                clicked (a day, a category, a department, a status bucket).
+                A modal, not a card at the bottom of the page — the card
+                version was easy to click-and-miss below the fold. */}
             {spotlight && (
-              <div className="content-card">
-                <div className="content-card-header">
-                  <div className="content-card-title">{spotlight.label}</div>
-                  <button
-                    onClick={() => setSpotlight(null)}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
-                    style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
-                  >
-                    Clear <X size={11} />
-                  </button>
-                </div>
-                <div className="p-5">
-                  <p className="text-xs text-[#8a8477] mb-3">
-                    {spotlightReports.length} report{spotlightReports.length === 1 ? '' : 's'}
-                  </p>
-                  {spotlightReports.length === 0 ? (
-                    <div className="text-center text-[#8a8477] py-6 text-xs">No reports match.</div>
-                  ) : (
-                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                      {spotlightReports.map((r) => (
-                        <div key={r.id} className="rounded-xl p-3 border border-[#1f1e1a]/8 flex items-center justify-between gap-3" style={{ background: 'var(--cream-100)' }}>
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-[#201f1b] truncate">{r.address || r.location || 'Unknown location'}</div>
-                            <div className="text-[10px] text-[#8a8477]">
-                              {r.categories || 'Other'} · {r.assigned_department || 'Unassigned'}
-                              {/* Date-only parse, not new Date(fullTimestamp) — the trend
-                                  chart buckets by the raw UTC date string, and converting
-                                  the full timestamp to local time here could roll the
-                                  displayed day forward/back across the same boundary,
-                                  showing "16 Aug" under a "Reports from Aug 15" header. */}
-                              {r.timestamp && ` · ${format(parseISO(r.timestamp.split('T')[0]), 'd MMM yyyy')}`}
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-black uppercase tracking-wide shrink-0" style={{ color: r.status === 'Resolved' ? '#15803d' : r.status === 'Rejected' ? '#8a8477' : '#b45309' }}>
-                            {r.status}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+              <ChartSpotlightModal
+                spotlight={spotlight}
+                reports={spotlightReports}
+                onClose={() => setSpotlight(null)}
+              />
             )}
           </div>
         )}
