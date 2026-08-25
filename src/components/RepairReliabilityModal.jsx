@@ -347,17 +347,18 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                   <p className="text-xs text-[#8a8477] mb-1 leading-relaxed">
                     {selectedRow?.resolvedCount ?? 0} resolved ticket{selectedRow?.resolvedCount === 1 ? '' : 's'}
                     {' · '}
-                    {selectedRow?.reIncidence > 0 ? (
-                      <span className="text-[#c1613f] font-bold">{selectedRow.reIncidence} repeat failure{selectedRow.reIncidence === 1 ? '' : 's'}</span>
-                    ) : 'no repeat failures'}
+                    {flaggedTicketCount > 0 ? (
+                      <span className="text-[#c1613f] font-bold">{flaggedTicketCount} place{flaggedTicketCount === 1 ? '' : 's'} keep{flaggedTicketCount === 1 ? 's' : ''} breaking again</span>
+                    ) : 'nothing has broken again'}
                     {selectedGrade && <> · Grade <strong style={{ color: rateColor(selectedRow.rate) }}>{selectedGrade.grade}</strong></>}
                     {' — every ticket below, most recently resolved first.'}
                   </p>
-                  {selectedRow?.reIncidence > 0 && flaggedTicketCount !== selectedRow.reIncidence && (
+                  {selectedRow?.reIncidence > 0 && (
                     <p className="text-[11px] text-[#8a8477] mb-3 leading-relaxed">
-                      That's {selectedRow.reIncidence} repeat-failure incident{selectedRow.reIncidence === 1 ? '' : 's'} landing on just{' '}
-                      <strong className="text-[#201f1b]">{flaggedTicketCount}</strong> original repair{flaggedTicketCount === 1 ? '' : 's'} — the red marker{flaggedTicketCount === 1 ? '' : 's'} below,
-                      each with more than one dashed line if it failed more than once. Same site breaking repeatedly, not many different sites.
+                      Shown as {flaggedTicketCount === 1 ? 'a red marker' : 'red markers'} below.{' '}
+                      {flaggedTicketCount !== selectedRow.reIncidence
+                        ? <>Between {flaggedTicketCount === 1 ? 'it' : 'them'}, {flaggedTicketCount === 1 ? "it's" : "they've"} come back {selectedRow.reIncidence} time{selectedRow.reIncidence === 1 ? '' : 's'} in total — click a red marker to see how many times each place failed.</>
+                        : <>Each has failed once so far — click a red marker for details.</>}
                     </p>
                   )}
                   {!selectedRow?.tickets?.length ? (
