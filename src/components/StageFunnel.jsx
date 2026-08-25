@@ -170,7 +170,11 @@ export function StageFunnel({ reports, dateFilterLabel }) {
               />
             )}
 
-            {/* Composition strip — means, because only means are additive. */}
+            {/* Composition strip — means, because only means are additive.
+                Requires every stage complete, so this cohort is small; below
+                the reporting threshold a "mean" from 1-2 reports asserts a
+                pattern the data can't back up, so it's shown as a caveat
+                instead of a bar that looks authoritative. */}
             {composition.n > 0 && (
               <div className="mt-6 pt-5 border-t border-[#1f1e1a]/8">
                 <div className="flex items-center justify-between mb-2">
@@ -178,26 +182,60 @@ export function StageFunnel({ reports, dateFilterLabel }) {
                     Share of end-to-end time
                   </span>
                   <span className="text-[11px] text-[#8a8477]">
-                    average total {fmtDuration(composition.meanTotalDays)} · from {composition.n} reports
+                    from {composition.n} fully-complete report{composition.n === 1 ? '' : 's'}
                   </span>
                 </div>
-                <div className="flex h-6 rounded-lg overflow-hidden border border-[#1f1e1a]/8">
-                  {composition.segments.map((seg) =>
-                    seg.share > 0 ? (
-                      <div
-                        key={seg.key}
-                        title={`${seg.label}: ${fmtDuration(seg.meanDays)} (${Math.round(seg.share * 100)}%)`}
-                        style={{ width: `${seg.share * 100}%`, background: SEGMENT_COLORS[seg.key] }}
-                      />
-                    ) : null
-                  )}
-                </div>
-                <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
-                  <Info size={10} className="inline mr-1 -mt-0.5" />
-                  Means are used in this strip because only means decompose additively, so the
-                  segments genuinely sum to the mean total. The bars above show medians, which
-                  better represent the typical case. Complete resolved reports only.
-                </p>
+
+                {composition.n < MIN_N_FOR_STAGE ? (
+                  <p className="text-xs text-[#8a8477] leading-relaxed">
+                    Only {composition.n} report{composition.n === 1 ? '' : 's'} {composition.n === 1 ? 'has' : 'have'} gone
+                    all the way through every stage so far — not enough to say where the total time
+                    typically goes. This fills in once {MIN_N_FOR_STAGE}+ reports complete the full pipeline.
+                  </p>
+                ) : (
+                  <>
+                    {(() => {
+                      const biggest = [...composition.segments].sort((a, b) => b.share - a.share)[0];
+                      return biggest && biggest.share > 0 ? (
+                        <p className="text-xs font-semibold leading-relaxed mb-2" style={{ color: '#8a4b0a' }}>
+                          {biggest.label} is the biggest piece — {Math.round(biggest.share * 100)}% of the average{' '}
+                          {fmtDuration(composition.meanTotalDays)} total. Click it below to see those reports.
+                        </p>
+                      ) : null;
+                    })()}
+                    <div className="flex h-6 rounded-lg overflow-hidden border border-[#1f1e1a]/8">
+                      {composition.segments.map((seg) =>
+                        seg.share > 0 ? (
+                          <button
+                            key={seg.key}
+                            title={`${seg.label}: ${fmtDuration(seg.meanDays)} (${Math.round(seg.share * 100)}%)`}
+                            onClick={() => setSelectedStageKey((prev) => (prev === seg.key ? null : seg.key))}
+                            style={{ width: `${seg.share * 100}%`, background: SEGMENT_COLORS[seg.key] }}
+                            className="transition-opacity hover:opacity-80 cursor-pointer"
+                          />
+                        ) : null
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                      {composition.segments.filter((seg) => seg.share > 0).map((seg) => (
+                        <button
+                          key={seg.key}
+                          onClick={() => setSelectedStageKey((prev) => (prev === seg.key ? null : seg.key))}
+                          className="inline-flex items-center gap-1 text-[10px] text-[#4b473d] hover:text-[#201f1b]"
+                        >
+                          <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: SEGMENT_COLORS[seg.key] }} />
+                          {seg.label} {Math.round(seg.share * 100)}%
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
+                      <Info size={10} className="inline mr-1 -mt-0.5" />
+                      Means are used here because only means decompose additively, so the segments
+                      genuinely sum to the total. The bars above show medians, which better represent
+                      the typical case.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
