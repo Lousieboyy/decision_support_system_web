@@ -616,10 +616,14 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
       resolvedAt: r.resolved_at,
       daysToResolve: Math.round(daysToResolve * 10) / 10,
       onTime,
+      latitude: r.latitude,
+      longitude: r.longitude,
       reappeared: false,
       reappearedAt: null,
       reappearedAddress: null,
       reappearedDistanceM: null,
+      reappearedLatitude: null,
+      reappearedLongitude: null,
     };
     ticketById.set(r.id, ticket);
     if (!ticketsByAuthority.has(authority.abbr)) ticketsByAuthority.set(authority.abbr, []);
@@ -657,6 +661,8 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
           ticket.reappearedAt = report.timestamp;
           ticket.reappearedAddress = report.address || report.location || 'Unknown location';
           ticket.reappearedDistanceM = Math.round(nearestDist);
+          ticket.reappearedLatitude = report.latitude;
+          ticket.reappearedLongitude = report.longitude;
         }
         incidents.push({
           id: `${nearest.id}-${report.id}`,

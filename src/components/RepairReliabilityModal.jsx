@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { X, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts';
+import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { format } from 'date-fns';
 import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor } from '../utils/analyticsConstants';
 
@@ -13,6 +15,34 @@ const fmtDate = (v) => {
 };
 
 const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
+
+const isValidPoint = (lat, lng) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
+
+// Blank-grey-tiles fix: a map mounted inside a modal has no real size on its
+// first render, so Leaflet measures a 0x0 box unless told to recheck once
+// the modal has actually painted.
+function MapResizer() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      try { map.invalidateSize(); } catch (_) { /* ignore */ }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [map]);
+  return null;
+}
+
+function MapBoundsFitter({ points }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length >= 2) {
+      map.fitBounds(L.latLngBounds(points), { padding: [30, 30] });
+    } else if (points.length === 1) {
+      map.setView(points[0], 15);
+    }
+  }, [map, points]);
+  return null;
+}
 
 function ReliabilityTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
@@ -48,12 +78,22 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
     : null;
   const selectedGrade = selectedRow?.rate == null ? null : gradeFor(selectedRow.rate);
 
+  const mappable = (selectedRow?.tickets || []).filter((t) => isValidPoint(t.latitude, t.longitude));
+  const unmapped = (selectedRow?.tickets?.length || 0) - mappable.length;
+  const boundsPoints = mappable.flatMap((t) => {
+    const pts = [[t.latitude, t.longitude]];
+    if (t.reappeared && isValidPoint(t.reappearedLatitude, t.reappearedLongitude)) {
+      pts.push([t.reappearedLatitude, t.reappearedLongitude]);
+    }
+    return pts;
+  });
+
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden"
+          className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden"
           style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
@@ -178,40 +218,76 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                     <div className="text-center text-[#8a8477] py-6 text-xs">
                       No resolved tickets with both a submitted and resolved date for {selectedAuthority}.
                     </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
-                      {selectedRow.tickets.map((t) => (
-                        <div key={t.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
-                          <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
-                            <span className="text-xs font-bold text-[#201f1b]">{t.address}</span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span
-                                className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
-                                style={t.onTime
-                                  ? { color: '#15803d', background: 'rgba(21,128,61,0.1)' }
-                                  : { color: '#b45309', background: 'rgba(180,83,9,0.1)' }}
-                              >
-                                {t.onTime ? 'On time' : 'Late'}
-                              </span>
-                              {t.reappeared && (
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide" style={{ color: '#b91c1c', background: 'rgba(185,28,28,0.1)' }}>
-                                  Repeat failure
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-[10px] text-[#8a8477]">
-                            {t.category} · Resolved {fmtDate(t.resolvedAt)} · {t.daysToResolve}d to fix
-                          </div>
-                          {t.reappeared && (
-                            <div className="mt-2 pt-2 border-t border-[#1f1e1a]/8 text-[10px]">
-                              <span className="font-bold text-[#c1613f]">Reappeared</span>{' '}
-                              at {t.reappearedAddress}, reported {fmtDate(t.reappearedAt)} · {t.reappearedDistanceM}m away
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                  ) : mappable.length === 0 ? (
+                    <div className="text-center text-[#8a8477] py-6 text-xs">
+                      None of these tickets have usable coordinates to plot.
                     </div>
+                  ) : (
+                    <>
+                      <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 420 }}>
+                        <MapContainer center={[2.1896, 102.2501]} zoom={12.5} style={{ height: '100%', width: '100%' }}>
+                          <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          />
+                          {mappable.map((t) => {
+                            const color = t.reappeared ? '#b91c1c' : t.onTime ? '#15803d' : '#b45309';
+                            const hasReappearPoint = t.reappeared && isValidPoint(t.reappearedLatitude, t.reappearedLongitude);
+                            return (
+                              <Fragment key={t.id}>
+                                <CircleMarker
+                                  center={[t.latitude, t.longitude]}
+                                  radius={7}
+                                  pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 2 }}
+                                >
+                                  <Popup>
+                                    <div style={{ fontSize: 12, minWidth: 160 }}>
+                                      <div style={{ fontWeight: 700 }}>{t.address}</div>
+                                      <div style={{ color: '#8a8477' }}>{t.category} · {t.onTime ? 'On time' : 'Late'} · {t.daysToResolve}d to fix</div>
+                                      <div style={{ color: '#8a8477' }}>Resolved {fmtDate(t.resolvedAt)}</div>
+                                      {t.reappeared && (
+                                        <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #eee', color: '#b91c1c', fontWeight: 700 }}>
+                                          Reappeared {t.reappearedDistanceM}m away, {fmtDate(t.reappearedAt)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </Popup>
+                                </CircleMarker>
+                                {hasReappearPoint && (
+                                  <>
+                                    <Polyline
+                                      positions={[[t.latitude, t.longitude], [t.reappearedLatitude, t.reappearedLongitude]]}
+                                      pathOptions={{ color: '#b91c1c', weight: 2, dashArray: '4 4' }}
+                                    />
+                                    <CircleMarker
+                                      center={[t.reappearedLatitude, t.reappearedLongitude]}
+                                      radius={5}
+                                      pathOptions={{ color: '#b91c1c', fillColor: '#fff', fillOpacity: 1, weight: 2 }}
+                                    >
+                                      <Popup>
+                                        <div style={{ fontSize: 12, minWidth: 160 }}>
+                                          <div style={{ fontWeight: 700 }}>{t.reappearedAddress}</div>
+                                          <div style={{ color: '#8a8477' }}>New report, {fmtDate(t.reappearedAt)}</div>
+                                          <div style={{ color: '#8a8477' }}>{t.reappearedDistanceM}m from the original repair</div>
+                                        </div>
+                                      </Popup>
+                                    </CircleMarker>
+                                  </>
+                                )}
+                              </Fragment>
+                            );
+                          })}
+                          <MapResizer />
+                          <MapBoundsFitter points={boundsPoints} />
+                        </MapContainer>
+                      </div>
+                      <div className="flex items-center gap-4 flex-wrap mt-2 text-[10px] text-[#8a8477]">
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#15803d' }} /> On time</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Late</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b91c1c' }} /> Repeat failure (dashed line to where it reappeared)</span>
+                        {unmapped > 0 && <span>{unmapped} ticket{unmapped === 1 ? '' : 's'} without usable coordinates not shown</span>}
+                      </div>
+                    </>
                   )}
                 </>
               )}
