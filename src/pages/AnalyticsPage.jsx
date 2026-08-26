@@ -7,18 +7,19 @@ import {
   BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar, LabelList,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { MapContainer, TileLayer, useMap, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck
+  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck,
+  Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
-  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
+  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor, RISK_TONE, DEFAULT_RISK_TONE,
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
@@ -110,6 +111,13 @@ function MapController({ focus }) {
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
+// Individual-ticket marker color for a selected hotspot's constituent
+// reports — status, not category, since category is already the cluster's
+// own badge. Only Pending/In Review/In Process/In Maintenance ever reach
+// here (hotspots only cluster active reports).
+const clusterMarkerColor = (status) =>
+  status === 'In Process' || status === 'In Maintenance' ? '#3b82f6' : '#b45309';
+
 export function AnalyticsPage() {
   const { role, user } = useAuth();
   const [reports, setReports] = useState([]);
@@ -182,6 +190,7 @@ export function AnalyticsPage() {
   // different things to the UI, so they must stay distinguishable.
   const [auditActions, setAuditActions] = useState(null);
   const [activeTab, setActiveTab] = useState('single');
+  const [hotspotSearch, setHotspotSearch] = useState('');
   const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'dispatch'
   const [showReliabilityModal, setShowReliabilityModal] = useState(false);
 
@@ -586,6 +595,15 @@ export function AnalyticsPage() {
     // Sort by priority score descending
     return computed.sort((a, b) => b.priorityScore - a.priorityScore);
   }, [hotspots, rootCauseAdvisories, reporterTrustMap, proximityRadius]);
+
+  // Lookup so the Predictive Hotspots list can show the same priority score
+  // and risk badge as the Dispatch & Audit queue, instead of a second,
+  // inconsistent ranking (currently raw cluster size) for the same clusters.
+  const priorityById = useMemo(() => {
+    const map = {};
+    prioritizedDispatchQueue.forEach((item) => { map[item.id] = item; });
+    return map;
+  }, [prioritizedDispatchQueue]);
 
   // Department scopes offered by the filter, derived from the data rather than a
   // hardcoded list of three. Declared before deptSLAMetrics, which consumes it.
@@ -1394,6 +1412,76 @@ export function AnalyticsPage() {
     ? (hotspots.find(h => h.id === activeClusterId) || rootCauseAdvisories.find(a => a.id === activeClusterId))
     : null;
 
+  // Predictive Hotspots list: ranked by the same priority score as the
+  // Dispatch & Audit queue (not raw cluster size) so the most urgent item is
+  // always first, and searchable by address/category once there are more
+  // than a handful of clusters to scan.
+  const hotspotSearchLower = hotspotSearch.trim().toLowerCase();
+  const matchesHotspotSearch = (item) =>
+    !hotspotSearchLower ||
+    item.address.toLowerCase().includes(hotspotSearchLower) ||
+    item.category.toLowerCase().includes(hotspotSearchLower);
+  const displayHotspots = [...hotspots]
+    .filter(matchesHotspotSearch)
+    .sort((a, b) => (priorityById[b.id]?.priorityScore ?? 0) - (priorityById[a.id]?.priorityScore ?? 0));
+  const displayAdvisories = [...rootCauseAdvisories]
+    .filter(matchesHotspotSearch)
+    .sort((a, b) => (priorityById[b.id]?.priorityScore ?? 0) - (priorityById[a.id]?.priorityScore ?? 0));
+
+  const renderHotspotCard = (item, isSystemic) => {
+    const priority = priorityById[item.id];
+    const tone = priority ? (RISK_TONE[priority.primaryRisk] || DEFAULT_RISK_TONE) : DEFAULT_RISK_TONE;
+    const badge = isSystemic
+      ? { bg: 'rgba(99,102,241,0.10)', border: 'rgba(99,102,241,0.25)', text: '#4338ca' }
+      : { bg: 'rgba(74,93,63,0.10)', border: 'rgba(74,93,63,0.20)', text: '#4a5d3f' };
+    return (
+      <div
+        key={item.id}
+        onClick={() => {
+          setActiveClusterId(item.id);
+          setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
+        }}
+        style={{ borderLeftColor: tone.color, borderLeftWidth: 4 }}
+        className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
+          activeClusterId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <span
+              className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
+              style={{ background: badge.bg, borderColor: badge.border, color: badge.text }}
+            >
+              {item.category}
+            </span>
+            <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
+              {item.size} {isSystemic ? 'reports' : 'active defects'}{item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {priority && (
+              <span
+                className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
+                style={{ color: tone.color, background: tone.bg }}
+                title={`Priority ${priority.priorityScore} of 100 — ${priority.primaryRisk}`}
+              >
+                {priority.priorityScore}
+              </span>
+            )}
+            <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors" />
+          </div>
+        </div>
+        <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
+        <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
+          {item.recommendation}
+        </div>
+        <div onClick={(e) => e.stopPropagation()} className="flex">
+          <ClusterDispatchAction item={item} onDispatched={loadData} />
+        </div>
+      </div>
+    );
+  };
+
   // The date filter cohorts by SUBMISSION date (matchesDateFilter keys off
   // r.timestamp). Saying so matters: cohorting by resolution date instead would
   // censor slow reports out of short windows and make the service look faster
@@ -1857,22 +1945,61 @@ export function AnalyticsPage() {
                         />
                         <HeatmapLayer points={heatmapPoints} ready={mapReady} />
                         {activeCluster && (
-                          <Circle
-                            center={[activeCluster.latitude, activeCluster.longitude]}
-                            radius={proximityRadius}
-                            pathOptions={{
-                              color: activeCluster.id.startsWith('advisory-') ? '#a1a1aa' : '#ffffff',
-                              fillColor: activeCluster.id.startsWith('advisory-') ? '#a1a1aa' : '#ffffff',
-                              fillOpacity: 0.15,
-                              weight: 2,
-                              dashArray: activeCluster.id.startsWith('advisory-') ? '6, 6' : undefined
-                            }}
-                          />
+                          <>
+                            <Circle
+                              center={[activeCluster.latitude, activeCluster.longitude]}
+                              radius={proximityRadius}
+                              pathOptions={{
+                                color: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
+                                fillColor: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
+                                fillOpacity: 0.06,
+                                weight: 1.5,
+                                dashArray: activeCluster.id.startsWith('advisory-') ? '6, 6' : undefined
+                              }}
+                            />
+                            {activeCluster.items
+                              .filter((it) => it.latitude != null && it.longitude != null)
+                              .map((it) => (
+                                <CircleMarker
+                                  key={it.id}
+                                  center={[it.latitude, it.longitude]}
+                                  radius={7}
+                                  pathOptions={{
+                                    color: clusterMarkerColor(it.status),
+                                    fillColor: clusterMarkerColor(it.status),
+                                    fillOpacity: 0.9,
+                                    weight: 2,
+                                  }}
+                                >
+                                  <Popup>
+                                    <div style={{ fontSize: 12, minWidth: 180 }}>
+                                      <div style={{ fontWeight: 700 }}>{it.address || it.location || 'Unknown location'}</div>
+                                      <div style={{ color: '#8a8477', marginTop: 2 }}>Category: {it.categories || activeCluster.category}</div>
+                                      <div style={{ color: '#8a8477' }}>Status: {it.status}</div>
+                                      {it.upvotes > 0 && <div style={{ color: '#8a8477' }}>{it.upvotes} upvotes</div>}
+                                    </div>
+                                  </Popup>
+                                </CircleMarker>
+                              ))}
+                          </>
                         )}
                         <MapResizer />
                         <MapController focus={mapFocus} />
                       </MapContainer>
                     </div>
+                    {activeCluster ? (
+                      <div className="flex items-center gap-4 flex-wrap mt-2.5 text-[10px] text-[#8a8477]">
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Waiting to be actioned</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2.5 h-2.5 rounded-full inline-block border-2" style={{ borderColor: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f' }} />
+                          {proximityRadius}m clustering radius
+                        </span>
+                        <span>Click a marker for that ticket's detail.</span>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-[#8a8477] mt-2.5">Select a hotspot below to see the individual reports behind it.</p>
+                    )}
                   </div>
                 </div>
 
@@ -1882,7 +2009,7 @@ export function AnalyticsPage() {
                   <div className="content-card-title">
                     Infrastructure Decision Support
                   </div>
-                  
+
                   {/* Tab Selector */}
                   <div className="flex bg-[#f5f1e6] p-1 rounded-xl border border-[#1f1e1a]/8 self-start sm:self-auto">
                     <button
@@ -1908,90 +2035,45 @@ export function AnalyticsPage() {
                   </div>
                 </div>
                   <div className="p-5 flex-1 flex flex-col space-y-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8477] pointer-events-none" />
+                        <input
+                          type="text"
+                          value={hotspotSearch}
+                          onChange={(e) => setHotspotSearch(e.target.value)}
+                          placeholder="Search by address or category…"
+                          className="w-full bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl pl-8 pr-8 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors"
+                        />
+                        {hotspotSearch && (
+                          <button
+                            onClick={() => setHotspotSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8a8477] hover:text-[#201f1b]"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">Sorted by priority, highest first</span>
+                    </div>
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
-                        hotspots.length === 0 ? (
+                        displayHotspots.length === 0 ? (
                           <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
                             <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
-                            No high-density active hotspots detected.
+                            {hotspots.length === 0 ? 'No high-density active hotspots detected.' : `No hotspots match "${hotspotSearch}".`}
                           </div>
                         ) : (
-                          hotspots.map((h) => (
-                            <div
-                              key={h.id}
-                              onClick={() => {
-                                setActiveClusterId(h.id);
-                                setMapFocus({ center: [h.latitude, h.longitude], zoom: 15.5, trigger: Date.now() });
-                              }}
-                              className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
-                                activeClusterId === h.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
-                                    {h.category}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
-                                    {h.size} active defects{h.upvotes > 0 && ` · ${h.upvotes} upvotes`}
-                                  </span>
-                                </div>
-                                <span className="text-[9px] font-bold text-[#8a8477] group-hover:text-[#201f1b] flex items-center gap-0.5 transition-colors">
-                                  Modify Settings
-                                  <ChevronRight size={10} />
-                                </span>
-                              </div>
-                              <div className="text-xs text-[#4b473d] font-bold">{h.address}</div>
-                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
-                                {h.recommendation}
-                              </div>
-                              <div onClick={(e) => e.stopPropagation()} className="flex">
-                                <ClusterDispatchAction item={h} onDispatched={loadData} />
-                              </div>
-                            </div>
-                          ))
+                          displayHotspots.map((h) => renderHotspotCard(h, false))
                         )
                       ) : (
-                        rootCauseAdvisories.length === 0 ? (
+                        displayAdvisories.length === 0 ? (
                           <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
                             <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
-                            No systemic cross-department issues detected.
+                            {rootCauseAdvisories.length === 0 ? 'No systemic cross-department issues detected.' : `No systemic issues match "${hotspotSearch}".`}
                           </div>
                         ) : (
-                          rootCauseAdvisories.map((a) => (
-                            <div
-                              key={a.id}
-                              onClick={() => {
-                                setActiveClusterId(a.id);
-                                setMapFocus({ center: [a.latitude, a.longitude], zoom: 15.5, trigger: Date.now() });
-                              }}
-                              className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
-                                activeClusterId === a.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
-                                    {a.category}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
-                                    {a.size} reports{a.upvotes > 0 && ` · ${a.upvotes} upvotes`}
-                                  </span>
-                                </div>
-                                <span className="text-[9px] font-bold text-[#8a8477] group-hover:text-[#201f1b] flex items-center gap-0.5 transition-colors">
-                                  Modify Settings
-                                  <ChevronRight size={10} />
-                                </span>
-                              </div>
-                              <div className="text-xs text-[#4b473d] font-bold">{a.address}</div>
-                              <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
-                                {a.recommendation}
-                              </div>
-                              <div onClick={(e) => e.stopPropagation()} className="flex">
-                                <ClusterDispatchAction item={a} onDispatched={loadData} />
-                              </div>
-                            </div>
-                          ))
+                          displayAdvisories.map((a) => renderHotspotCard(a, true))
                         )
                       )}
                     </div>
@@ -2013,9 +2095,22 @@ export function AnalyticsPage() {
                           <ChevronLeft size={16} />
                           Back
                         </button>
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
-                          {activeCluster.category}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {priorityById[activeCluster.id] && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
+                              style={{
+                                color: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).color,
+                                background: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).bg,
+                              }}
+                            >
+                              Priority {priorityById[activeCluster.id].priorityScore}
+                            </span>
+                          )}
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
+                            {activeCluster.category}
+                          </span>
+                        </div>
                       </div>
                       <div className="p-5 space-y-5 text-left">
                         {/* Edit Name */}
