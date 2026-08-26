@@ -30,7 +30,7 @@ import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
 import { DispatchAudit } from '../components/DispatchAudit';
 import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
-import { ChartSpotlightModal } from '../components/ChartSpotlightModal';
+import { ReportExplorerModal } from '../components/ReportExplorerModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
@@ -168,11 +168,16 @@ export function AnalyticsPage() {
   }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
-  // What the Overview charts' "click to see the reports behind this" points
-  // at right now — a day from the trend chart, a slice from the category
-  // chart, or a department bar from the SLA chart. One shared spotlight
-  // instead of three separate pieces of state since only one can be open.
-  const [spotlight, setSpotlight] = useState(null);
+  // The Overview charts used to each pop their own single-dimension "reports
+  // matching this one click" panel — date OR category OR department, never
+  // combinable, which made four separate entry points into what was really
+  // the same underlying question. One explorer instead: any chart click
+  // pre-fills one filter here, and every filter stays live and adjustable
+  // in the same modal so they can be combined (e.g. MBMB + Road Damage +
+  // a specific week) rather than re-clicking through charts one at a time.
+  const EMPTY_EXPLORE_FILTERS = { dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all' };
+  const [exploreFilters, setExploreFilters] = useState(null); // null = modal closed
+  const openExplore = (partial) => setExploreFilters({ ...EMPTY_EXPLORE_FILTERS, ...partial });
   // null = endpoint absent or forbidden; [] = present but empty. The two mean
   // different things to the UI, so they must stay distinguishable.
   const [auditActions, setAuditActions] = useState(null);
@@ -865,32 +870,44 @@ export function AnalyticsPage() {
       .slice(0, 6);
   }, [filteredReports]);
 
-  // The reports behind whichever chart element the admin just clicked — one
-  // shared lookup for the trend, category, and SLA charts' spotlight.
-  const spotlightReports = useMemo(() => {
-    if (!spotlight) return [];
-    if (spotlight.type === 'date') {
-      return filteredReports.filter((r) => r.timestamp && r.timestamp.split('T')[0] === spotlight.value);
-    }
-    if (spotlight.type === 'category') {
-      return filteredReports.filter((r) => (r.categories || 'Other') === spotlight.value);
-    }
-    if (spotlight.type === 'department') {
-      const needle = spotlight.value.toLowerCase();
-      return filteredReports.filter((r) => (r.assigned_department || '').toLowerCase().includes(needle));
-    }
-    if (spotlight.type === 'status') {
-      // filteredReports is already scoped to the selected department here,
-      // so this only needs to bucket by status the same way deptStatusData does.
-      return filteredReports.filter((r) => {
-        if (spotlight.status === 'Resolved') return r.status === 'Resolved';
-        if (spotlight.status === 'Rejected') return r.status === 'Rejected';
-        if (spotlight.status === 'Pending') return r.status === 'Pending';
-        return r.status !== 'Resolved' && r.status !== 'Rejected' && r.status !== 'Pending';
-      });
-    }
-    return [];
-  }, [spotlight, filteredReports]);
+  // Option lists for the explorer's selects, derived from every report ever
+  // loaded (not just the current top-level filter scope) — the explorer is
+  // a standalone "find anything" tool, so its own dropdowns shouldn't be
+  // limited to whatever the page-level Time Interval/Department happens to
+  // be set to right now.
+  const exploreCategories = useMemo(
+    () => [...new Set(reports.map((r) => r.categories || 'Other'))].sort(),
+    [reports]
+  );
+  const exploreStatuses = useMemo(
+    () => [...new Set(reports.map((r) => r.status).filter(Boolean))].sort(),
+    [reports]
+  );
+
+  // Every filter in exploreFilters applies together (AND), over the full
+  // report set — searching "MBMB AND Road Damage AND this week" instead of
+  // one dimension at a time is the entire point of combining the four
+  // separate chart-click panels into one modal.
+  const exploreResults = useMemo(() => {
+    if (!exploreFilters) return [];
+    return reports
+      .filter((r) => {
+        if (exploreFilters.department !== 'all') {
+          const needle = exploreFilters.department.toLowerCase();
+          if (!(r.assigned_department || '').toLowerCase().includes(needle)) return false;
+        }
+        if (exploreFilters.category !== 'all' && (r.categories || 'Other') !== exploreFilters.category) return false;
+        if (exploreFilters.status !== 'all' && r.status !== exploreFilters.status) return false;
+        if (exploreFilters.dateFrom || exploreFilters.dateTo) {
+          if (!r.timestamp) return false;
+          const t = new Date(r.timestamp);
+          if (exploreFilters.dateFrom && t < new Date(exploreFilters.dateFrom)) return false;
+          if (exploreFilters.dateTo && t > new Date(exploreFilters.dateTo)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  }, [exploreFilters, reports]);
 
   // ==================== CITY HEALTH & WELLNESS COMPUTATIONS ====================
 
@@ -1610,7 +1627,7 @@ export function AnalyticsPage() {
                         ({trendInsight.last7Sum} vs {trendInsight.prior7Sum} reports).{' '}</>
                       )}
                       {trendInsight.peak && (
-                        <>Busiest day: <button onClick={() => setSpotlight({ type: 'date', value: trendInsight.peak.rawDate, label: `Reports from ${trendInsight.peak.date}` })} className="underline decoration-dotted underline-offset-2 hover:opacity-70">{trendInsight.peak.date} ({trendInsight.peak.Complaints})</button>.</>
+                        <>Busiest day: <button onClick={() => openExplore({ dateFrom: `${trendInsight.peak.rawDate}T00:00`, dateTo: `${trendInsight.peak.rawDate}T23:59` })} className="underline decoration-dotted underline-offset-2 hover:opacity-70">{trendInsight.peak.date} ({trendInsight.peak.Complaints})</button>.</>
                       )}
                     </p>
                   )}
@@ -1622,7 +1639,7 @@ export function AnalyticsPage() {
                         onClick={(e) => {
                           const point = e?.activePayload?.[0]?.payload;
                           if (point && point.Complaints > 0) {
-                            setSpotlight((prev) => (prev?.value === point.rawDate ? null : { type: 'date', value: point.rawDate, label: `Reports from ${point.date}` }));
+                            openExplore({ dateFrom: `${point.rawDate}T00:00`, dateTo: `${point.rawDate}T23:59` });
                           }
                         }}
                       >
@@ -1672,14 +1689,13 @@ export function AnalyticsPage() {
                           cursor="pointer"
                           onClick={(d) => {
                             const name = d?.name ?? d?.payload?.name;
-                            if (name) setSpotlight((prev) => (prev?.value === name ? null : { type: 'category', value: name, label: `${name} reports` }));
+                            if (name) openExplore({ category: name });
                           }}
                         >
                           {categoryChartData.map((entry, index) => (
                             <Cell
                               key={`cell-${index}`}
                               fill={COLORS[index % COLORS.length]}
-                              fillOpacity={!spotlight || (spotlight.type === 'category' && spotlight.value === entry.name) ? 1 : 0.35}
                             />
                           ))}
                         </Pie>
@@ -1687,13 +1703,14 @@ export function AnalyticsPage() {
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
-                  {/* Legend — real counts, and each entry is its own spotlight trigger
-                      so the chart isn't the only clickable surface. */}
+                  {/* Legend — real counts, and each entry opens the explorer
+                      pre-filtered to it, so the chart isn't the only
+                      clickable surface. */}
                   <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 px-2 mt-2">
                     {categoryChartData.map((entry, index) => (
                       <button
                         key={entry.name}
-                        onClick={() => setSpotlight((prev) => (prev?.value === entry.name ? null : { type: 'category', value: entry.name, label: `${entry.name} reports` }))}
+                        onClick={() => openExplore({ category: entry.name })}
                         className="flex items-center gap-1.5 text-[10px] font-semibold hover:opacity-70"
                       >
                         <span className="w-2 h-2 rounded-full shrink-0" style={{ background: COLORS[index % COLORS.length] }} />
@@ -1748,7 +1765,7 @@ export function AnalyticsPage() {
                             maxBarSize={45}
                             onClick={(d) => {
                               const entry = d?.payload ?? d;
-                              if (entry?.name) setSpotlight((prev) => (prev?.value === entry.name ? null : { type: 'department', value: entry.name, label: `${entry.fullName || entry.name} reports` }));
+                              if (entry?.name) openExplore({ department: entry.name });
                             }}
                           >
                             {measurableSLAMetrics.map((entry, index) => {
@@ -1769,7 +1786,12 @@ export function AnalyticsPage() {
                             maxBarSize={30}
                             onClick={(d) => {
                               const entry = d?.payload ?? d;
-                              if (entry?.name) setSpotlight((prev) => (prev?.value === `${selectedDept}|${entry.name}` ? null : { type: 'status', value: `${selectedDept}|${entry.name}`, dept: selectedDept, status: entry.name, label: `${selectedDept} — ${entry.name}` }));
+                              if (!entry?.name) return;
+                              // "In Progress" is a catch-all bucket (In Review/In
+                              // Process/In Maintenance lumped together), not one
+                              // real status value, so leave status unfiltered for it.
+                              const status = ['Pending', 'Resolved', 'Rejected'].includes(entry.name) ? entry.name : 'all';
+                              openExplore({ department: selectedDept, status });
                             }}
                           >
                             {deptStatusData.map((entry, index) => {
@@ -1821,7 +1843,7 @@ export function AnalyticsPage() {
                       <span>Fastest to Resolve</span>
                       {kpiStats.fastestSLA ? (
                         <button
-                          onClick={() => setSpotlight((prev) => (prev?.value === kpiStats.fastestSLA.name ? null : { type: 'department', value: kpiStats.fastestSLA.name, label: `${kpiStats.fastestSLA.fullName || kpiStats.fastestSLA.name} reports` }))}
+                          onClick={() => openExplore({ department: kpiStats.fastestSLA.name })}
                           className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
                         >
                           {kpiStats.fastestSLA.name} ({kpiStats.fastestSLA.avgResolveDays} days)
@@ -1834,7 +1856,7 @@ export function AnalyticsPage() {
                       <span>Slowest to Resolve</span>
                       {kpiStats.slowestSLA ? (
                         <button
-                          onClick={() => setSpotlight((prev) => (prev?.value === kpiStats.slowestSLA.name ? null : { type: 'department', value: kpiStats.slowestSLA.name, label: `${kpiStats.slowestSLA.fullName || kpiStats.slowestSLA.name} reports` }))}
+                          onClick={() => openExplore({ department: kpiStats.slowestSLA.name })}
                           className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
                         >
                           {kpiStats.slowestSLA.name} ({kpiStats.slowestSLA.avgResolveDays} days)
@@ -1847,7 +1869,7 @@ export function AnalyticsPage() {
                       <span>Largest Backlog</span>
                       {kpiStats.worstBacklogDept !== 'None' ? (
                         <button
-                          onClick={() => setSpotlight((prev) => (prev?.value === kpiStats.worstBacklogDept ? null : { type: 'department', value: kpiStats.worstBacklogDept, label: `${kpiStats.worstBacklogDept} reports` }))}
+                          onClick={() => openExplore({ department: kpiStats.worstBacklogDept })}
                           className="text-[#8a8477] underline decoration-dotted underline-offset-2 hover:opacity-70"
                         >
                           {kpiStats.worstBacklogDept}
@@ -1861,15 +1883,18 @@ export function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Spotlight — the reports behind whichever chart element was just
-                clicked (a day, a category, a department, a status bucket).
-                A modal, not a card at the bottom of the page — the card
-                version was easy to click-and-miss below the fold. */}
-            {spotlight && (
-              <ChartSpotlightModal
-                spotlight={spotlight}
-                reports={spotlightReports}
-                onClose={() => setSpotlight(null)}
+            {/* One explorer for all four charts — any click pre-fills a
+                single filter, but date/category/department/status all stay
+                live and combinable in the same modal afterward. */}
+            {exploreFilters && (
+              <ReportExplorerModal
+                filters={exploreFilters}
+                onFiltersChange={setExploreFilters}
+                categories={exploreCategories}
+                departments={departmentOptions}
+                statuses={exploreStatuses}
+                results={exploreResults}
+                onClose={() => setExploreFilters(null)}
               />
             )}
           </div>
