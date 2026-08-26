@@ -785,12 +785,42 @@ export function AnalyticsPage() {
     };
   }, [filteredReports, hotspots, deptSLAMetrics, selectedDept]);
 
-  // 4. Monthly Trend Data (Last 30 Days)
+  // 4. Ticket Volume Trend — the window it plots now follows whichever date
+  // filter is active instead of being hardcoded to the last 30 days, so
+  // picking "Last 7 Days" or a custom range actually changes this chart
+  // instead of silently ignoring the filter.
+  const TREND_MAX_DAYS = 180;
+  const trendRange = useMemo(() => {
+    const today = endOfDay(new Date());
+    if (dateFilter === '7d') return { start: subDays(today, 6), end: today, truncated: false };
+    if (dateFilter === '30d') return { start: subDays(today, 29), end: today, truncated: false };
+
+    // 'all', or 'custom' with one or both bounds unset — fall back to the
+    // actual span of the filtered reports rather than an arbitrary window.
+    const reportDates = filteredReports
+      .map((r) => r.timestamp)
+      .filter(Boolean)
+      .map((t) => parseISO(t.split('T')[0]));
+
+    let start = dateFilter === 'custom' && customStart ? new Date(customStart) : null;
+    let end = dateFilter === 'custom' && customEnd ? endOfDay(new Date(customEnd)) : null;
+
+    if (!start) start = reportDates.length ? new Date(Math.min(...reportDates)) : subDays(today, 29);
+    if (!end) end = reportDates.length && dateFilter !== 'custom' ? new Date(Math.max(...reportDates)) : today;
+
+    const spanDays = Math.round((end - start) / 86400000) + 1;
+    if (spanDays > TREND_MAX_DAYS) {
+      return { start: subDays(end, TREND_MAX_DAYS - 1), end, truncated: true };
+    }
+    return { start, end, truncated: false };
+  }, [dateFilter, customStart, customEnd, filteredReports]);
+
   const trendChartData = useMemo(() => {
     const daysMap = {};
-    for (let i = 29; i >= 0; i--) {
-      const dStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
-      daysMap[dStr] = 0;
+    let cursor = new Date(trendRange.start);
+    while (cursor <= trendRange.end) {
+      daysMap[format(cursor, 'yyyy-MM-dd')] = 0;
+      cursor = subDays(cursor, -1); // +1 day, without a separate addDays import
     }
 
     filteredReports.forEach((r) => {
@@ -806,7 +836,7 @@ export function AnalyticsPage() {
       rawDate: date,
       Complaints: count,
     }));
-  }, [filteredReports]);
+  }, [trendRange, filteredReports]);
 
   // Week-over-week change and the single busiest day — the two facts that
   // turn "here's a line" into "here's what changed and when it spiked."
@@ -1565,8 +1595,12 @@ export function AnalyticsPage() {
               <div className="content-card lg:col-span-2 min-w-0">
                 <div className="content-card-header">
                   <div className="content-card-title">
-                    Ticket Volume Trends (Last 30 Days)
+                    Ticket Volume Trends
                   </div>
+                  <span className="text-[11px] text-[#8a8477]">
+                    {format(trendRange.start, 'd MMM yyyy')} – {format(trendRange.end, 'd MMM yyyy')}
+                    {trendRange.truncated && ` (capped at ${TREND_MAX_DAYS} days)`}
+                  </span>
                 </div>
                 <div className="p-5">
                   {trendInsight && (
