@@ -12,10 +12,10 @@ export function ChartSpotlightModal({ spotlight, reports, onClose }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl overflow-hidden"
+          className="w-full max-w-lg max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
           style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
