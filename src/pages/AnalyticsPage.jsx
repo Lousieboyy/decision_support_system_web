@@ -13,7 +13,7 @@ import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, ChevronLeft, Eye, Lightbulb, Heart, Activity, Truck,
+  CheckCircle2, ChevronRight, Eye, Lightbulb, Heart, Activity, Truck,
   Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
@@ -2081,207 +2081,214 @@ export function AnalyticsPage() {
                 </div>
               </div>
 
-              {/* Hotspot Controls & Detail Editor (lg:col-span-1) */}
+              {/* Clustering Controls (lg:col-span-1) — no longer swaps out for
+                  the detail editor, which now opens as its own popup below. */}
               <div className="lg:col-span-1 space-y-6">
-                {activeCluster ? (
-                  // Detail & Edit View
-                  <div className="content-card flex flex-col h-full justify-between">
-                    <div>
-                      <div className="content-card-header flex items-center justify-between border-b border-[#1f1e1a]/8 pb-4">
-                        <button
-                          onClick={() => setActiveClusterId(null)}
-                          className="flex items-center gap-1 text-[#8a8477] hover:text-[#201f1b] text-xs font-bold transition-colors cursor-pointer"
-                        >
-                          <ChevronLeft size={16} />
-                          Back
-                        </button>
-                        <div className="flex items-center gap-1.5">
-                          {priorityById[activeCluster.id] && (
-                            <span
-                              className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
-                              style={{
-                                color: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).color,
-                                background: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).bg,
-                              }}
-                            >
-                              Priority {priorityById[activeCluster.id].priorityScore}
-                            </span>
-                          )}
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
-                            {activeCluster.category}
-                          </span>
-                        </div>
+                <div className="bg-white border border-[#1f1e1a]/10 rounded-2xl p-6 space-y-6 text-left">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-[#201f1b]">
+                      Clustering Controls
+                    </h3>
+                    <p className="text-xs text-[#8a8477] mt-1">Adjust spatial criteria to modify hotspot grouping boundaries in real time.</p>
+                  </div>
+
+                  <div className="space-y-5 pt-2">
+                    {/* Proximity Slider */}
+                    <div className="space-y-2 text-left">
+                      <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
+                        <span>Cluster Proximity Radius</span>
+                        <span className="text-[#4a5d3f] font-bold">{proximityRadius} meters</span>
                       </div>
-                      <div className="p-5 space-y-5 text-left">
-                        {/* Edit Name */}
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Hotspot Location Name</label>
-                          <input
-                            type="text"
-                            value={activeCluster.address}
-                            onChange={(e) => {
-                              setCustomOverrides(prev => ({
-                                ...prev,
-                                [activeCluster.seedId]: {
-                                  ...prev[activeCluster.seedId],
-                                  customAddress: e.target.value
-                                }
-                              }));
-                            }}
-                            placeholder={activeCluster.defaultAddress}
-                            className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full"
-                          />
-                        </div>
-
-                        {/* Edit Recommendation */}
-                        <div className="flex flex-col gap-1.5">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Actionable Recommendation</label>
-                            <button
-                              onClick={() => {
-                                setCustomOverrides(prev => {
-                                  const copy = { ...prev };
-                                  if (copy[activeCluster.seedId]) {
-                                    const next = { ...copy[activeCluster.seedId] };
-                                    delete next.customRecommendation;
-                                    copy[activeCluster.seedId] = next;
-                                  }
-                                  return copy;
-                                });
-                              }}
-                              className="text-[9px] font-bold text-[#8a8477] hover:text-[#4b473d] transition-colors cursor-pointer"
-                            >
-                              Reset to Default
-                            </button>
-                          </div>
-                          <textarea
-                            value={activeCluster.recommendation}
-                            onChange={(e) => {
-                              setCustomOverrides(prev => ({
-                                ...prev,
-                                [activeCluster.seedId]: {
-                                  ...prev[activeCluster.seedId],
-                                  customRecommendation: e.target.value
-                                }
-                              }));
-                            }}
-                            rows={4}
-                            className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full resize-none leading-relaxed"
-                          />
-                        </div>
-
-                        {/* Map Focus Button */}
-                        <button
-                          onClick={() => {
-                            setMapFocus({
-                              center: [activeCluster.latitude, activeCluster.longitude],
-                              zoom: 15.5,
-                              trigger: Date.now()
-                            });
-                          }}
-                          className="flex items-center justify-center gap-1.5 bg-[#f5f1e6] border border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 hover:bg-[#4a5d3f]/8 text-[#4b473d] hover:text-[#201f1b] py-2.5 rounded-xl text-xs font-bold transition-all w-full cursor-pointer"
-                        >
-                          <Eye size={14} />
-                          Locate on Heatmap
-                        </button>
-
-                        {/* Exclude / Include Tickets List */}
-                        <div className="flex flex-col min-h-0 pt-2 border-t border-[#1f1e1a]/8">
-                          <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2 flex items-center justify-between">
-                            <span>Constituent Issues</span>
-                            <span className="px-1.5 py-0.5 rounded bg-[#f5f1e6] text-[#4b473d] text-[9px] font-black">{activeCluster.items.length} Tickets</span>
-                          </label>
-                          <div className="overflow-y-auto max-h-[180px] pr-1 space-y-2 scrollbar-thin">
-                            {activeCluster.items.map((item) => (
-                              <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-[#f7f4ec] border border-[#1f1e1a]/8 rounded-lg text-left">
-                                <input
-                                  type="checkbox"
-                                  checked={!(customOverrides[activeCluster.seedId]?.excludedReportIds?.includes(item.id))}
-                                  onChange={() => handleToggleExcludeTicket(activeCluster.seedId, item.id)}
-                                  className="mt-0.5 cursor-pointer accent-[#4a5d3f] rounded border-[#1f1e1a]/15"
-                                  title="Exclude this ticket from cluster"
-                                />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[11px] leading-relaxed text-[#4b473d] truncate font-semibold">
-                                    {item.description || 'No description'}
-                                  </p>
-                                  <p className="text-[9px] text-[#8a8477] font-medium mt-0.5">
-                                    Report #{item.id} | {item.status} | {item.upvotes || 0} Upvotes
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                      <input
+                        type="range"
+                        min="50"
+                        max="1000"
+                        step="50"
+                        value={proximityRadius}
+                        onChange={(e) => setProximityRadius(Number(e.target.value))}
+                        className="w-full h-1.5 bg-[#e7ede1] rounded-lg appearance-none cursor-pointer accent-[#4a5d3f]"
+                      />
+                      <div className="flex justify-between text-[9px] text-[#8a8477] font-medium">
+                        <span>50m (Precise)</span>
+                        <span>1000m (Broad)</span>
                       </div>
+                    </div>
+
+                    {/* Min Density Selector */}
+                    <div className="space-y-2 text-left">
+                      <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
+                        <span>Minimum Complaint Density</span>
+                        <span className="text-[#4a5d3f] font-bold">{minClusterSize} tickets</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[2, 3, 4, 5, 6, 8, 10, 15].map((val) => (
+                          <button
+                            key={val}
+                            onClick={() => setMinClusterSize(val)}
+                            className={`py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                              minClusterSize === val
+                                ? 'bg-[#4a5d3f] border-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20'
+                                : 'bg-[#f5f1e6] border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 text-[#8a8477] hover:text-[#201f1b]'
+                            }`}
+                          >
+                            {val}+
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
+                        Hotspots require at least this number of active complaints of the same category clustered within the radius.
+                      </p>
                     </div>
                   </div>
-                ) : (
-                  // Hotspot Parameter Controls (shown by default in right panel)
-                  <div className="bg-white border border-[#1f1e1a]/10 rounded-2xl p-6 space-y-6 text-left animate-fade-in">
-                    <div>
-                      <h3 className="text-sm font-extrabold text-[#201f1b]">
-                        Clustering Controls
-                      </h3>
-                      <p className="text-xs text-[#8a8477] mt-1">Adjust spatial criteria to modify hotspot grouping boundaries in real time.</p>
-                    </div>
 
-                    <div className="space-y-5 pt-2">
-                      {/* Proximity Slider */}
-                      <div className="space-y-2 text-left">
-                        <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
-                          <span>Cluster Proximity Radius</span>
-                          <span className="text-[#4a5d3f] font-bold">{proximityRadius} meters</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="50"
-                          max="1000"
-                          step="50"
-                          value={proximityRadius}
-                          onChange={(e) => setProximityRadius(Number(e.target.value))}
-                          className="w-full h-1.5 bg-[#e7ede1] rounded-lg appearance-none cursor-pointer accent-[#4a5d3f]"
-                        />
-                        <div className="flex justify-between text-[9px] text-[#8a8477] font-medium">
-                          <span>50m (Precise)</span>
-                          <span>1000m (Broad)</span>
-                        </div>
-                      </div>
-
-                      {/* Min Density Selector */}
-                      <div className="space-y-2 text-left">
-                        <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
-                          <span>Minimum Complaint Density</span>
-                          <span className="text-[#4a5d3f] font-bold">{minClusterSize} tickets</span>
-                        </div>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {[2, 3, 4, 5, 6, 8, 10, 15].map((val) => (
-                            <button
-                              key={val}
-                              onClick={() => setMinClusterSize(val)}
-                              className={`py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                                minClusterSize === val
-                                  ? 'bg-[#4a5d3f] border-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20'
-                                  : 'bg-[#f5f1e6] border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 text-[#8a8477] hover:text-[#201f1b]'
-                              }`}
-                            >
-                              {val}+
-                            </button>
-                          ))}
-                        </div>
-                        <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
-                          Hotspots require at least this number of active complaints of the same category clustered within the radius.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[11px] text-[#4b473d] leading-relaxed">
-                      Select a hotspot card on the list to rename its address, edit the recommended action plans, or exclude individual report tickets.
-                    </div>
+                  <div className="p-4 rounded-xl bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[11px] text-[#4b473d] leading-relaxed">
+                    Click a hotspot card to rename its address, edit the recommended action plan, or exclude individual report tickets.
                   </div>
-                )}
+                </div>
               </div>
             </div>
+
+            {/* Detail & Edit popup — used to swap in for the Clustering
+                Controls panel above, which hid the panel and forced a "Back"
+                click just to change the radius/density mid-edit. */}
+            {activeCluster && (
+              <>
+                <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setActiveClusterId(null)} />
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div
+                    className="w-full max-w-md max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
+                    style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
+                  >
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {priorityById[activeCluster.id] && (
+                          <span
+                            className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
+                            style={{
+                              color: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).color,
+                              background: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).bg,
+                            }}
+                          >
+                            Priority {priorityById[activeCluster.id].priorityScore}
+                          </span>
+                        )}
+                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
+                          {activeCluster.category}
+                        </span>
+                      </div>
+                      <button onClick={() => setActiveClusterId(null)} className="p-2 rounded-full transition-colors" style={{ color: '#8a8477' }}>
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div className="p-5 space-y-5 text-left overflow-y-auto">
+                      {/* Edit Name */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Hotspot Location Name</label>
+                        <input
+                          type="text"
+                          value={activeCluster.address}
+                          onChange={(e) => {
+                            setCustomOverrides(prev => ({
+                              ...prev,
+                              [activeCluster.seedId]: {
+                                ...prev[activeCluster.seedId],
+                                customAddress: e.target.value
+                              }
+                            }));
+                          }}
+                          placeholder={activeCluster.defaultAddress}
+                          className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full"
+                        />
+                      </div>
+
+                      {/* Edit Recommendation */}
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Actionable Recommendation</label>
+                          <button
+                            onClick={() => {
+                              setCustomOverrides(prev => {
+                                const copy = { ...prev };
+                                if (copy[activeCluster.seedId]) {
+                                  const next = { ...copy[activeCluster.seedId] };
+                                  delete next.customRecommendation;
+                                  copy[activeCluster.seedId] = next;
+                                }
+                                return copy;
+                              });
+                            }}
+                            className="text-[9px] font-bold text-[#8a8477] hover:text-[#4b473d] transition-colors cursor-pointer"
+                          >
+                            Reset to Default
+                          </button>
+                        </div>
+                        <textarea
+                          value={activeCluster.recommendation}
+                          onChange={(e) => {
+                            setCustomOverrides(prev => ({
+                              ...prev,
+                              [activeCluster.seedId]: {
+                                ...prev[activeCluster.seedId],
+                                customRecommendation: e.target.value
+                              }
+                            }));
+                          }}
+                          rows={4}
+                          className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full resize-none leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Map Focus Button — recenters without closing, so the
+                          boundary circle and per-ticket markers (which only
+                          render while this cluster is selected) are still
+                          there once the popup is closed. */}
+                      <button
+                        onClick={() => {
+                          setMapFocus({
+                            center: [activeCluster.latitude, activeCluster.longitude],
+                            zoom: 15.5,
+                            trigger: Date.now()
+                          });
+                        }}
+                        className="flex items-center justify-center gap-1.5 bg-[#f5f1e6] border border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 hover:bg-[#4a5d3f]/8 text-[#4b473d] hover:text-[#201f1b] py-2.5 rounded-xl text-xs font-bold transition-all w-full cursor-pointer"
+                      >
+                        <Eye size={14} />
+                        Locate on Heatmap
+                      </button>
+
+                      {/* Exclude / Include Tickets List */}
+                      <div className="flex flex-col min-h-0 pt-2 border-t border-[#1f1e1a]/8">
+                        <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2 flex items-center justify-between">
+                          <span>Constituent Issues</span>
+                          <span className="px-1.5 py-0.5 rounded bg-[#f5f1e6] text-[#4b473d] text-[9px] font-black">{activeCluster.items.length} Tickets</span>
+                        </label>
+                        <div className="max-h-[220px] overflow-y-auto pr-1 space-y-2 scrollbar-thin">
+                          {activeCluster.items.map((item) => (
+                            <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-[#f7f4ec] border border-[#1f1e1a]/8 rounded-lg text-left">
+                              <input
+                                type="checkbox"
+                                checked={!(customOverrides[activeCluster.seedId]?.excludedReportIds?.includes(item.id))}
+                                onChange={() => handleToggleExcludeTicket(activeCluster.seedId, item.id)}
+                                className="mt-0.5 cursor-pointer accent-[#4a5d3f] rounded border-[#1f1e1a]/15"
+                                title="Exclude this ticket from cluster"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] leading-relaxed text-[#4b473d] truncate font-semibold">
+                                  {item.description || 'No description'}
+                                </p>
+                                <p className="text-[9px] text-[#8a8477] font-medium mt-0.5">
+                                  Report #{item.id} | {item.status} | {item.upvotes || 0} Upvotes
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 
