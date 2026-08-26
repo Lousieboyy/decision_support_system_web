@@ -1018,13 +1018,13 @@ export function AnalyticsPage() {
       // Null guard matters: `null < 60` coerces to `0 < 60`.
       if (domain.score != null && domain.score < 60) {
         const detail = domain.medianDays != null
-          ? `Median ${domain.medianDays.toFixed(1)} days against a ${domain.targetDays}-day target (n=${domain.n}).`
-          : `First-pass yield is ${domain.score}% across ${domain.n} dispatched reports.`;
+          ? `Typical (median) time is ${domain.medianDays.toFixed(1)} days, against a ${domain.targetDays}-day target (based on ${domain.n} reports).`
+          : `${domain.score}% of dispatched reports were handled successfully on the first try, out of ${domain.n} reports.`;
         insights.push({
           id: `spi-${key}`, type: 'warning', title: `${domain.name} is missing its target`,
-          description: `${detail} This stage is the council's to control.`,
+          description: `${detail} This step is directly within the council's control.`,
           zone: 'City-wide',
-          action: `Review the ${domain.name.toLowerCase()} step — it is consuming more of the SLA budget than allowed for.`,
+          action: `Review the ${domain.name.toLowerCase()} step — it is taking longer than its SLA target allows.`,
         });
       }
     });
@@ -1034,10 +1034,10 @@ export function AnalyticsPage() {
       if (domain.score != null && domain.score < 60) {
         insights.push({
           id: `uci-${key}`, type: 'warning', title: `${domain.name} defects are accumulating`,
-          description: `${domain.openCount} open, an age-weighted burden of ${domain.burden} against a tolerance of ${domain.target}` +
-            (domain.medianAgeDays != null ? `, median age ${Math.round(domain.medianAgeDays)} days.` : '.'),
+          description: `${domain.openCount} open, with a current load of ${domain.burden} against an allowed limit of ${domain.target} (issues open longer count for more)` +
+            (domain.medianAgeDays != null ? `, typical age ${Math.round(domain.medianAgeDays)} days.` : '.'),
           zone: 'City-wide',
-          action: `Clear the oldest ${domain.name.toLowerCase()} defects first — age is what drives this burden up.`,
+          action: `Clear the oldest ${domain.name.toLowerCase()} defects first — their age is what's driving this number up.`,
         });
       }
     });
@@ -1049,13 +1049,13 @@ export function AnalyticsPage() {
       if (d.score != null && d.score < 60) {
         insights.push({
           id: `ifi-${zone}`, type: 'critical', title: `${zone} — fragile infrastructure`,
-          description: `Fragility score ${d.score}/100, driven mainly by ${d.driverLabel}.`,
+          description: `Fragility score: ${d.score} of 100, mainly because of ${d.driverLabel}.`,
           zone,
           action: d.driver === 'failureRate'
-            ? `Inspect installation/repair quality in ${zone} — repairs there aren't holding, so faster dispatch won't fix it.`
+            ? `Check the quality of repairs in ${zone} — they aren't holding, so responding faster won't fix it.`
             : d.driver === 'mtbf'
-            ? `Schedule a proactive inspection for ${zone} instead of waiting for the next citizen report.`
-            : `Check whether ${zone} is under-resourced relative to how often it actually breaks.`,
+            ? `Set up regular inspections in ${zone} instead of waiting for the next resident report.`
+            : `Check whether ${zone} has enough resources for how often problems actually happen there.`,
         });
       }
     });
@@ -1065,7 +1065,7 @@ export function AnalyticsPage() {
     if (topZone) {
       insights.push({ id: 'top-zone', type: 'success', title: `${topZone.name} — Top Performing Zone`,
         description: `${topZone.resolutionRate}% resolution rate across ${topZone.total} reports. Average resolution time: ${topZone.avgDays} days.`,
-        zone: topZone.name, action: `Recognize this zone's performance and adopt its practices as a model for underperforming areas.` });
+        zone: topZone.name, action: `Recognize this zone's performance and use its approach as an example for zones that are behind.` });
     }
 
     // 3. Neglected zones (aged unresolved reports)
@@ -1079,8 +1079,8 @@ export function AnalyticsPage() {
       const worstZone = Object.entries(zoneAged).sort((a, b) => b[1] - a[1])[0];
       if (worstZone) {
         insights.push({ id: 'neglected-zone', type: 'critical', title: `Neglected Zone: ${worstZone[0]}`,
-          description: `${worstZone[1]} reports older than 14 days remain unresolved in ${worstZone[0]}. This indicates a systemic response gap that needs urgent attention.`,
-          zone: worstZone[0], action: `Schedule a priority inspection team for ${worstZone[0]} and review department assignment bottlenecks.` });
+          description: `${worstZone[1]} reports older than 14 days are still unresolved in ${worstZone[0]}. This shows an ongoing gap in response that needs urgent attention.`,
+          zone: worstZone[0], action: `Send a priority inspection team to ${worstZone[0]} and review why department assignment is slow there.` });
       }
     }
 
@@ -1089,7 +1089,7 @@ export function AnalyticsPage() {
       if (dept.backlog > INSIGHT.backlogAlertTickets) {
         insights.push({ id: `dept-overload-${dept.name}`, type: 'warning', title: `${dept.name} Department Overloaded`,
           description: `${dept.name} has ${dept.backlog} active backlog tickets with an average resolution time of ${dept.avgResolveDays} days. This exceeds the 3-day SLA target.`,
-          zone: 'Department-wide', action: `Reallocate 15–20% crew capacity from lower-backlog departments to ${dept.name} for the next sprint cycle.` });
+          zone: 'Department-wide', action: `Move 15–20% of crew capacity from less-busy departments to ${dept.name} for the next work cycle.` });
       }
     });
 
@@ -1103,16 +1103,16 @@ export function AnalyticsPage() {
         const cat = r.categories || r.ai_prediction || 'Other'; catCounts[cat] = (catCounts[cat] || 0) + 1;
       });
       const topCat = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
-      insights.push({ id: 'volume-spike', type: 'warning', title: `${pctIncrease}% Report Volume Spike Detected`,
-        description: `${last7} reports this week vs ${prev7} last week. ${topCat ? `Most common: ${topCat[0]} (${topCat[1]} reports).` : ''} This may indicate a seasonal or event-driven pattern.`,
-        zone: 'City-wide', action: `Investigate the root cause and prepare additional response capacity if the trend continues.` });
+      insights.push({ id: 'volume-spike', type: 'warning', title: `${pctIncrease}% Increase in Reports This Week`,
+        description: `${last7} reports this week, compared with ${prev7} last week. ${topCat ? `Most common type: ${topCat[0]} (${topCat[1]} reports).` : ''} This could be due to the season or a specific event.`,
+        zone: 'City-wide', action: `Look into what's causing this, and prepare extra response capacity if it continues.` });
     }
 
     // 6. Cross-category correlation
     if (rootCauseAdvisories.length > 0) {
       const topAdvisory = rootCauseAdvisories[0];
       insights.push({ id: 'cross-correlation', type: 'info', title: `Cross-Issue Pattern: ${topAdvisory.category}`,
-        description: `${topAdvisory.size} reports of different categories clustered near ${topAdvisory.address}. This suggests a shared root cause requiring coordinated response.`,
+        description: `${topAdvisory.size} reports of different types are clustered near ${topAdvisory.address}. This suggests one shared cause that needs a joint response.`,
         zone: topAdvisory.address, action: topAdvisory.recommendation });
     }
 
@@ -1121,7 +1121,7 @@ export function AnalyticsPage() {
     if (bestDept && bestDept.avgResolveDays <= 3 && bestDept.resolved > 0) {
       insights.push({ id: 'sla-achievement', type: 'success', title: `${bestDept.name} Exceeding SLA Targets`,
         description: `${bestDept.name} maintained an average resolution time of ${bestDept.avgResolveDays} days, within the 3-day SLA target. ${bestDept.resolved} tickets resolved.`,
-        zone: 'Department-wide', action: `Acknowledge ${bestDept.name}'s performance and share their workflow practices across departments.` });
+        zone: 'Department-wide', action: `Recognize ${bestDept.name}'s performance and share how they work with other departments.` });
     }
 
     // 8. High citizen engagement
@@ -1129,8 +1129,8 @@ export function AnalyticsPage() {
     if (highUpvoteReports.length > 0) {
       const totalHighUpvotes = highUpvoteReports.reduce((sum, r) => sum + (r.upvotes || 0), 0);
       insights.push({ id: 'citizen-engagement', type: 'info', title: `High Citizen Engagement Detected`,
-        description: `${highUpvoteReports.length} active reports have 5+ citizen upvotes (${totalHighUpvotes} total). These represent strong public concern that should be prioritized.`,
-        zone: 'City-wide', action: `Prioritize high-engagement reports to demonstrate government responsiveness to citizen concerns.` });
+        description: `${highUpvoteReports.length} active reports have 5+ citizen upvotes (${totalHighUpvotes} total). These show strong public concern and should be prioritized.`,
+        zone: 'City-wide', action: `Prioritize these reports to show residents the government is listening.` });
     }
 
     // 9. Overall standing. Reported as two separate verdicts, because a council
@@ -1140,18 +1140,18 @@ export function AnalyticsPage() {
     const uci = urbanCondition.index;
     if (spi != null && spi < 60) {
       insights.push({ id: 'spi-poor', type: 'critical', title: 'Service performance below target',
-        description: `Service Performance Index is ${spi}/100. The council is missing its own stage targets across multiple steps.`,
-        zone: 'City-wide', action: 'Start with the stage consuming the largest share of end-to-end time in the funnel.' });
+        description: `Service Performance score is ${spi} of 100. The council is missing its own targets across multiple steps.`,
+        zone: 'City-wide', action: 'Start with the step that takes up the largest share of the total time, shown in the "Where the time goes" chart.' });
     }
     if (uci != null && uci < 60) {
-      insights.push({ id: 'uci-poor', type: 'critical', title: 'Urban condition deteriorating',
-        description: `Urban Condition Index is ${uci}/100. Open defects are accumulating faster than the agreed tolerance, regardless of response speed.`,
-        zone: 'City-wide', action: 'This is a capacity or budget question rather than a process one — closing tickets faster will not by itself reverse it.' });
+      insights.push({ id: 'uci-poor', type: 'critical', title: 'Urban condition is getting worse',
+        description: `Urban Condition score is ${uci} of 100. Open issues are piling up faster than the agreed limit, no matter how fast the council responds.`,
+        zone: 'City-wide', action: 'This is a capacity or budget problem, not a process problem — resolving tickets faster alone will not fix it.' });
     }
     if (spi != null && uci != null && spi >= 80 && uci < 60) {
       insights.push({ id: 'spi-uci-divergence', type: 'info', title: 'Responding well, but falling behind',
-        description: `Service Performance is ${spi}/100 while Urban Condition is ${uci}/100. The council is handling what arrives, but defects are accumulating faster than they are cleared.`,
-        zone: 'City-wide', action: 'Additional crew capacity is more likely to help here than further process tuning.' });
+        description: `Service Performance is ${spi} of 100 while Urban Condition is ${uci} of 100. The council is keeping up with what comes in, but issues are piling up faster than they're being cleared.`,
+        zone: 'City-wide', action: 'Adding more crew capacity is more likely to help here than adjusting the process further.' });
     }
 
     const priority = { critical: 0, warning: 1, info: 2, success: 3 };
@@ -2309,10 +2309,10 @@ export function AnalyticsPage() {
               <div className="content-card-header">
                 <div className="content-card-title flex items-center gap-2">
                   <Lightbulb size={16} className="text-amber-600" />
-                  Actionable Urban Insights
+                  Insights You Can Act On
                 </div>
                 <div className="text-[10px] font-semibold text-[#8a8477]">
-                  {actionableInsights.length} insights generated
+                  {actionableInsights.length} insights found
                 </div>
               </div>
               <div className="p-5">
@@ -2320,7 +2320,7 @@ export function AnalyticsPage() {
                   {actionableInsights.length === 0 ? (
                     <div className="col-span-2 h-32 flex flex-col items-center justify-center text-[#8a8477] text-xs">
                       <CheckCircle2 className="text-[#8a8477] mb-2" size={20} />
-                      No actionable insights generated from current data.
+                      No insights found for the current data.
                     </div>
                   ) : (
                     actionableInsights.map(insight => (
@@ -2374,7 +2374,7 @@ export function AnalyticsPage() {
                     <div className="text-[#4b473d] space-y-0.5">
                       <div>{z.total} total · {z.active} active · {z.resolved} resolved</div>
                       <div>
-                        Avg {z.avgDays ?? '—'} days
+                        Average {z.avgDays ?? '—'} days
                         {z.avgDays != null && z.avgDays > SLA_END_TO_END_DAYS && (
                           <span className="text-red-700 font-bold"> (over target)</span>
                         )}
@@ -2390,10 +2390,10 @@ export function AnalyticsPage() {
                   <div className="content-card-header">
                     <div className="content-card-title flex items-center gap-2">
                       <MapPin size={16} className="text-[#4a5d3f]" />
-                      Zone / Area Wellness
+                      Zone Wellness
                     </div>
                     <div className="text-[10px] font-semibold text-[#8a8477]">
-                      {zoneScorecard.length} zones tracked · worst first
+                      {zoneScorecard.length} zones tracked — worst shown first
                     </div>
                   </div>
                   <div className="p-5">
@@ -2424,19 +2424,19 @@ export function AnalyticsPage() {
                           </ResponsiveContainer>
                         </div>
                         <p className="text-[10px] text-[#8a8477] mt-2">
-                          Resolution rate = resolved ÷ (total − rejected). Dashed line marks 80%, the start of a passing grade.
-                          {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} excluded — fewer than ${MIN_N_FOR_SCORE} reports to grade.`}
+                          Resolution rate is the number resolved, divided by the total minus rejected reports. The dashed line at 80% marks where a passing grade starts.
+                          {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
                         </p>
                         {/* The ranking alone doesn't say what to do about it —
                             name the worst zone and why it's worth a look. */}
                         {chartData[0].resolutionRate < 60 ? (
                           <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(185,28,28,0.06)', color: '#b91c1c' }}>
-                            {chartData[0].name} is furthest behind at {chartData[0].resolutionRate}% — worth checking whether it's
-                            routing, staffing, or access slowing this zone specifically, not just city-wide capacity.
+                            {chartData[0].name} is furthest behind at {chartData[0].resolutionRate}%. It may be worth checking whether
+                            something specific to this zone — like routing, staffing, or access — is slowing it down, rather than a city-wide capacity problem.
                           </div>
                         ) : (
                           <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}>
-                            No zone is critically behind — the lowest, {chartData[0].name}, is still at {chartData[0].resolutionRate}%.
+                            No zone is seriously behind — even the lowest, {chartData[0].name}, is still at {chartData[0].resolutionRate}%.
                           </div>
                         )}
                       </>

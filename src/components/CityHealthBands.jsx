@@ -38,13 +38,13 @@ function IndexGauge({ value, label, caption, excludedCount, totalDomains }) {
           </span>
         </div>
       ) : (
-        <div className="mt-5 text-base font-bold text-[#8a8477]">Insufficient data</div>
+        <div className="mt-5 text-base font-bold text-[#8a8477]">Not enough data</div>
       )}
       <div className="mt-3 text-[10px] text-[#8a8477] text-center leading-relaxed">
         {caption}
         {excludedCount > 0 && (
           <div className="mt-1 font-semibold">
-            {excludedCount} of {totalDomains} domains omitted — insufficient data
+            {excludedCount} of {totalDomains} categories left out — not enough data
           </div>
         )}
       </div>
@@ -86,63 +86,70 @@ function DomainCard({ name, score, primary, secondary }) {
 function MethodologyPanel({ kind, onClose }) {
   const config = {
     spi: {
-      title: 'Service Performance Index',
-      subtitle: 'Measures the council. Every input is an action the council controls.',
+      title: 'Service Performance Score',
+      subtitle: 'This measures the council. Every part of the score is something the council controls.',
       rows: Object.entries(SPI_WEIGHTS).map(([k, w]) => ({
-        key: k,
+        key: {
+          triage: 'Triage', dispatch: 'Dispatch decision', poolWait: 'Pool wait',
+          work: 'Work', verify: 'Verification', firstPass: 'Right First Time',
+        }[k] || k,
         weight: w,
         detail: SLA_TARGET_DAYS[k] != null
-          ? `target ${SLA_TARGET_DAYS[k]}d · score = min(100, target ÷ median × 100)`
-          : 'share of dispatched reports never re-pooled',
+          ? `Target: ${SLA_TARGET_DAYS[k]} days. Score is 100 if the typical (median) time is at or under the target; otherwise the score is lower, in proportion to how much slower it is.`
+          : 'The percentage of dispatched reports that were not sent back to the assignment pool again.',
       })),
       footer: (
         <p>
-          A stage needs {MIN_N_FOR_STAGE} reports to be scored. Scores cap at 100 —
-          beating a target is not extra credit, it means the target needs revisiting.
+          A step needs at least {MIN_N_FOR_STAGE} reports before it can be scored. The
+          highest possible score is 100 — beating the target doesn't earn extra points. It
+          just means the target should be reviewed.
         </p>
       ),
     },
     uci: {
-      title: 'Urban Condition Index',
-      subtitle: 'Measures the city. Deliberately excludes resolution rate, which describes council throughput rather than the condition of the city.',
+      title: 'Urban Condition Score',
+      subtitle: "This measures the city itself. It does not count how many reports get resolved, since that describes how fast the council works, not the actual condition of the city.",
       rows: Object.entries(UCI_WEIGHTS).map(([k, w]) => ({
         key: k,
         weight: w,
-        detail: `tolerance ${UCI_BURDEN_TARGETS[k]} age-weighted open defects · score = 100 × (1 − burden ÷ tolerance)`,
+        detail: `Allowed limit: ${UCI_BURDEN_TARGETS[k]} open issues (issues open longer count for more). Score = 100 minus a percentage based on how far over that limit the current total is.`,
       })),
       footer: (
         <p>
-          <strong className="text-[#c1613f]">Policy input:</strong> the tolerances above are
-          service standards to agree with the council, not measurements. Each open defect
-          counts as 1, plus 1 more per {AGE_WEIGHT_DAYS} days it stays open.
+          <strong className="text-[#c1613f]">Policy setting:</strong> the limits above are
+          targets to agree on with the council — they are not measured facts. Each open
+          issue counts as 1, plus 1 more for every {AGE_WEIGHT_DAYS} days it stays open.
         </p>
       ),
     },
     ifi: {
-      title: 'Infrastructure Fragility Index',
-      subtitle: 'Measures the zone, over its full history — the only index here that looks past what is currently open. Neither SPI nor UCI answers where infrastructure is weak by design rather than by bad luck.',
+      title: 'Infrastructure Fragility Score',
+      subtitle: "This measures each zone using its full history, not just what's open right now — the only score here that looks at the past this way. Neither Service Performance nor Urban Condition shows where infrastructure is weak because of how it was built, rather than by bad luck.",
       rows: Object.entries(IFI_WEIGHTS).map(([k, w]) => ({
-        key: k,
+        key: {
+          reportRate: 'Report rate', failureRate: 'Failure rate', mtbf: 'Time between problems',
+        }[k] || k,
         weight: w,
         detail: {
-          reportRate: `reports per 10,000 residents vs. city average · score 50 at the average, 100 at 2×`,
-          failureRate: `% of resolved reports that reoccurred within ${REINCIDENCE.radiusM}m / ${REINCIDENCE.windowDays}d`,
-          mtbf: `mean days between defects in the zone vs. city average · shorter gaps score worse`,
+          reportRate: `Reports per 10,000 residents, compared with the city average. A score of 50 means it matches the average; 100 means it's twice the average.`,
+          failureRate: `Percentage of resolved reports where a similar new report appeared again within ${REINCIDENCE.radiusM}m and ${REINCIDENCE.windowDays} days.`,
+          mtbf: `Average number of days between problems in the zone, compared with the city average. Shorter gaps (problems happening more often) score worse.`,
         }[k],
       })),
       footer: (
         <>
           <p>
             <strong className="text-[#c1613f]">Population source:</strong> Department of
-            Statistics Malaysia, district-level 2024 figures — not per-neighborhood. Zones
-            sharing a district share that district's population, so the report-rate
-            component compares fairly within a district but not below it.
+            Statistics Malaysia, district-level 2024 figures — not per-neighborhood figures.
+            Zones in the same district share that district's population number, so the
+            reports-per-resident figure is fair when comparing between districts, but less
+            precise when comparing zones within the same district.
           </p>
           <p>
-            A zone needs {MIN_N_FOR_INDEX} reports (its full history, not just open ones) to
-            be scored. The headline figure is population-weighted across scored zones, so a
-            fragile but tiny zone can't move the city number as much as a fragile, populous
-            one.
+            A zone needs at least {MIN_N_FOR_INDEX} reports (its full history, not just open
+            ones) before it can be scored. The city-wide figure is weighted by population
+            across scored zones, so a small, fragile zone moves the city number less than a
+            large, fragile one.
           </p>
         </>
       ),
@@ -170,7 +177,7 @@ function MethodologyPanel({ kind, onClose }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-[#8a8477] uppercase text-[10px] tracking-wider">
-              <th className="text-left pb-2">Domain</th>
+              <th className="text-left pb-2">Category</th>
               <th className="text-right pb-2 w-16">Weight</th>
               <th className="text-left pb-2 pl-4">How it is scored</th>
             </tr>
@@ -190,13 +197,13 @@ function MethodologyPanel({ kind, onClose }) {
 
         <div className="mt-4 pt-4 border-t border-[#1f1e1a]/8 text-[11px] text-[#8a8477] space-y-2 leading-relaxed">
           <p>
-            Weights are read from the constants module at runtime, so this table cannot
-            drift from the values actually applied.
+            These weights come directly from the system's live settings, so this table
+            always matches what is actually used — it can't fall out of date.
           </p>
           <p>
-            When a domain has no data it is excluded and the remaining weights are
-            renormalised to 1. The gauge states how many domains were omitted rather than
-            substituting a default score.
+            If a category has no data, it is left out, and the other categories' weights are
+            adjusted so they still add up to a full score. The gauge shows how many
+            categories were left out, instead of guessing a score for them.
           </p>
           {footer}
         </div>
@@ -240,7 +247,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
   const flowData = backlogFlow.map((p) => ({
     week: format(new Date(p.weekEnd), 'MMM dd'),
     Open: p.open,
-    Inflow: p.inflow,
+    'New Reports': p.inflow,
     Resolved: p.outflow,
   }));
 
@@ -250,7 +257,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
       <section className="space-y-4">
         <BandHeader
           title="Service Performance"
-          subtitle="How well the council responds. Every input is a council action, scored against the agreed stage targets."
+          subtitle="How well the council responds. Every part of this score is something the council does, measured against the agreed target for each step."
           onMethodology={() => setMethodology('spi')}
         />
 
@@ -270,10 +277,10 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 score={d.score}
                 primary={
                   d.medianDays != null
-                    ? `median ${d.medianDays.toFixed(1)}d vs ${d.targetDays}d target · n=${d.n}`
+                    ? `Typical (median) time: ${d.medianDays.toFixed(1)} days, vs a ${d.targetDays}-day target (based on ${d.n} reports)`
                     : `${d.n} dispatched reports`
                 }
-                secondary={`Insufficient data — ${d.n} of ${d.key === 'firstPass' ? MIN_N_FOR_SCORE : MIN_N_FOR_STAGE} needed`}
+                secondary={`Not enough data — ${d.n} of ${d.key === 'firstPass' ? MIN_N_FOR_SCORE : MIN_N_FOR_STAGE} reports needed`}
               />
             ))}
           </div>
@@ -282,7 +289,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
         {/* Backlog & flow — a real point-in-time reconstruction. */}
         <div className="content-card">
           <div className="content-card-header">
-            <div className="content-card-title">Backlog &amp; flow (12 weeks)</div>
+            <div className="content-card-title">Open, New, and Resolved Reports (12 weeks)</div>
             <span className="text-[11px] text-[#8a8477]">Are we keeping up?</span>
           </div>
           <div className="p-5">
@@ -304,16 +311,16 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Area type="monotone" dataKey="Open" stroke="#d97757" strokeWidth={2} fill="url(#openGrad)" />
-                  <Line type="monotone" dataKey="Inflow" stroke="#6366f1" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="New Reports" stroke="#6366f1" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="Resolved" stroke="#4a5d3f" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
             <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
               <Info size={10} className="inline mr-1 -mt-0.5" />
-              Open backlog reconstructed week by week from submission and resolution dates.
-              Rejection date is inferred from the review timestamp, which is safe because a
-              rejected report is never later approved.
+              The number of open reports each week is calculated from the dates reports were
+              submitted and resolved. The rejection date is estimated from the review date,
+              which is accurate because a rejected report is never later approved.
             </p>
           </div>
         </div>
@@ -323,7 +330,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
       <section className="space-y-4 pt-2 border-t border-[#1f1e1a]/10">
         <BandHeader
           title="Urban Condition"
-          subtitle="The state of the city itself — the open defect burden the council is responding to. Largely outside its short-term control, and scored without reference to resolution rate."
+          subtitle="The actual condition of the city — how many open issues the council is dealing with. This is mostly outside the council's short-term control, and the score does not depend on how many reports get resolved."
           onMethodology={() => setMethodology('uci')}
         />
 
@@ -331,7 +338,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           <IndexGauge
             value={urbanCondition.index}
             label="Urban Cond."
-            caption="Open defects, weighted by age"
+            caption="Open issues, weighted by how long they've been open"
             excludedCount={urbanCondition.excluded.length}
             totalDomains={Object.keys(UCI_WEIGHTS).length}
           />
@@ -342,10 +349,10 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 name={d.name}
                 score={d.score}
                 primary={
-                  `${d.openCount} open · burden ${d.burden}/${d.target}` +
-                  (d.medianAgeDays != null ? ` · median age ${Math.round(d.medianAgeDays)}d` : '')
+                  `${d.openCount} open · current load ${d.burden} of ${d.target} allowed` +
+                  (d.medianAgeDays != null ? ` · typical time open: ${Math.round(d.medianAgeDays)} days` : '')
                 }
-                secondary="Insufficient data — no reports in this category"
+                secondary="Not enough data — no reports in this category"
               />
             ))}
           </div>
@@ -356,7 +363,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
       <section className="space-y-4 pt-2 border-t border-[#1f1e1a]/10">
         <BandHeader
           title="Infrastructure Fragility"
-          subtitle="Where the city is breaking by design, not by bad luck — scored per zone against its own population, over full history rather than just what's open right now."
+          subtitle="Shows where the city keeps breaking because of how it was built, not just bad luck. Each zone is scored against its own population, using its full history — not just what's open right now."
           onMethodology={() => setMethodology('ifi')}
         />
 
@@ -372,7 +379,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           <div className="lg:col-span-3 content-card">
             {ifiZones.length === 0 ? (
               <div className="p-8 text-center text-sm text-[#8a8477]">
-                No zone has {MIN_N_FOR_INDEX}+ reports with a known district yet — nothing to score.
+                No zone yet has {MIN_N_FOR_INDEX}+ reports with a known district, so none can be scored.
               </div>
             ) : (
               <div className="p-5">
@@ -391,10 +398,10 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                               <div className="font-bold text-[#201f1b] mb-1">{d.zone}</div>
                               <div className="text-[#4b473d] space-y-0.5">
                                 <div>{d.reportCount} reports · {d.district} district</div>
-                                <div>{d.ratePer10k.toFixed(1)} per 10k residents</div>
-                                {d.failureRatePct != null && <div>{d.failureRatePct}% of repairs reoccurred</div>}
-                                {d.mtbfDays != null && <div>{Math.round(d.mtbfDays)}d between defects, avg</div>}
-                                {d.driverLabel && <div className="pt-1 mt-1 border-t border-[#1f1e1a]/6 italic">Driven by: {d.driverLabel}</div>}
+                                <div>{d.ratePer10k.toFixed(1)} reports per 10,000 residents</div>
+                                {d.failureRatePct != null && <div>{d.failureRatePct}% of repairs broke again</div>}
+                                {d.mtbfDays != null && <div>On average, {Math.round(d.mtbfDays)} days between problems</div>}
+                                {d.driverLabel && <div className="pt-1 mt-1 border-t border-[#1f1e1a]/6 italic">Main reason: {d.driverLabel}</div>}
                               </div>
                             </div>
                           );
@@ -412,8 +419,8 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                   </ResponsiveContainer>
                 </div>
                 <p className="text-[10px] text-[#8a8477] mt-2">
-                  Score = 100 − fragility, so higher is more durable. Dashed line marks 80, the start of a passing grade.
-                  {ifiUnscored > 0 && ` ${ifiUnscored} zone${ifiUnscored === 1 ? '' : 's'} excluded — fewer than ${MIN_N_FOR_INDEX} reports, or no district mapping.`}
+                  A higher score means the zone holds up better. The dashed line at 80 marks where a passing grade starts.
+                  {ifiUnscored > 0 && ` ${ifiUnscored} zone${ifiUnscored === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_INDEX} reports, or the district isn't known.`}
                 </p>
                 {/* The ranking alone doesn't say what to do — name the worst
                     zone and which of the three signals is actually driving
@@ -429,16 +436,16 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                   >
                     {infrastructureFragility.worst.score < 60 ? (
                       <>
-                        {infrastructureFragility.worst.zone} is the most fragile zone at {infrastructureFragility.worst.score} —
-                        driven mainly by {infrastructureFragility.worst.driverLabel}. That points to
+                        {infrastructureFragility.worst.zone} is the most fragile zone, scoring {infrastructureFragility.worst.score} —
+                        mainly because of {infrastructureFragility.worst.driverLabel}. This suggests
                         {infrastructureFragility.worst.driver === 'failureRate'
-                          ? ' inspecting installation quality there, not dispatching faster.'
+                          ? ' checking the quality of the original repairs there, instead of just responding faster.'
                           : infrastructureFragility.worst.driver === 'mtbf'
-                          ? ' a proactive inspection schedule for this zone, rather than waiting for the next citizen report.'
-                          : ' checking whether this zone is under-resourced relative to how often it actually breaks.'}
+                          ? ' setting up regular inspections in this zone, instead of waiting for the next resident report.'
+                          : ' checking whether this zone has enough resources for how often problems actually happen there.'}
                       </>
                     ) : (
-                      <>No zone is critically fragile — the lowest, {infrastructureFragility.worst.zone}, still scores {infrastructureFragility.worst.score}.</>
+                      <>No zone is seriously fragile — even the lowest, {infrastructureFragility.worst.zone}, still scores {infrastructureFragility.worst.score}.</>
                     )}
                   </div>
                 )}

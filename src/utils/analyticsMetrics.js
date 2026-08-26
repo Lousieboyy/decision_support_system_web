@@ -432,7 +432,7 @@ export function buildServicePerformance(reports) {
     verify: { key: 'verify', name: 'Verification', score: attainment('verify'), n: byKey.verify?.n ?? 0, medianDays: byKey.verify?.median ?? null, targetDays: SLA_TARGET_DAYS.verify },
     firstPass: {
       key: 'firstPass',
-      name: 'First-pass yield',
+      name: 'Right First Time',
       // Routing quality: the share of dispatched reports never re-pooled.
       score: funnel.dispatchedCount >= MIN_N_FOR_SCORE ? funnel.firstPassYield : null,
       n: funnel.dispatchedCount,
