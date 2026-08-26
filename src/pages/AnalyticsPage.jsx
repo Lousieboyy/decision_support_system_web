@@ -118,6 +118,17 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'
 const clusterMarkerColor = (status) =>
   status === 'In Process' || status === 'In Maintenance' ? '#3b82f6' : '#b45309';
 
+// Plain-language reason for whichever factor primaryRisk names as the
+// biggest driver of a cluster's priority score — the score itself is a
+// blend of several inputs, but this says which one actually pushed it up.
+const PRIORITY_RISK_EXPLANATION = {
+  'High Public Concern': 'Mainly upvotes — a lot of people flagged this.',
+  'Safety Risk': 'Mainly urgent categories — several reports here are high-priority by type.',
+  'Long Overdue': "Mainly age — these reports have sat open a long time.",
+  'Recurring Problem': "Systemic — it spans more than one department's category, not just report count.",
+  'Many Reports': 'Mainly how many reports are clustered here.',
+};
+
 export function AnalyticsPage() {
   const { role, user } = useAuth();
   const [reports, setReports] = useState([]);
@@ -2051,6 +2062,12 @@ export function AnalyticsPage() {
                       </div>
                       <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">Sorted by priority, highest first</span>
                     </div>
+                    <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
+                      <Info size={10} className="inline mr-1 -mt-0.5" />
+                      Priority score combines report count, upvotes, how urgent the category is, and how long it's
+                      been open — reports tightly clustered together and from reporters with an accurate track
+                      record count for more. Same score the Dispatch & Audit queue uses.
+                    </p>
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
                         displayHotspots.length === 0 ? (
@@ -2096,7 +2113,7 @@ export function AnalyticsPage() {
                               background: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).bg,
                             }}
                           >
-                            Priority {priorityById[activeCluster.id].priorityScore}
+                            Priority {priorityById[activeCluster.id].priorityScore} · {priorityById[activeCluster.id].primaryRisk}
                           </span>
                         )}
                         <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
@@ -2166,6 +2183,13 @@ export function AnalyticsPage() {
                           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
                           <span>Click a marker for that ticket's detail.</span>
                         </div>
+                        {priorityById[activeCluster.id] && (
+                          <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
+                            <Info size={10} className="inline mr-1 -mt-0.5" />
+                            Priority {priorityById[activeCluster.id].priorityScore} of 100.{' '}
+                            {PRIORITY_RISK_EXPLANATION[priorityById[activeCluster.id].primaryRisk] || ''}
+                          </p>
+                        )}
                       </div>
 
                       {/* Edit Name */}
