@@ -13,7 +13,7 @@ import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, Eye, Lightbulb, Heart, Activity, Truck,
+  CheckCircle2, ChevronRight, Lightbulb, Heart, Activity, Truck,
   Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
@@ -1944,62 +1944,11 @@ export function AnalyticsPage() {
                           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                         />
                         <HeatmapLayer points={heatmapPoints} ready={mapReady} />
-                        {activeCluster && (
-                          <>
-                            <Circle
-                              center={[activeCluster.latitude, activeCluster.longitude]}
-                              radius={proximityRadius}
-                              pathOptions={{
-                                color: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
-                                fillColor: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
-                                fillOpacity: 0.06,
-                                weight: 1.5,
-                                dashArray: activeCluster.id.startsWith('advisory-') ? '6, 6' : undefined
-                              }}
-                            />
-                            {activeCluster.items
-                              .filter((it) => it.latitude != null && it.longitude != null)
-                              .map((it) => (
-                                <CircleMarker
-                                  key={it.id}
-                                  center={[it.latitude, it.longitude]}
-                                  radius={7}
-                                  pathOptions={{
-                                    color: clusterMarkerColor(it.status),
-                                    fillColor: clusterMarkerColor(it.status),
-                                    fillOpacity: 0.9,
-                                    weight: 2,
-                                  }}
-                                >
-                                  <Popup>
-                                    <div style={{ fontSize: 12, minWidth: 180 }}>
-                                      <div style={{ fontWeight: 700 }}>{it.address || it.location || 'Unknown location'}</div>
-                                      <div style={{ color: '#8a8477', marginTop: 2 }}>Category: {it.categories || activeCluster.category}</div>
-                                      <div style={{ color: '#8a8477' }}>Status: {it.status}</div>
-                                      {it.upvotes > 0 && <div style={{ color: '#8a8477' }}>{it.upvotes} upvotes</div>}
-                                    </div>
-                                  </Popup>
-                                </CircleMarker>
-                              ))}
-                          </>
-                        )}
                         <MapResizer />
                         <MapController focus={mapFocus} />
                       </MapContainer>
                     </div>
-                    {activeCluster ? (
-                      <div className="flex items-center gap-4 flex-wrap mt-2.5 text-[10px] text-[#8a8477]">
-                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Waiting to be actioned</span>
-                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
-                        <span className="inline-flex items-center gap-1">
-                          <span className="w-2.5 h-2.5 rounded-full inline-block border-2" style={{ borderColor: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f' }} />
-                          {proximityRadius}m clustering radius
-                        </span>
-                        <span>Click a marker for that ticket's detail.</span>
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-[#8a8477] mt-2.5">Select a hotspot below to see the individual reports behind it.</p>
-                    )}
+                    <p className="text-[10px] text-[#8a8477] mt-2.5">Click a hotspot below to open its full detail with the individual reports on a map.</p>
                   </div>
                 </div>
 
@@ -2156,7 +2105,7 @@ export function AnalyticsPage() {
                 <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setActiveClusterId(null)} />
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                   <div
-                    className="w-full max-w-md max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
+                    className="w-full max-w-xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
                     style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
                   >
                     <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
@@ -2181,6 +2130,66 @@ export function AnalyticsPage() {
                       </button>
                     </div>
                     <div className="p-5 space-y-5 text-left overflow-y-auto">
+                      {/* Evidence map — every constituent report as its own
+                          marker, not just the fuzzy density heatmap behind
+                          this popup (which the overlay blur hides anyway). */}
+                      <div>
+                        <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 260 }}>
+                          <MapContainer
+                            key={activeCluster.id}
+                            center={[activeCluster.latitude, activeCluster.longitude]}
+                            zoom={15.5}
+                            style={{ height: '100%', width: '100%' }}
+                          >
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            <Circle
+                              center={[activeCluster.latitude, activeCluster.longitude]}
+                              radius={proximityRadius}
+                              pathOptions={{
+                                color: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
+                                fillColor: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
+                                fillOpacity: 0.06,
+                                weight: 1.5,
+                                dashArray: activeCluster.id.startsWith('advisory-') ? '6, 6' : undefined
+                              }}
+                            />
+                            {activeCluster.items
+                              .filter((it) => it.latitude != null && it.longitude != null)
+                              .map((it) => (
+                                <CircleMarker
+                                  key={it.id}
+                                  center={[it.latitude, it.longitude]}
+                                  radius={7}
+                                  pathOptions={{
+                                    color: clusterMarkerColor(it.status),
+                                    fillColor: clusterMarkerColor(it.status),
+                                    fillOpacity: 0.9,
+                                    weight: 2,
+                                  }}
+                                >
+                                  <Popup>
+                                    <div style={{ fontSize: 12, minWidth: 180 }}>
+                                      <div style={{ fontWeight: 700 }}>{it.address || it.location || 'Unknown location'}</div>
+                                      <div style={{ color: '#8a8477', marginTop: 2 }}>Category: {it.categories || activeCluster.category}</div>
+                                      <div style={{ color: '#8a8477' }}>Status: {it.status}</div>
+                                      {it.upvotes > 0 && <div style={{ color: '#8a8477' }}>{it.upvotes} upvotes</div>}
+                                    </div>
+                                  </Popup>
+                                </CircleMarker>
+                              ))}
+                            <MapResizer />
+                          </MapContainer>
+                        </div>
+                        <div className="flex items-center gap-3 flex-wrap mt-2 text-[10px] text-[#8a8477]">
+                          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Waiting to be actioned</span>
+                          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
+                          <span>Click a marker for that ticket's detail.</span>
+                        </div>
+                      </div>
+
                       {/* Edit Name */}
                       <div className="flex flex-col gap-1.5">
                         <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Hotspot Location Name</label>
@@ -2237,24 +2246,6 @@ export function AnalyticsPage() {
                           className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full resize-none leading-relaxed"
                         />
                       </div>
-
-                      {/* Map Focus Button — recenters without closing, so the
-                          boundary circle and per-ticket markers (which only
-                          render while this cluster is selected) are still
-                          there once the popup is closed. */}
-                      <button
-                        onClick={() => {
-                          setMapFocus({
-                            center: [activeCluster.latitude, activeCluster.longitude],
-                            zoom: 15.5,
-                            trigger: Date.now()
-                          });
-                        }}
-                        className="flex items-center justify-center gap-1.5 bg-[#f5f1e6] border border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 hover:bg-[#4a5d3f]/8 text-[#4b473d] hover:text-[#201f1b] py-2.5 rounded-xl text-xs font-bold transition-all w-full cursor-pointer"
-                      >
-                        <Eye size={14} />
-                        Locate on Heatmap
-                      </button>
 
                       {/* Exclude / Include Tickets List */}
                       <div className="flex flex-col min-h-0 pt-2 border-t border-[#1f1e1a]/8">
