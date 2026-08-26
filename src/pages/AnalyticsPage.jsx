@@ -1919,72 +1919,118 @@ export function AnalyticsPage() {
           <div className="space-y-6 animate-fade-in">
             {filterBar}
 
-            {/* Focused Map & List Workspace */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Map & List (lg:col-span-2) */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Heatmap Card */}
-                <div className="content-card">
-                  <div className="content-card-header">
-                    <div className="content-card-title">
-                      <MapPin size={16} className="text-[#4a5d3f] mr-2" />
-                      Melaka Complaint Density Heatmap
+            {/* Heatmap Card */}
+            <div className="content-card">
+              <div className="content-card-header">
+                <div className="content-card-title">
+                  <MapPin size={16} className="text-[#4a5d3f] mr-2" />
+                  Melaka Complaint Density Heatmap
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '380px', width: '100%' }}>
+                  <MapContainer
+                    center={[2.1896, 102.2501]}
+                    zoom={12.5}
+                    style={{ height: '100%', width: '100%' }}
+                    zoomControl={false}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <HeatmapLayer points={heatmapPoints} ready={mapReady} />
+                    <MapResizer />
+                    <MapController focus={mapFocus} />
+                  </MapContainer>
+                </div>
+                <p className="text-[10px] text-[#8a8477] mt-2.5">Click a hotspot below to open its full detail with the individual reports on a map.</p>
+              </div>
+            </div>
+
+            {/* Hotspots & Systemic list, with the clustering controls that
+                shape it right above — dragging the radius/density here
+                re-sorts and re-filters the exact list underneath it,
+                instead of a separate panel elsewhere on the page. */}
+            <div className="content-card flex flex-col">
+            <div className="content-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#1f1e1a]/8 pb-4">
+              <div className="content-card-title">
+                Infrastructure Decision Support
+              </div>
+
+              {/* Tab Selector */}
+              <div className="flex bg-[#f5f1e6] p-1 rounded-xl border border-[#1f1e1a]/8 self-start sm:self-auto">
+                <button
+                  onClick={() => setActiveTab('single')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'single'
+                      ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
+                      : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
+                  }`}
+                >
+                  Hotspots ({hotspots.length})
+                </button>
+                <button
+                  onClick={() => setActiveTab('systemic')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'systemic'
+                      ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
+                      : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
+                  }`}
+                >
+                  Systemic ({rootCauseAdvisories.length})
+                </button>
+              </div>
+            </div>
+
+              {/* Clustering Controls */}
+              <div className="px-5 py-4 border-b border-[#1f1e1a]/8" style={{ background: 'rgba(74,93,63,0.04)' }}>
+                <div className="flex flex-col sm:flex-row sm:items-start gap-5">
+                  <div className="flex-1 min-w-[200px] space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
+                      <span>Cluster Proximity Radius</span>
+                      <span className="text-[#4a5d3f] font-bold">{proximityRadius}m</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="1000"
+                      step="50"
+                      value={proximityRadius}
+                      onChange={(e) => setProximityRadius(Number(e.target.value))}
+                      className="w-full h-1.5 bg-[#e7ede1] rounded-lg appearance-none cursor-pointer accent-[#4a5d3f]"
+                    />
+                    <div className="flex justify-between text-[9px] text-[#8a8477] font-medium">
+                      <span>50m (Precise)</span>
+                      <span>1000m (Broad)</span>
                     </div>
                   </div>
-                  <div className="p-5">
-                    <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '380px', width: '100%' }}>
-                      <MapContainer
-                        center={[2.1896, 102.2501]}
-                        zoom={12.5}
-                        style={{ height: '100%', width: '100%' }}
-                        zoomControl={false}
-                      >
-                        <TileLayer
-                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                        />
-                        <HeatmapLayer points={heatmapPoints} ready={mapReady} />
-                        <MapResizer />
-                        <MapController focus={mapFocus} />
-                      </MapContainer>
+                  <div className="flex-1 min-w-[240px] space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
+                      <span>Minimum Complaint Density</span>
+                      <span className="text-[#4a5d3f] font-bold">{minClusterSize}+ tickets</span>
                     </div>
-                    <p className="text-[10px] text-[#8a8477] mt-2.5">Click a hotspot below to open its full detail with the individual reports on a map.</p>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[2, 3, 4, 5, 6, 8, 10, 15].map((val) => (
+                        <button
+                          key={val}
+                          onClick={() => setMinClusterSize(val)}
+                          className={`py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                            minClusterSize === val
+                              ? 'bg-[#4a5d3f] border-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20'
+                              : 'bg-[#f5f1e6] border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 text-[#8a8477] hover:text-[#201f1b]'
+                          }`}
+                        >
+                          {val}+
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                {/* Hotspots & Systemic tab list */}
-                <div className="content-card flex flex-col">
-                <div className="content-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#1f1e1a]/8 pb-4">
-                  <div className="content-card-title">
-                    Infrastructure Decision Support
-                  </div>
-
-                  {/* Tab Selector */}
-                  <div className="flex bg-[#f5f1e6] p-1 rounded-xl border border-[#1f1e1a]/8 self-start sm:self-auto">
-                    <button
-                      onClick={() => setActiveTab('single')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeTab === 'single'
-                          ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
-                          : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
-                      }`}
-                    >
-                      Hotspots ({hotspots.length})
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('systemic')}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeTab === 'systemic'
-                          ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
-                          : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
-                      }`}
-                    >
-                      Systemic ({rootCauseAdvisories.length})
-                    </button>
-                  </div>
-                </div>
-                  <div className="p-5 flex-1 flex flex-col space-y-4">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="p-5 flex-1 flex flex-col space-y-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="relative flex-1 min-w-[200px]">
                         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8477] pointer-events-none" />
                         <input
@@ -2028,74 +2074,6 @@ export function AnalyticsPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Clustering Controls (lg:col-span-1) — no longer swaps out for
-                  the detail editor, which now opens as its own popup below. */}
-              <div className="lg:col-span-1 space-y-6">
-                <div className="bg-white border border-[#1f1e1a]/10 rounded-2xl p-6 space-y-6 text-left">
-                  <div>
-                    <h3 className="text-sm font-extrabold text-[#201f1b]">
-                      Clustering Controls
-                    </h3>
-                    <p className="text-xs text-[#8a8477] mt-1">Adjust spatial criteria to modify hotspot grouping boundaries in real time.</p>
-                  </div>
-
-                  <div className="space-y-5 pt-2">
-                    {/* Proximity Slider */}
-                    <div className="space-y-2 text-left">
-                      <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
-                        <span>Cluster Proximity Radius</span>
-                        <span className="text-[#4a5d3f] font-bold">{proximityRadius} meters</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="50"
-                        max="1000"
-                        step="50"
-                        value={proximityRadius}
-                        onChange={(e) => setProximityRadius(Number(e.target.value))}
-                        className="w-full h-1.5 bg-[#e7ede1] rounded-lg appearance-none cursor-pointer accent-[#4a5d3f]"
-                      />
-                      <div className="flex justify-between text-[9px] text-[#8a8477] font-medium">
-                        <span>50m (Precise)</span>
-                        <span>1000m (Broad)</span>
-                      </div>
-                    </div>
-
-                    {/* Min Density Selector */}
-                    <div className="space-y-2 text-left">
-                      <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
-                        <span>Minimum Complaint Density</span>
-                        <span className="text-[#4a5d3f] font-bold">{minClusterSize} tickets</span>
-                      </div>
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {[2, 3, 4, 5, 6, 8, 10, 15].map((val) => (
-                          <button
-                            key={val}
-                            onClick={() => setMinClusterSize(val)}
-                            className={`py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                              minClusterSize === val
-                                ? 'bg-[#4a5d3f] border-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20'
-                                : 'bg-[#f5f1e6] border-[#1f1e1a]/12 hover:border-[#4a5d3f]/30 text-[#8a8477] hover:text-[#201f1b]'
-                            }`}
-                          >
-                            {val}+
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
-                        Hotspots require at least this number of active complaints of the same category clustered within the radius.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[11px] text-[#4b473d] leading-relaxed">
-                    Click a hotspot card to rename its address, edit the recommended action plan, or exclude individual report tickets.
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* Detail & Edit popup — used to swap in for the Clustering
                 Controls panel above, which hid the panel and forced a "Back"
