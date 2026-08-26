@@ -1818,66 +1818,45 @@ export function AnalyticsPage() {
                     Resource Reallocation Advisory
                   </div>
                 </div>
-                <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    <p className="text-xs leading-relaxed text-[#4b473d]">
-                      Flags automatically when a department falls behind.
-                    </p>
-                    
-                    <div className="mt-4 space-y-3">
-                      <div className="p-4 rounded-xl border flex items-start gap-3 bg-[#4a5d3f]/10 border-[#4a5d3f]/20 text-[#4a5d3f]">
-                        <div className="text-left">
-                          <div className="text-xs font-bold uppercase tracking-wide">
-                            {kpiStats.healthStatus === 'Optimal' ? 'System Healthy' : 'Resource Reallocation Alert'}
-                          </div>
-                          <div className="text-[11px] leading-relaxed mt-1 text-[#8a8477]">
-                            {kpiStats.recommendation}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                <div className="p-5 flex-1 flex flex-col justify-center space-y-3">
+                  <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
+                    <span>Fastest to Resolve</span>
+                    {kpiStats.fastestSLA ? (
+                      <button
+                        onClick={() => openExplore({ department: kpiStats.fastestSLA.name })}
+                        className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
+                      >
+                        {kpiStats.fastestSLA.name} ({kpiStats.fastestSLA.avgResolveDays} days)
+                      </button>
+                    ) : (
+                      <span className="text-[#201f1b]">Insufficient data</span>
+                    )}
                   </div>
-
-                  <div className="border-t border-[#1f1e1a]/8 pt-4">
-                    <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
-                      <span>Fastest to Resolve</span>
-                      {kpiStats.fastestSLA ? (
-                        <button
-                          onClick={() => openExplore({ department: kpiStats.fastestSLA.name })}
-                          className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
-                        >
-                          {kpiStats.fastestSLA.name} ({kpiStats.fastestSLA.avgResolveDays} days)
-                        </button>
-                      ) : (
-                        <span className="text-[#201f1b]">Insufficient data</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
-                      <span>Slowest to Resolve</span>
-                      {kpiStats.slowestSLA ? (
-                        <button
-                          onClick={() => openExplore({ department: kpiStats.slowestSLA.name })}
-                          className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
-                        >
-                          {kpiStats.slowestSLA.name} ({kpiStats.slowestSLA.avgResolveDays} days)
-                        </button>
-                      ) : (
-                        <span className="text-[#201f1b]">Insufficient data</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold mt-2">
-                      <span>Largest Backlog</span>
-                      {kpiStats.worstBacklogDept !== 'None' ? (
-                        <button
-                          onClick={() => openExplore({ department: kpiStats.worstBacklogDept })}
-                          className="text-[#8a8477] underline decoration-dotted underline-offset-2 hover:opacity-70"
-                        >
-                          {kpiStats.worstBacklogDept}
-                        </button>
-                      ) : (
-                        <span className="text-[#8a8477]">None</span>
-                      )}
-                    </div>
+                  <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
+                    <span>Slowest to Resolve</span>
+                    {kpiStats.slowestSLA ? (
+                      <button
+                        onClick={() => openExplore({ department: kpiStats.slowestSLA.name })}
+                        className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
+                      >
+                        {kpiStats.slowestSLA.name} ({kpiStats.slowestSLA.avgResolveDays} days)
+                      </button>
+                    ) : (
+                      <span className="text-[#201f1b]">Insufficient data</span>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
+                    <span>Largest Backlog</span>
+                    {kpiStats.worstBacklogDept !== 'None' ? (
+                      <button
+                        onClick={() => openExplore({ department: kpiStats.worstBacklogDept })}
+                        className="text-[#8a8477] underline decoration-dotted underline-offset-2 hover:opacity-70"
+                      >
+                        {kpiStats.worstBacklogDept}
+                      </button>
+                    ) : (
+                      <span className="text-[#8a8477]">None</span>
+                    )}
                   </div>
                 </div>
               </div>
