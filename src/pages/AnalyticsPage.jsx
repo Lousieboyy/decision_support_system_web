@@ -1723,10 +1723,8 @@ export function AnalyticsPage() {
               </div>
             </div>
 
-            {/* SLA Department Performance Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* SLA Performance Bar Chart / Scoped Status Chart */}
-              <div className="content-card lg:col-span-2 min-w-0">
+            {/* SLA Performance Bar Chart / Scoped Status Chart */}
+            <div className="content-card min-w-0">
                 <div className="content-card-header">
                   <div className="content-card-title">
                     {selectedDept === 'all' 
@@ -1810,57 +1808,6 @@ export function AnalyticsPage() {
                   <p className="text-[10px] text-[#8a8477] mt-1.5">Click a bar to see the reports behind it.</p>
                 </div>
               </div>
-
-              {/* Smart Decision Warning Board */}
-              <div className="content-card flex flex-col justify-between">
-                <div className="content-card-header">
-                  <div className="content-card-title">
-                    Resource Reallocation Advisory
-                  </div>
-                </div>
-                <div className="p-5 flex-1 flex flex-col justify-center space-y-3">
-                  <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
-                    <span>Fastest to Resolve</span>
-                    {kpiStats.fastestSLA ? (
-                      <button
-                        onClick={() => openExplore({ department: kpiStats.fastestSLA.name })}
-                        className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
-                      >
-                        {kpiStats.fastestSLA.name} ({kpiStats.fastestSLA.avgResolveDays} days)
-                      </button>
-                    ) : (
-                      <span className="text-[#201f1b]">Insufficient data</span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
-                    <span>Slowest to Resolve</span>
-                    {kpiStats.slowestSLA ? (
-                      <button
-                        onClick={() => openExplore({ department: kpiStats.slowestSLA.name })}
-                        className="text-[#201f1b] underline decoration-dotted underline-offset-2 hover:opacity-70"
-                      >
-                        {kpiStats.slowestSLA.name} ({kpiStats.slowestSLA.avgResolveDays} days)
-                      </button>
-                    ) : (
-                      <span className="text-[#201f1b]">Insufficient data</span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-[#8a8477] font-bold">
-                    <span>Largest Backlog</span>
-                    {kpiStats.worstBacklogDept !== 'None' ? (
-                      <button
-                        onClick={() => openExplore({ department: kpiStats.worstBacklogDept })}
-                        className="text-[#8a8477] underline decoration-dotted underline-offset-2 hover:opacity-70"
-                      >
-                        {kpiStats.worstBacklogDept}
-                      </button>
-                    ) : (
-                      <span className="text-[#8a8477]">None</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
 
             {/* One explorer for all four charts — any click pre-fills a
                 single filter, but date/category/department/status all stay
