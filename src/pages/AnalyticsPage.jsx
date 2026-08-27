@@ -701,6 +701,28 @@ export function AnalyticsPage() {
     [deptSLAMetrics]
   );
 
+  // 2.4 Every department's backlog, regardless of the page's Department Scope
+  // filter — Allocation Status is specifically about comparing departments
+  // against each other, so it deliberately ignores that filter (it still
+  // respects the date filter) rather than zeroing out every department but
+  // the one currently selected.
+  const allDeptBacklog = useMemo(() => {
+    const dateOnly = reports.filter((r) => matchesDateFilter(r.timestamp));
+    const presentAbbrs = new Set(departmentOptions.map((d) => d.key));
+    const filteredAuthorities = AUTHORITIES.filter((a) => presentAbbrs.has(a.abbr));
+    const counts = {};
+    filteredAuthorities.forEach((a) => { counts[a.abbr] = { name: a.abbr, fullName: a.name, backlog: 0 }; });
+    dateOnly.forEach((r) => {
+      const deptName = r.assigned_department || '';
+      const auth = filteredAuthorities.find(
+        (a) => deptName.toLowerCase().includes(a.abbr.toLowerCase()) || deptName.toLowerCase().includes(a.id.toLowerCase())
+      );
+      if (!auth) return;
+      if (r.status !== 'Resolved' && r.status !== 'Rejected') counts[auth.abbr].backlog++;
+    });
+    return Object.values(counts).sort((a, b) => b.backlog - a.backlog);
+  }, [reports, dateFilter, customStart, customEnd, departmentOptions]);
+
   // 2.5 Scoped department status data for breakdown chart
   const deptStatusData = useMemo(() => {
     if (selectedDept === 'all') return [];
@@ -1670,6 +1692,30 @@ export function AnalyticsPage() {
                           ? `Optimal means every department has ${INSIGHT.backlogAlertTickets} or fewer open tickets waiting.`
                           : `Triggers when any department has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`)
                       : `Scoped to ${kpiStats.worstBacklogDept} — triggers once it has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`}
+                  </div>
+                  {/* Every department, not just whichever one is flagged —
+                      so "Normal" has a visible baseline to be normal against,
+                      not just an absence of a warning. Deliberately ignores
+                      the page's Department Scope filter (see the memo above)
+                      since this is specifically a cross-department comparison. */}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {allDeptBacklog.map((d) => {
+                      const warning = d.backlog > INSIGHT.backlogAlertTickets;
+                      return (
+                        <button
+                          key={d.name}
+                          onClick={() => openExplore({ department: d.name })}
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer"
+                          style={{
+                            background: warning ? 'rgba(185,28,28,0.08)' : 'rgba(21,128,61,0.08)',
+                            color: warning ? '#b91c1c' : '#15803d',
+                          }}
+                          title={`${d.fullName}: ${d.backlog} open ticket${d.backlog === 1 ? '' : 's'} — click to see them`}
+                        >
+                          {d.name} {d.backlog}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
