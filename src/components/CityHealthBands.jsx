@@ -18,7 +18,7 @@ const scoreColor = (s) =>
   s == null ? '#8a8477' : s >= 80 ? '#15803d' : s >= 60 ? '#b45309' : '#b91c1c';
 
 /** Radial gauge that degrades to an explicit unmeasured state. */
-function IndexGauge({ value, label, caption, excludedCount, totalDomains }) {
+function IndexGauge({ value, label, caption, excludedCount, totalDomains, formula, onMethodology }) {
   const grade = gradeFor(value);
   return (
     <div className="content-card flex flex-col items-center justify-center py-8 px-6">
@@ -49,18 +49,44 @@ function IndexGauge({ value, label, caption, excludedCount, totalDomains }) {
           </div>
         )}
       </div>
+      {/* The number alone doesn't say how it was built — state the model in
+          plain words right here, with a direct path to the exact weights,
+          instead of leaving that only behind the small header button. */}
+      {formula && (
+        <div className="mt-3 pt-3 border-t border-[#1f1e1a]/8 w-full text-center">
+          <p className="text-[10px] text-[#8a8477] leading-relaxed">{formula}</p>
+          {onMethodology && (
+            <button
+              onClick={onMethodology}
+              className="mt-1.5 text-[10px] font-bold underline decoration-dotted underline-offset-2 cursor-pointer"
+              style={{ color: '#4a5d3f' }}
+            >
+              See the exact weights and math →
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /** Score card whose box model is identical whether or not the score exists. */
-function DomainCard({ name, score, primary, secondary }) {
+function DomainCard({ name, score, weight, primary, secondary }) {
   const measured = score != null;
   return (
     <div className="domain-card">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] font-extrabold text-[#8a8477] uppercase tracking-wider truncate pr-2">
+        <span className="text-[10px] font-extrabold text-[#8a8477] uppercase tracking-wider truncate pr-2 flex items-center gap-1.5">
           {name}
+          {weight != null && (
+            <span
+              className="shrink-0 px-1 py-px rounded text-[9px] font-black normal-case tracking-normal"
+              style={{ background: 'rgba(74,93,63,0.10)', color: '#4a5d3f' }}
+              title="How much this category counts toward the score above"
+            >
+              {Math.round(weight * 100)}%
+            </span>
+          )}
         </span>
         <span className="text-lg font-black shrink-0" style={{ color: scoreColor(score) }}>
           {measured ? score : '—'}
@@ -308,6 +334,8 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
             caption={`Based on ${reportCount} reports`}
             excludedCount={servicePerformance.excluded.length}
             totalDomains={Object.keys(SPI_WEIGHTS).length}
+            formula="A weighted average of the categories shown here — the % on each card is its share of this score."
+            onMethodology={() => setMethodology('spi')}
           />
           <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
             {spiDomains.map((d) => (
@@ -315,6 +343,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 key={d.key}
                 name={d.name}
                 score={d.score}
+                weight={SPI_WEIGHTS[d.key]}
                 primary={
                   d.medianDays != null
                     ? `Typical (median) time: ${fmtDuration(d.medianDays)}, vs a target of ${fmtDuration(d.targetDays)} (based on ${d.n} reports)`
@@ -383,6 +412,8 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
             caption="Open issues, weighted by how long they've been open"
             excludedCount={urbanCondition.excluded.length}
             totalDomains={Object.keys(UCI_WEIGHTS).length}
+            formula="A weighted average of the categories shown here — the % on each card is its share of this score."
+            onMethodology={() => setMethodology('uci')}
           />
           <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
             {uciDomains.map((d) => (
@@ -390,6 +421,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 key={d.key}
                 name={d.name}
                 score={d.score}
+                weight={UCI_WEIGHTS[d.key]}
                 primary={
                   `${d.openCount} open · current load ${d.burden} of ${d.target} allowed` +
                   (d.medianAgeDays != null ? ` · typical time open: ${Math.round(d.medianAgeDays)} days` : '')
@@ -418,6 +450,8 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
             caption={`${ifiZones.length} zone${ifiZones.length === 1 ? '' : 's'} scored`}
             excludedCount={0}
             totalDomains={ifiZones.length}
+            formula="Each zone below blends three signals into its own score — this number is those zone scores averaged, weighted by population."
+            onMethodology={() => setMethodology('ifi')}
           />
 
           <div className="lg:col-span-3 content-card">
