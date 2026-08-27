@@ -1725,8 +1725,8 @@ export function AnalyticsPage() {
                         style={{ color: kpiStats.avgDays > SLA_END_TO_END_DAYS ? '#b91c1c' : '#15803d' }}
                       >
                         {kpiStats.avgDays > SLA_END_TO_END_DAYS
-                          ? `${(kpiStats.avgDays - SLA_END_TO_END_DAYS).toFixed(1)}d over the ${SLA_END_TO_END_DAYS}-day target`
-                          : `${(SLA_END_TO_END_DAYS - kpiStats.avgDays).toFixed(1)}d under the ${SLA_END_TO_END_DAYS}-day target`}
+                          ? `${fmtDuration(kpiStats.avgDays - SLA_END_TO_END_DAYS)} over the ${SLA_END_TO_END_DAYS}-day target`
+                          : `${fmtDuration(SLA_END_TO_END_DAYS - kpiStats.avgDays)} under the ${SLA_END_TO_END_DAYS}-day target`}
                       </div>
                       {kpiStats.fastestSLA && (
                         <button
@@ -1734,7 +1734,7 @@ export function AnalyticsPage() {
                           className="flex items-center justify-between w-full text-[9px] font-semibold cursor-pointer"
                         >
                           <span className="text-[#8a8477]">Fastest</span>
-                          <span style={{ color: '#15803d' }}>{kpiStats.fastestSLA.name} — {kpiStats.fastestSLA.avgResolveDays}d</span>
+                          <span style={{ color: '#15803d' }}>{kpiStats.fastestSLA.name} — {fmtDuration(kpiStats.fastestSLA.avgResolveDays)}</span>
                         </button>
                       )}
                       {kpiStats.slowestSLA && (
@@ -1743,7 +1743,7 @@ export function AnalyticsPage() {
                           className="flex items-center justify-between w-full text-[9px] font-semibold cursor-pointer"
                         >
                           <span className="text-[#8a8477]">Slowest</span>
-                          <span style={{ color: '#b91c1c' }}>{kpiStats.slowestSLA.name} — {kpiStats.slowestSLA.avgResolveDays}d</span>
+                          <span style={{ color: '#b91c1c' }}>{kpiStats.slowestSLA.name} — {fmtDuration(kpiStats.slowestSLA.avgResolveDays)}</span>
                         </button>
                       )}
                     </div>
@@ -1831,7 +1831,7 @@ export function AnalyticsPage() {
                             <span style={{ color: failBacklog ? '#b91c1c' : '#8a8477' }}>{d.backlog} backlog</span>
                             {' · '}
                             <span style={{ color: failResolve ? '#b91c1c' : '#8a8477' }}>
-                              {d.avgResolveDays != null ? `${d.avgResolveDays}d avg` : 'no data'}
+                              {d.avgResolveDays != null ? `${fmtDuration(d.avgResolveDays)} avg` : 'no data'}
                             </span>
                             {' · '}
                             <span style={{ color: failOnTime ? '#b91c1c' : '#8a8477' }}>
@@ -1842,9 +1842,14 @@ export function AnalyticsPage() {
                       );
                     })}
                   </div>
-                  <p className="text-[8px] text-[#8a8477] mt-1 leading-relaxed">
-                    Backlog target: {INSIGHT.backlogAlertTickets} or fewer waiting. Resolve target: {SLA_END_TO_END_DAYS} days or under, on average. On-time target: 60%+ of resolved tickets within {SLA_END_TO_END_DAYS} days.
-                  </p>
+                  <div className="mt-1.5 pt-1.5 border-t border-[#1f1e1a]/6">
+                    <div className="text-[8px] font-bold text-[#8a8477] uppercase tracking-wider mb-1">Requirements checked</div>
+                    <ul className="space-y-0.5 text-[8px] text-[#8a8477] leading-relaxed">
+                      <li>• Backlog — {INSIGHT.backlogAlertTickets} or fewer tickets waiting</li>
+                      <li>• Resolve time — {fmtDuration(SLA_END_TO_END_DAYS)} or under, on average</li>
+                      <li>• On-time rate — 60%+ of resolved tickets within {fmtDuration(SLA_END_TO_END_DAYS)}</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
