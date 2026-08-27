@@ -865,6 +865,25 @@ export function AnalyticsPage() {
     };
   }, [filteredReports, hotspots, deptSLAMetrics, selectedDept]);
 
+  // 3a. What kind of "active" — a bare count doesn't say whether it's a pile
+  // of untouched Pending reports or work already In Process.
+  const activeStatusBreakdown = useMemo(() => {
+    const counts = {};
+    filteredReports.forEach((r) => {
+      if (r.status === 'Resolved' || r.status === 'Rejected' || !r.status) return;
+      counts[r.status] = (counts[r.status] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [filteredReports]);
+
+  // 3b. Which categories the active hotspots are actually in — the zone
+  // count alone doesn't say what kind of problem is clustering.
+  const hotspotCategoryBreakdown = useMemo(() => {
+    const counts = {};
+    hotspots.forEach((h) => { counts[h.category] = (counts[h.category] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [hotspots]);
+
   // 4. Ticket Volume Trend — the window it plots now follows whichever date
   // filter is active instead of being hardcoded to the last 30 days, so
   // picking "Last 7 Days" or a custom range actually changes this chart
@@ -1670,6 +1689,23 @@ export function AnalyticsPage() {
                   <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Complaints</div>
                   <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.active}</div>
                   <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Out of {kpiStats.total} total reports</div>
+                  {/* What kind of active — untouched vs already being worked
+                      call for different responses. */}
+                  {activeStatusBreakdown.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-[#1f1e1a]/6">
+                      {activeStatusBreakdown.map(([status, count]) => (
+                        <button
+                          key={status}
+                          onClick={() => openExplore({ status })}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer"
+                          style={{ background: 'rgba(74,93,63,0.08)', color: '#4a5d3f' }}
+                          title={`${count} ${status} — click to see them`}
+                        >
+                          {status} {count}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1682,6 +1718,36 @@ export function AnalyticsPage() {
                       : `${kpiStats.avgDays} Days`}
                   </div>
                   <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">From report submitted to problem resolved</div>
+                  {kpiStats.avgDays != null && (
+                    <div className="mt-3 pt-3 border-t border-[#1f1e1a]/6 space-y-1.5">
+                      <div
+                        className="text-[9px] font-bold"
+                        style={{ color: kpiStats.avgDays > SLA_END_TO_END_DAYS ? '#b91c1c' : '#15803d' }}
+                      >
+                        {kpiStats.avgDays > SLA_END_TO_END_DAYS
+                          ? `${(kpiStats.avgDays - SLA_END_TO_END_DAYS).toFixed(1)}d over the ${SLA_END_TO_END_DAYS}-day target`
+                          : `${(SLA_END_TO_END_DAYS - kpiStats.avgDays).toFixed(1)}d under the ${SLA_END_TO_END_DAYS}-day target`}
+                      </div>
+                      {kpiStats.fastestSLA && (
+                        <button
+                          onClick={() => openExplore({ department: kpiStats.fastestSLA.name })}
+                          className="flex items-center justify-between w-full text-[9px] font-semibold cursor-pointer"
+                        >
+                          <span className="text-[#8a8477]">Fastest</span>
+                          <span style={{ color: '#15803d' }}>{kpiStats.fastestSLA.name} — {kpiStats.fastestSLA.avgResolveDays}d</span>
+                        </button>
+                      )}
+                      {kpiStats.slowestSLA && (
+                        <button
+                          onClick={() => openExplore({ department: kpiStats.slowestSLA.name })}
+                          className="flex items-center justify-between w-full text-[9px] font-semibold cursor-pointer"
+                        >
+                          <span className="text-[#8a8477]">Slowest</span>
+                          <span style={{ color: '#b91c1c' }}>{kpiStats.slowestSLA.name} — {kpiStats.slowestSLA.avgResolveDays}d</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1690,6 +1756,30 @@ export function AnalyticsPage() {
                   <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Hotspots</div>
                   <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.hotspotsCount} Zones</div>
                   <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Areas with several reports close together</div>
+                  {/* The zone count alone doesn't say what's clustering —
+                      the category breakdown does. */}
+                  {hotspotCategoryBreakdown.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-[#1f1e1a]/6">
+                      {hotspotCategoryBreakdown.map(([category, count]) => (
+                        <button
+                          key={category}
+                          onClick={() => openExplore({ category })}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer"
+                          style={{ background: 'rgba(193,97,63,0.08)', color: '#c1613f' }}
+                          title={`${count} hotspot zone${count === 1 ? '' : 's'} in ${category} — click to see those reports`}
+                        >
+                          {category} {count}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setActiveViewTab('hotspots')}
+                    className="mt-2 text-[9px] font-bold underline decoration-dotted underline-offset-2 cursor-pointer"
+                    style={{ color: '#4a5d3f' }}
+                  >
+                    Full breakdown →
+                  </button>
                 </div>
               </div>
 
