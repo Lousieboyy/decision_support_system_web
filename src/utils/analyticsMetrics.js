@@ -62,6 +62,21 @@ export function percentile(values, p) {
 
 export const median = (values) => percentile(values, 50);
 
+/**
+ * A fractional-day value like "0.5" reads as nothing to someone who hasn't
+ * been told what a percentile or a decimal day means. Below a day, switch
+ * to minutes/hours; a day or more stays in days.
+ */
+export const fmtDuration = (v) => {
+  if (v == null) return '—';
+  if (v <= 0) return '0 min';
+  const hrs = v * 24;
+  if (hrs < 1) return Math.max(1, Math.round(hrs * 60)) + ' min';
+  if (v < 1) return Math.round(hrs) + ' hrs';
+  const rounded = Math.round(v * 10) / 10;
+  return rounded + (rounded === 1 ? ' day' : ' days');
+};
+
 /** Great-circle distance in metres. */
 export function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // km

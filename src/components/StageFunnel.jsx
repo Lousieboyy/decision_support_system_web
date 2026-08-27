@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
-import { buildFunnel, buildComposition } from '../utils/analyticsMetrics';
+import { buildFunnel, buildComposition, fmtDuration } from '../utils/analyticsMetrics';
 import { MIN_N_FOR_STAGE } from '../utils/analyticsConstants';
 import { StageEvidenceModal } from './StageEvidenceModal';
 
@@ -12,18 +12,6 @@ const SEGMENT_COLORS = {
   mobilise: '#8b5cf6',
   work: '#4a5d3f',
   verify: '#14b8a6',
-};
-
-// Plain time units instead of fractional days — "0.3d" means nothing to a
-// reader without doing the multiplication themselves.
-const fmtDuration = (v) => {
-  if (v == null) return '—';
-  if (v <= 0) return '0 min';
-  const hrs = v * 24;
-  if (hrs < 1) return Math.max(1, Math.round(hrs * 60)) + ' min';
-  if (v < 1) return Math.round(hrs) + ' hrs';
-  const rounded = Math.round(v * 10) / 10;
-  return rounded + (rounded === 1 ? ' day' : ' days');
 };
 
 /**

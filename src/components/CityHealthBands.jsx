@@ -10,6 +10,7 @@ import {
   AGE_WEIGHT_DAYS, MIN_N_FOR_STAGE, MIN_N_FOR_SCORE, MIN_N_FOR_INDEX,
   IFI_WEIGHTS, REINCIDENCE, gradeFor,
 } from '../utils/analyticsConstants';
+import { fmtDuration } from '../utils/analyticsMetrics';
 
 const HATCH = 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, transparent 6px 12px)';
 
@@ -95,7 +96,7 @@ function MethodologyPanel({ kind, onClose }) {
         }[k] || k,
         weight: w,
         detail: SLA_TARGET_DAYS[k] != null
-          ? `Target: ${SLA_TARGET_DAYS[k]} days. Score is 100 if the typical (median) time is at or under the target; otherwise the score is lower, in proportion to how much slower it is.`
+          ? `Target: ${fmtDuration(SLA_TARGET_DAYS[k])}. Score is 100 if the typical (median) time is at or under the target; otherwise the score is lower, in proportion to how much slower it is.`
           : 'The percentage of dispatched reports that were not sent back to the assignment pool again.',
       })),
       footer: (
@@ -277,7 +278,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 score={d.score}
                 primary={
                   d.medianDays != null
-                    ? `Typical (median) time: ${d.medianDays.toFixed(1)} days, vs a ${d.targetDays}-day target (based on ${d.n} reports)`
+                    ? `Typical (median) time: ${fmtDuration(d.medianDays)}, vs a target of ${fmtDuration(d.targetDays)} (based on ${d.n} reports)`
                     : `${d.n} dispatched reports`
                 }
                 secondary={`Not enough data — ${d.n} of ${d.key === 'firstPass' ? MIN_N_FOR_SCORE : MIN_N_FOR_STAGE} reports needed`}

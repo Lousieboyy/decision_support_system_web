@@ -24,7 +24,7 @@ import {
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
   buildServicePerformance, buildUrbanCondition, buildBacklogFlow, buildFunnel,
-  buildReliabilityAudit, buildInfrastructureFragility,
+  buildReliabilityAudit, buildInfrastructureFragility, fmtDuration,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { StageFunnel } from '../components/StageFunnel';
@@ -1018,7 +1018,7 @@ export function AnalyticsPage() {
       // Null guard matters: `null < 60` coerces to `0 < 60`.
       if (domain.score != null && domain.score < 60) {
         const detail = domain.medianDays != null
-          ? `Typical (median) time is ${domain.medianDays.toFixed(1)} days, against a ${domain.targetDays}-day target (based on ${domain.n} reports).`
+          ? `Typical (median) time is ${fmtDuration(domain.medianDays)}, against a target of ${fmtDuration(domain.targetDays)} (based on ${domain.n} reports).`
           : `${domain.score}% of dispatched reports were handled successfully on the first try, out of ${domain.n} reports.`;
         insights.push({
           id: `spi-${key}`, type: 'warning', title: `${domain.name} is missing its target`,
