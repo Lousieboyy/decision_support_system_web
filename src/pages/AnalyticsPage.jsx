@@ -27,7 +27,6 @@ import {
   buildReliabilityAudit, buildInfrastructureFragility, fmtDuration,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
-import { StageFunnel } from '../components/StageFunnel';
 import { CityHealthBands } from '../components/CityHealthBands';
 import { DispatchAudit } from '../components/DispatchAudit';
 import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
@@ -1899,10 +1898,6 @@ export function AnalyticsPage() {
                 </button>
               </div>
             </div>
-
-            {/* Stage-duration funnel — the headline operational analytic:
-                which stage of the pipeline actually consumes the days. */}
-            <StageFunnel reports={filteredReports} dateFilterLabel={dateFilterLabel} />
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
