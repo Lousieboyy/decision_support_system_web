@@ -9,12 +9,19 @@ import { canonicalizeCategory } from '../utils/analyticsMetrics';
 // This is only ever a starting point — the person dispatching can change
 // it before confirming, and the backend enforces the real permission
 // boundary regardless of what's selected here.
+//
+// MBMB is the local council, so it's the default for every local-scale
+// category — including Drainage System (local drains/culverts), not just
+// roads/lighting/vandalism. Waste Management defaults to SWCorp, the
+// waste-management regulator. JKR isn't defaulted to anywhere anymore —
+// it's still a selectable team for the rare state/federal-grade escalation,
+// just no longer the first guess for a routine local drainage complaint.
 const CATEGORY_TEAM_HINT = {
   'Road Damage': 'MBMB',
   'Street Lighting': 'MBMB',
   Vandalism: 'MBMB',
   'Other Infrastructure': 'MBMB',
-  'Drainage System': 'JKR',
+  'Drainage System': 'MBMB',
   'Waste Management': 'SWCorp',
 };
 
