@@ -1654,11 +1654,22 @@ export function AnalyticsPage() {
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
                   <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Allocation Status</div>
-                  <div className="text-lg font-black text-[#201f1b] mt-1 truncate max-w-[170px]" title={kpiStats.healthStatus}>
+                  <div
+                    className="text-lg font-black mt-1 truncate max-w-[220px]"
+                    style={{ color: kpiStats.healthStatus === 'Optimal' ? '#15803d' : '#b91c1c' }}
+                    title={kpiStats.healthStatus}
+                  >
                     {kpiStats.healthStatus}
                   </div>
-                  <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">
-                    {kpiStats.healthStatus === 'Optimal' ? 'All crew rates balanced' : `${kpiStats.worstBacklogDept} backlog warning`}
+                  <div className="text-[10px] text-[#4b473d] font-semibold mt-1 leading-relaxed">
+                    {kpiStats.recommendation}
+                  </div>
+                  <div className="text-[9px] text-[#8a8477] mt-1.5 pt-1.5 border-t border-[#1f1e1a]/6 leading-relaxed">
+                    {selectedDept === 'all'
+                      ? (kpiStats.healthStatus === 'Optimal'
+                          ? `Optimal means every department has ${INSIGHT.backlogAlertTickets} or fewer open tickets waiting.`
+                          : `Triggers when any department has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`)
+                      : `Scoped to ${kpiStats.worstBacklogDept} — triggers once it has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`}
                   </div>
                 </div>
               </div>
