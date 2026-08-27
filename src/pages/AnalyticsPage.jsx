@@ -998,9 +998,15 @@ export function AnalyticsPage() {
         if (exploreFilters.zone !== 'all' && deriveZone(r) !== exploreFilters.zone) return false;
         if (exploreFilters.dateFrom || exploreFilters.dateTo) {
           if (!r.timestamp) return false;
-          const t = new Date(r.timestamp);
-          if (exploreFilters.dateFrom && t < new Date(exploreFilters.dateFrom)) return false;
-          if (exploreFilters.dateTo && t > new Date(exploreFilters.dateTo)) return false;
+          // Compared as UTC calendar-date strings, not Date-instant math.
+          // Report timestamps carry a real UTC offset (e.g. "...+00:00"),
+          // but datetime-local inputs parse as local time — in Malaysia
+          // (UTC+8) that mismatch could put a report the trend chart
+          // buckets into "Jul 26" (UTC) outside a "Jul 26" local-time
+          // window entirely, so a bar showing 4 reports opened to 0.
+          const reportDate = r.timestamp.split('T')[0];
+          if (exploreFilters.dateFrom && reportDate < exploreFilters.dateFrom.split('T')[0]) return false;
+          if (exploreFilters.dateTo && reportDate > exploreFilters.dateTo.split('T')[0]) return false;
         }
         return true;
       })
