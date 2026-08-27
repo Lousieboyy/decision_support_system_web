@@ -204,6 +204,10 @@ export function AnalyticsPage() {
   const [hotspotSearch, setHotspotSearch] = useState('');
   const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'dispatch'
   const [showReliabilityModal, setShowReliabilityModal] = useState(false);
+  // Lifted out of CityHealthBands so the Zone chart below it can show the
+  // dimension that matches whichever score band is currently selected,
+  // instead of the same resolution-rate chart under every tab.
+  const [cityHealthBand, setCityHealthBand] = useState('spi');
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -2302,12 +2306,16 @@ export function AnalyticsPage() {
               infrastructureFragility={infrastructureFragility}
               backlogFlow={backlogFlow}
               reportCount={filteredReports.length}
+              activeBand={cityHealthBand}
+              onBandChange={setCityHealthBand}
             />
 
-            {/* Row 4: Zone Wellness Scorecard — worst zones first, so the
-                one thing worth acting on is the top bar, not a row you have
-                to hunt for in a sorted-by-volume table. */}
-            {(() => {
+            {/* Row 4: a zone breakdown that matches whichever score band is
+                active — Service Performance and Urban Condition had no
+                zone-level view anywhere else on this tab, and Infrastructure
+                Fragility already has its own zone chart, so nothing repeats
+                here. */}
+            {cityHealthBand === 'spi' && (() => {
               const graded = zoneScorecard.filter(z => z.resolutionRate != null);
               const ungraded = zoneScorecard.length - graded.length;
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
@@ -2338,7 +2346,7 @@ export function AnalyticsPage() {
                   <div className="content-card-header">
                     <div className="content-card-title flex items-center gap-2">
                       <MapPin size={16} className="text-[#4a5d3f]" />
-                      Zone Wellness
+                      Zone Response Rate
                     </div>
                     <div className="text-[10px] font-semibold text-[#8a8477]">
                       {zoneScorecard.length} zones tracked — worst shown first
@@ -2387,6 +2395,74 @@ export function AnalyticsPage() {
                             No zone is seriously behind — even the lowest, {chartData[0].name}, is still at {chartData[0].resolutionRate}%.
                           </div>
                         )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {cityHealthBand === 'uci' && (() => {
+              const totalOpenCityWide = zoneScorecard.reduce((sum, z) => sum + z.active, 0);
+              const chartData = [...zoneScorecard]
+                .filter((z) => z.active > 0)
+                .sort((a, b) => b.active - a.active);
+              const shareOf = (n) => (totalOpenCityWide > 0 ? Math.round((n / totalOpenCityWide) * 100) : 0);
+
+              const OpenZoneTooltip = ({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const z = payload[0].payload;
+                return (
+                  <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
+                    <div className="font-bold text-[#201f1b] mb-1">{z.name}</div>
+                    <div className="text-[#4b473d] space-y-0.5">
+                      <div>{z.active} open of {z.total} total reports</div>
+                      <div>{shareOf(z.active)}% of all open issues city-wide</div>
+                      {z.avgDays != null && <div>Average {z.avgDays} days to resolve, when resolved</div>}
+                    </div>
+                  </div>
+                );
+              };
+
+              return (
+                <div className="content-card">
+                  <div className="content-card-header">
+                    <div className="content-card-title flex items-center gap-2">
+                      <MapPin size={16} className="text-[#4a5d3f]" />
+                      Open Issues by Zone
+                    </div>
+                    <div className="text-[10px] font-semibold text-[#8a8477]">
+                      {totalOpenCityWide} open city-wide — most burdened shown first
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    {chartData.length === 0 ? (
+                      <div className="text-center text-[#8a8477] py-8 text-sm">No open issues right now.</div>
+                    ) : (
+                      <>
+                        <div style={{ height: Math.max(220, chartData.length * 34) }}>
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
+                              <XAxis type="number" stroke="#8a8477" fontSize={10} tickLine={false} allowDecimals={false} />
+                              <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
+                              <Tooltip content={<OpenZoneTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
+                              <Bar dataKey="active" fill="#c1613f" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                                <LabelList dataKey="active" position="right" style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }} />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <p className="text-[10px] text-[#8a8477] mt-2">
+                          Open issues currently unresolved (not rejected) in each zone, right now — not weighted by
+                          population or age (see Infrastructure Fragility for that). Bars aren't a pass/fail grade,
+                          since there's no per-zone target to compare against, only a city-wide one.
+                        </p>
+                        <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(193,97,63,0.06)', color: '#c1613f' }}>
+                          {chartData[0].name} carries {chartData[0].active} open issue{chartData[0].active === 1 ? '' : 's'} —
+                          {' '}{shareOf(chartData[0].active)}% of everything open city-wide. Worth checking whether that's
+                          a real backlog or just a recent spike still working through the queue.
+                        </div>
                       </>
                     )}
                   </div>

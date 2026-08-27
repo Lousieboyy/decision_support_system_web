@@ -235,9 +235,8 @@ function BandHeader({ title, subtitle, onMethodology }) {
  * defects accumulated. Band A now measures the council; Band B measures the
  * city.
  */
-export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount }) {
+export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount, activeBand, onBandChange }) {
   const [methodology, setMethodology] = useState(null);
-  const [activeBand, setActiveBand] = useState('spi');
 
   const spiDomains = Object.values(servicePerformance.domains);
   const uciDomains = Object.values(urbanCondition.domains);
@@ -267,7 +266,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
         {BAND_TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveBand(tab.key)}
+            onClick={() => onBandChange(tab.key)}
             className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
               activeBand === tab.key
                 ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
