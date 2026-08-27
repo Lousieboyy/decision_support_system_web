@@ -2252,6 +2252,15 @@ export function AnalyticsPage() {
                       </div>
                       <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">Sorted by priority, highest first</span>
                     </div>
+                    {activeTab === 'systemic' && (
+                      <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
+                        <Info size={10} className="inline mr-1 -mt-0.5" />
+                        A Hotspot is many reports about the <strong>same</strong> problem. This is different —
+                        each row mixes two or more <strong>different</strong> problem types (e.g. drainage +
+                        road damage) that showed up in the same spot, which usually means one is causing the
+                        other. Fixing the visible symptom without the cause tends to bring it back.
+                      </p>
+                    )}
                     <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
                       <Info size={10} className="inline mr-1 -mt-0.5" />
                       Priority score combines report count, upvotes, how urgent the category is, and how long it's
