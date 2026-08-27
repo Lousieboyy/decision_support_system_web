@@ -12,8 +12,8 @@ import L from 'leaflet';
 import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
-  AlertTriangle, AlertCircle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, Lightbulb, Heart, Activity, Truck,
+  AlertTriangle, Download, Info, MapPin, RefreshCw,
+  CheckCircle2, ChevronRight, Heart, Activity, Truck,
   Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
@@ -2303,58 +2303,6 @@ export function AnalyticsPage() {
               backlogFlow={backlogFlow}
               reportCount={filteredReports.length}
             />
-
-            {/* Row 3: Actionable Insights Panel */}
-            <div className="content-card">
-              <div className="content-card-header">
-                <div className="content-card-title flex items-center gap-2">
-                  <Lightbulb size={16} className="text-amber-600" />
-                  Insights You Can Act On
-                </div>
-                <div className="text-[10px] font-semibold text-[#8a8477]">
-                  {actionableInsights.length} insights found
-                </div>
-              </div>
-              <div className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1 scrollbar-thin">
-                  {actionableInsights.length === 0 ? (
-                    <div className="col-span-2 h-32 flex flex-col items-center justify-center text-[#8a8477] text-xs">
-                      <CheckCircle2 className="text-[#8a8477] mb-2" size={20} />
-                      No insights found for the current data.
-                    </div>
-                  ) : (
-                    actionableInsights.map(insight => (
-                      <div key={insight.id} className={`insight-card ${insight.type}`}>
-                        <div className="flex items-start gap-3">
-                          <div className={`insight-icon mt-0.5 flex-shrink-0 ${
-                            insight.type === 'critical' ? 'text-red-700' :
-                            insight.type === 'warning' ? 'text-amber-700' :
-                            insight.type === 'success' ? 'text-emerald-700' : 'text-[#4a5d3f]'
-                          }`}>
-                            {insight.type === 'critical' ? <AlertCircle size={16} /> :
-                             insight.type === 'warning' ? <AlertTriangle size={16} /> :
-                             insight.type === 'success' ? <CheckCircle2 size={16} /> :
-                             <Info size={16} />}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-extrabold text-[#201f1b]">{insight.title}</div>
-                            <div className="text-[11px] leading-relaxed text-[#8a8477] mt-1">{insight.description}</div>
-                            <div className="mt-2 flex items-center gap-2">
-                              <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded bg-[#1f1e1a]/6 border border-[#1f1e1a]/8 text-[#8a8477]">
-                                {insight.zone}
-                              </span>
-                            </div>
-                            <div className="text-[10px] leading-relaxed text-[#4b473d] mt-2 italic">
-                              <strong>Recommended Action:</strong> {insight.action}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
 
             {/* Row 4: Zone Wellness Scorecard — worst zones first, so the
                 one thing worth acting on is the top bar, not a row you have

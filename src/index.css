@@ -946,43 +946,6 @@ select option {
   transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Insight Cards */
-.insight-card {
-  background: var(--cream-100);
-  border: 1px solid rgba(31,30,26,0.07);
-  border-radius: 0.875rem;
-  padding: 1rem 1.25rem;
-  border-left: 3px solid;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  text-align: left;
-}
-
-.insight-card:hover {
-  background: #ffffff;
-  transform: translateX(3px);
-  box-shadow: 0 4px 16px rgba(31,30,26,0.06);
-}
-
-.insight-card.critical {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.045);
-}
-
-.insight-card.warning {
-  border-left-color: #d97757;
-  background: rgba(217, 119, 87, 0.06);
-}
-
-.insight-card.info {
-  border-left-color: #4a5d3f;
-  background: rgba(74, 93, 63, 0.05);
-}
-
-.insight-card.success {
-  border-left-color: #16a34a;
-  background: rgba(22, 163, 74, 0.05);
-}
-
 /* Wellness Grade Badges */
 .wellness-grade {
   display: inline-flex;
@@ -1039,14 +1002,6 @@ select option {
   border-bottom: 1px solid rgba(31,30,26,0.05);
   white-space: nowrap;
 }
-
-/* Pulse for critical insights */
-@keyframes pulseCritical {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.insight-card.critical .insight-icon { animation: pulseCritical 2s ease-in-out infinite; }
 
 /* CWI Grade color classes */
 .cwi-grade-A { color: #15803d; }
