@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, SLA_TARGET_DAYS,
   AGE_WEIGHT_DAYS, MIN_N_FOR_STAGE, MIN_N_FOR_SCORE, MIN_N_FOR_INDEX,
-  IFI_WEIGHTS, REINCIDENCE, gradeFor,
+  IFI_WEIGHTS, REINCIDENCE, gradeFor, GRADE_SCALE,
 } from '../utils/analyticsConstants';
 import { fmtDuration } from '../utils/analyticsMetrics';
 
@@ -17,9 +17,95 @@ const HATCH = 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, trans
 const scoreColor = (s) =>
   s == null ? '#8a8477' : s >= 80 ? '#15803d' : s >= 60 ? '#b45309' : '#b91c1c';
 
-/** Radial gauge that degrades to an explicit unmeasured state. */
-function IndexGauge({ value, label, caption, excludedCount, totalDomains, formula, onMethodology }) {
+// Matches .cwi-grade-{letter} in index.css so a grade means the same color
+// everywhere it appears.
+const GRADE_COLOR = { A: '#15803d', B: '#0f766e', C: '#c1613f', D: '#c2410c', F: '#b91c1c' };
+
+// Ascending order (Critical -> Optimal, left to right), each with its actual
+// score range — GRADE_SCALE itself is stored highest-first for lookup.
+const GRADE_SEGMENTS = [...GRADE_SCALE].reverse().map((g, i, arr) => ({
+  ...g,
+  start: g.min,
+  end: i === arr.length - 1 ? 100 : arr[i + 1].min,
+}));
+
+// What to actually do at each grade tier — differs per band because "60"
+// means something different when it's council speed vs. open-issue burden
+// vs. zone-level structural fragility.
+const BAND_ACTIONS = {
+  spi: {
+    A: 'Every step is beating its target — no action needed. If this holds, the targets may be worth tightening.',
+    B: 'On track. Keep monitoring — no action needed right now.',
+    C: "Slipping in places. Check the \"Where the time goes\" chart on Overview for the step actually falling behind.",
+    D: 'Falling behind its own targets. Reassign capacity to the slowest step in the categories below.',
+    F: "Missing its own targets badly. Start with the step taking the largest share of time — see \"Where the time goes\" on Overview.",
+  },
+  uci: {
+    A: 'Open issues are well within the agreed limits — no action needed.',
+    B: 'Comfortably within limits. Keep monitoring.',
+    C: 'Approaching the limit in places — check which category below is closest to its cap.',
+    D: 'Over the agreed limit. This is a capacity question — consider more crew, not faster processing.',
+    F: 'Far over the agreed limit, no matter how fast tickets get resolved. Needs more capacity or budget, not process changes.',
+  },
+  ifi: {
+    A: 'No zone is fragile by design — no action needed.',
+    B: 'Holding up well. Keep an eye on the zone chart below for early signs.',
+    C: 'Some zones are borderline — check the zone chart below for which one, and why.',
+    D: "At least one zone keeps breaking. Its driving factor below — repairs not holding, recurring failures, or under-resourcing — points to a different fix.",
+    F: 'Structurally weak zones present. The zone chart below names the driving factor — that determines what kind of fix is actually needed.',
+  },
+};
+
+// "100 is good, but when does it become critical?" — the ladder answers
+// that by drawing the whole scale, not just the one number landed on.
+function GradeLadder({ value }) {
   const grade = gradeFor(value);
+  return (
+    <div className="w-full">
+      <div className="relative">
+        <div className="h-3 rounded-full overflow-hidden flex" style={{ background: '#f0ede4' }}>
+          {GRADE_SEGMENTS.map((s) => (
+            <div key={s.grade} style={{ width: `${s.end - s.start}%`, background: GRADE_COLOR[s.grade] }} />
+          ))}
+        </div>
+        {value != null && (
+          <div
+            className="absolute top-1/2 rounded-full bg-white border-2"
+            style={{
+              left: `${Math.min(100, Math.max(0, value))}%`,
+              width: 10,
+              height: 10,
+              borderColor: '#201f1b',
+              transform: 'translate(-50%, -50%)',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.35)',
+            }}
+            title={`This score: ${value}`}
+          />
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1 justify-center mt-2.5">
+        {GRADE_SEGMENTS.map((s) => (
+          <span
+            key={s.grade}
+            className="px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+            style={
+              grade?.grade === s.grade
+                ? { background: GRADE_COLOR[s.grade], color: '#fff' }
+                : { background: 'rgba(31,30,26,0.05)', color: GRADE_COLOR[s.grade] }
+            }
+          >
+            {s.label} {s.end === 100 ? `${s.start}+` : `${s.start}–${s.end - 1}`}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Radial gauge that degrades to an explicit unmeasured state. */
+function IndexGauge({ value, label, caption, excludedCount, totalDomains, formula, onMethodology, actionsByGrade }) {
+  const grade = gradeFor(value);
+  const action = actionsByGrade && grade ? actionsByGrade[grade.grade] : null;
   return (
     <div className="content-card flex flex-col items-center justify-center py-8 px-6">
       <div
@@ -40,6 +126,19 @@ function IndexGauge({ value, label, caption, excludedCount, totalDomains, formul
         </div>
       ) : (
         <div className="mt-5 text-base font-bold text-[#8a8477]">Not enough data</div>
+      )}
+      {/* Where does "critical" actually start? The full scale, not just the
+          one number this happens to land on. */}
+      <div className="mt-4 w-full">
+        <GradeLadder value={value} />
+      </div>
+      {action && (
+        <div
+          className="mt-3 rounded-lg px-3 py-2 text-[11px] font-semibold leading-relaxed text-left w-full"
+          style={{ background: grade ? `${GRADE_COLOR[grade.grade]}14` : 'rgba(31,30,26,0.05)', color: grade ? GRADE_COLOR[grade.grade] : '#8a8477' }}
+        >
+          {action}
+        </div>
       )}
       <div className="mt-3 text-[10px] text-[#8a8477] text-center leading-relaxed">
         {caption}
@@ -336,6 +435,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
             totalDomains={Object.keys(SPI_WEIGHTS).length}
             formula="A weighted average of the categories shown here — the % on each card is its share of this score."
             onMethodology={() => setMethodology('spi')}
+            actionsByGrade={BAND_ACTIONS.spi}
           />
           <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
             {spiDomains.map((d) => (
@@ -414,6 +514,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
             totalDomains={Object.keys(UCI_WEIGHTS).length}
             formula="A weighted average of the categories shown here — the % on each card is its share of this score."
             onMethodology={() => setMethodology('uci')}
+            actionsByGrade={BAND_ACTIONS.uci}
           />
           <div className="lg:col-span-3 grid grid-cols-2 md:grid-cols-3 gap-3">
             {uciDomains.map((d) => (
@@ -452,6 +553,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
             totalDomains={ifiZones.length}
             formula="Each zone below blends three signals into its own score — this number is those zone scores averaged, weighted by population."
             onMethodology={() => setMethodology('ifi')}
+            actionsByGrade={BAND_ACTIONS.ifi}
           />
 
           <div className="lg:col-span-3 content-card">
