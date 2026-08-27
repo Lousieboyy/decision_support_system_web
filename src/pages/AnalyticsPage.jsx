@@ -701,26 +701,46 @@ export function AnalyticsPage() {
     [deptSLAMetrics]
   );
 
-  // 2.4 Every department's backlog, regardless of the page's Department Scope
-  // filter — Allocation Status is specifically about comparing departments
-  // against each other, so it deliberately ignores that filter (it still
-  // respects the date filter) rather than zeroing out every department but
-  // the one currently selected.
-  const allDeptBacklog = useMemo(() => {
+  // 2.4 Every department against three separate requirements, regardless of
+  // the page's Department Scope filter — Allocation Status is specifically a
+  // cross-department comparison, so it deliberately ignores that filter (it
+  // still respects the date filter) rather than zeroing out every department
+  // but the one currently selected. Backlog alone only ever answered "is
+  // work piling up" — resolve time and on-time rate answer "is it moving
+  // fast enough" and "is it hitting the target once it moves."
+  const allDeptStatus = useMemo(() => {
     const dateOnly = reports.filter((r) => matchesDateFilter(r.timestamp));
     const presentAbbrs = new Set(departmentOptions.map((d) => d.key));
     const filteredAuthorities = AUTHORITIES.filter((a) => presentAbbrs.has(a.abbr));
-    const counts = {};
-    filteredAuthorities.forEach((a) => { counts[a.abbr] = { name: a.abbr, fullName: a.name, backlog: 0 }; });
+    const stats = {};
+    filteredAuthorities.forEach((a) => {
+      stats[a.abbr] = { name: a.abbr, fullName: a.name, backlog: 0, resolvedCount: 0, totalResolveDays: 0, onTimeCount: 0 };
+    });
     dateOnly.forEach((r) => {
       const deptName = r.assigned_department || '';
       const auth = filteredAuthorities.find(
         (a) => deptName.toLowerCase().includes(a.abbr.toLowerCase()) || deptName.toLowerCase().includes(a.id.toLowerCase())
       );
       if (!auth) return;
-      if (r.status !== 'Resolved' && r.status !== 'Rejected') counts[auth.abbr].backlog++;
+      const s = stats[auth.abbr];
+      if (r.status !== 'Resolved' && r.status !== 'Rejected') {
+        s.backlog++;
+      } else if (r.status === 'Resolved' && r.timestamp && r.resolved_at) {
+        const days = (new Date(r.resolved_at) - new Date(r.timestamp)) / (1000 * 60 * 60 * 24);
+        if (!isNaN(days) && days >= 0) {
+          s.resolvedCount++;
+          s.totalResolveDays += days;
+          if (days <= SLA_END_TO_END_DAYS) s.onTimeCount++;
+        }
+      }
     });
-    return Object.values(counts).sort((a, b) => b.backlog - a.backlog);
+    return Object.values(stats)
+      .map((s) => ({
+        ...s,
+        avgResolveDays: s.resolvedCount ? parseFloat((s.totalResolveDays / s.resolvedCount).toFixed(1)) : null,
+        onTimeRate: s.resolvedCount ? Math.round((s.onTimeCount / s.resolvedCount) * 100) : null,
+      }))
+      .sort((a, b) => b.backlog - a.backlog);
   }, [reports, dateFilter, customStart, customEnd, departmentOptions]);
 
   // 2.5 Scoped department status data for breakdown chart
@@ -1693,30 +1713,48 @@ export function AnalyticsPage() {
                           : `Triggers when any department has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`)
                       : `Scoped to ${kpiStats.worstBacklogDept} — triggers once it has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`}
                   </div>
-                  {/* Every department, not just whichever one is flagged —
-                      so "Normal" has a visible baseline to be normal against,
-                      not just an absence of a warning. Deliberately ignores
+                  {/* Backlog alone only says "is work piling up" — resolve
+                      time and on-time rate say "is it moving fast enough"
+                      and "does it hit the target once it moves." Every
+                      department, not just whichever one is flagged, so
+                      "Normal" has a visible baseline. Deliberately ignores
                       the page's Department Scope filter (see the memo above)
                       since this is specifically a cross-department comparison. */}
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {allDeptBacklog.map((d) => {
-                      const warning = d.backlog > INSIGHT.backlogAlertTickets;
+                  <div className="flex flex-col gap-1 mt-2">
+                    {allDeptStatus.map((d) => {
+                      const failBacklog = d.backlog > INSIGHT.backlogAlertTickets;
+                      const failResolve = d.avgResolveDays != null && d.avgResolveDays > SLA_END_TO_END_DAYS;
+                      const failOnTime = d.onTimeRate != null && d.onTimeRate < 60;
+                      const failing = failBacklog || failResolve || failOnTime;
                       return (
                         <button
                           key={d.name}
                           onClick={() => openExplore({ department: d.name })}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer"
-                          style={{
-                            background: warning ? 'rgba(185,28,28,0.08)' : 'rgba(21,128,61,0.08)',
-                            color: warning ? '#b91c1c' : '#15803d',
-                          }}
-                          title={`${d.fullName}: ${d.backlog} open ticket${d.backlog === 1 ? '' : 's'} — click to see them`}
+                          className="flex items-center justify-between gap-2 px-2 py-1 rounded text-left cursor-pointer"
+                          style={{ background: failing ? 'rgba(185,28,28,0.06)' : 'rgba(21,128,61,0.06)' }}
+                          title={`${d.fullName} — click to see its reports`}
                         >
-                          {d.name} {d.backlog}
+                          <span className="text-[9px] font-black shrink-0" style={{ color: failing ? '#b91c1c' : '#15803d' }}>
+                            {d.name}
+                          </span>
+                          <span className="text-[8px] font-bold text-right">
+                            <span style={{ color: failBacklog ? '#b91c1c' : '#8a8477' }}>{d.backlog} backlog</span>
+                            {' · '}
+                            <span style={{ color: failResolve ? '#b91c1c' : '#8a8477' }}>
+                              {d.avgResolveDays != null ? `${d.avgResolveDays}d avg` : 'no data'}
+                            </span>
+                            {' · '}
+                            <span style={{ color: failOnTime ? '#b91c1c' : '#8a8477' }}>
+                              {d.onTimeRate != null ? `${d.onTimeRate}% on time` : '—'}
+                            </span>
+                          </span>
                         </button>
                       );
                     })}
                   </div>
+                  <p className="text-[8px] text-[#8a8477] mt-1 leading-relaxed">
+                    Backlog target: {INSIGHT.backlogAlertTickets} or fewer waiting. Resolve target: {SLA_END_TO_END_DAYS} days or under, on average. On-time target: 60%+ of resolved tickets within {SLA_END_TO_END_DAYS} days.
+                  </p>
                 </div>
               </div>
             </div>
