@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Send, Loader2, X, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { fetchTeams, fetchCrews, dispatchToTeam } from '../api/reportsApi';
+import { canonicalizeCategory } from '../utils/analyticsMetrics';
 
-// Best-guess default team for a cluster's category, so the picker opens
-// with a sensible choice already made instead of a blank dropdown. This is
-// only ever a starting point — the person dispatching can change it before
-// confirming, and the backend enforces the real permission boundary
-// regardless of what's selected here.
+// Best-guess default team for a report's own category, so each picker row
+// opens with a sensible choice already made instead of a blank dropdown.
+// This is only ever a starting point — the person dispatching can change
+// it before confirming, and the backend enforces the real permission
+// boundary regardless of what's selected here.
 const CATEGORY_TEAM_HINT = {
   'Road Damage': 'MBMB',
   'Street Lighting': 'MBMB',
@@ -16,13 +17,16 @@ const CATEGORY_TEAM_HINT = {
   'Drainage System': 'JKR',
   'Waste Management': 'SWCorp',
 };
-const SYSTEMIC_TEAM_HINT = {
-  'Drainage & Road Decay': 'JKR',
-  'Darkness & Vandalism Zone': 'MBMB',
-  'Waste-Induced Drainage Blockages': 'SWCorp',
-};
 
 const OPEN_STATUSES = ['Pending', 'In Review'];
+
+// A systemic advisory's items array deliberately mixes categories (e.g. a
+// "Drainage & Road Decay" cluster holds both Road Damage and Drainage
+// System reports) — that's the whole point of the cluster. Each report
+// still belongs to exactly one department though, so this reads it off
+// per-report instead of guessing one department for the whole cluster.
+const deptForReport = (r) =>
+  CATEGORY_TEAM_HINT[canonicalizeCategory(r.categories || r.ai_prediction)] || 'Other';
 
 /**
  * Turns a Today's Priorities / hotspot recommendation into an actual
@@ -34,50 +38,84 @@ const OPEN_STATUSES = ['Pending', 'In Review'];
  * only gets sent after a person looks at the team/crew choice and confirms.
  * Only dispatches reports still Pending/In Review — anything already being
  * worked keeps its existing assignment untouched.
+ *
+ * A cluster can span more than one department (any systemic advisory does,
+ * by definition). Rather than forcing the whole cluster through one team
+ * dropdown, reports are grouped by their own natural department and each
+ * group gets its own team/crew picker — one Confirm still sends everything
+ * in a single action, just routed to the right "hands" per report.
  */
 export function ClusterDispatchAction({ item, onDispatched }) {
   const [open, setOpen] = useState(false);
   const [teams, setTeams] = useState(null);
   const [teamsError, setTeamsError] = useState(null);
-  const [crews, setCrews] = useState([]);
-  const [selectedTeam, setSelectedTeam] = useState('');
-  const [selectedCrew, setSelectedCrew] = useState('');
+  const [teamByGroup, setTeamByGroup] = useState({});
+  const [crewByGroup, setCrewByGroup] = useState({});
+  const [crewsByGroup, setCrewsByGroup] = useState({});
   const [note, setNote] = useState(item.recommendation || '');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
   const eligible = item.items.filter((r) => OPEN_STATUSES.includes(r.status));
 
+  const groups = eligible
+    .reduce((acc, r) => {
+      const dept = deptForReport(r);
+      let group = acc.find((g) => g.dept === dept);
+      if (!group) {
+        group = { dept, reports: [] };
+        acc.push(group);
+      }
+      group.reports.push(r);
+      return acc;
+    }, [])
+    .sort((a, b) => b.reports.length - a.reports.length);
+
+  // groups is derived fresh from item.items every render but is stable for
+  // the lifetime of one open popup — the list above keys each card by
+  // item.id, so switching clusters remounts this component instead of
+  // reusing it. Safe to read here without listing it as a dependency.
   useEffect(() => {
     if (!open || teams) return;
     fetchTeams()
       .then((list) => {
         setTeams(list);
-        const hint = SYSTEMIC_TEAM_HINT[item.category] || CATEGORY_TEAM_HINT[item.category];
-        const match = hint && list.find((t) => t.name === hint);
-        if (match) setSelectedTeam(String(match.id));
+        const defaults = {};
+        groups.forEach((g) => {
+          const match = list.find((t) => t.name === g.dept);
+          if (match) defaults[g.dept] = String(match.id);
+        });
+        setTeamByGroup(defaults);
+        Object.entries(defaults).forEach(([dept, teamId]) => {
+          fetchCrews(Number(teamId))
+            .then((crewList) => setCrewsByGroup((prev) => ({ ...prev, [dept]: crewList })))
+            .catch(() => {});
+        });
       })
       .catch((e) => setTeamsError(e.message || 'Failed to load teams'));
-  }, [open, teams, item.category]);
+  }, [open, teams]);
 
-  useEffect(() => {
-    if (!selectedTeam) {
-      setCrews([]);
-      setSelectedCrew('');
-      return;
-    }
-    fetchCrews(Number(selectedTeam))
-      .then(setCrews)
-      .catch(() => setCrews([]));
-  }, [selectedTeam]);
+  const setTeamForGroup = (dept, teamId) => {
+    setTeamByGroup((prev) => ({ ...prev, [dept]: teamId }));
+    setCrewByGroup((prev) => ({ ...prev, [dept]: '' }));
+    if (!teamId) return;
+    fetchCrews(Number(teamId))
+      .then((crewList) => setCrewsByGroup((prev) => ({ ...prev, [dept]: crewList })))
+      .catch(() => setCrewsByGroup((prev) => ({ ...prev, [dept]: [] })));
+  };
+
+  const allAssigned = groups.length > 0 && groups.every((g) => teamByGroup[g.dept]);
 
   const handleConfirm = async () => {
-    if (!selectedTeam || eligible.length === 0) return;
+    if (!allAssigned || eligible.length === 0) return;
     setBusy(true);
     const outcomes = await Promise.allSettled(
-      eligible.map((r) =>
-        dispatchToTeam(r.id, Number(selectedTeam), null, note, selectedCrew ? Number(selectedCrew) : null)
-      )
+      eligible.map((r) => {
+        const dept = deptForReport(r);
+        const teamId = teamByGroup[dept];
+        const crewId = crewByGroup[dept];
+        return dispatchToTeam(r.id, Number(teamId), null, note, crewId ? Number(crewId) : null);
+      })
     );
     const failed = outcomes
       .map((o, i) => ({ o, report: eligible[i] }))
@@ -187,30 +225,44 @@ export function ClusterDispatchAction({ item, onDispatched }) {
               <Loader2 size={12} className="animate-spin" /> Loading teams…
             </p>
           ) : (
-            <div className="flex gap-2 flex-wrap">
-              <select
-                value={selectedTeam}
-                onChange={(e) => setSelectedTeam(e.target.value)}
-                className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-xs"
-                style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
-              >
-                <option value="">Select team…</option>
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-              <select
-                value={selectedCrew}
-                onChange={(e) => setSelectedCrew(e.target.value)}
-                disabled={!selectedTeam || crews.length === 0}
-                className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-xs disabled:opacity-50"
-                style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
-              >
-                <option value="">Whole team pool</option>
-                {crews.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+            <div className="space-y-1.5">
+              {groups.length > 1 && (
+                <p className="text-[10px] text-[#8a8477]">
+                  Spans {groups.length} departments — each gets its own team below, dispatched together in one Confirm.
+                </p>
+              )}
+              {groups.map((g) => (
+                <div key={g.dept} className="flex gap-2 flex-wrap items-center">
+                  {groups.length > 1 && (
+                    <span className="text-[10px] font-bold text-[#4b473d] shrink-0">
+                      {g.dept} · {g.reports.length}
+                    </span>
+                  )}
+                  <select
+                    value={teamByGroup[g.dept] || ''}
+                    onChange={(e) => setTeamForGroup(g.dept, e.target.value)}
+                    className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-xs"
+                    style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
+                  >
+                    <option value="">Select team…</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={crewByGroup[g.dept] || ''}
+                    onChange={(e) => setCrewByGroup((prev) => ({ ...prev, [g.dept]: e.target.value }))}
+                    disabled={!teamByGroup[g.dept] || (crewsByGroup[g.dept] || []).length === 0}
+                    className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-xs disabled:opacity-50"
+                    style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
+                  >
+                    <option value="">Whole team pool</option>
+                    {(crewsByGroup[g.dept] || []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
             </div>
           )}
 
@@ -233,7 +285,7 @@ export function ClusterDispatchAction({ item, onDispatched }) {
             </button>
             <button
               onClick={handleConfirm}
-              disabled={!selectedTeam || busy}
+              disabled={!allAssigned || busy}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50"
               style={{ background: '#3d4d34', color: '#fff' }}
             >
