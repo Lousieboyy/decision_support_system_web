@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { deriveZone } from '../utils/analyticsMetrics';
 
 const fmtRowDate = (timestamp) => {
   if (!timestamp) return null;
@@ -22,13 +23,13 @@ const dateClass =
  * away the others. Here every filter is live at once: a chart click just
  * pre-fills one field, and the rest stay adjustable in the same modal.
  */
-export function ReportExplorerModal({ filters, onFiltersChange, categories, departments, statuses, results, onClose }) {
+export function ReportExplorerModal({ filters, onFiltersChange, categories, departments, statuses, zones, results, onClose }) {
   if (!filters) return null;
 
   const set = (field) => (e) => onFiltersChange({ ...filters, [field]: e.target.value });
   const isEmpty =
     !filters.dateFrom && !filters.dateTo &&
-    filters.category === 'all' && filters.department === 'all' && filters.status === 'all';
+    filters.category === 'all' && filters.department === 'all' && filters.status === 'all' && filters.zone === 'all';
 
   return (
     <>
@@ -61,7 +62,7 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
                 <input type="datetime-local" value={filters.dateTo} onChange={set('dateTo')} className={dateClass} />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider block mb-1">Category</label>
                 <select value={filters.category} onChange={set('category')} className={selectClass}>
@@ -81,6 +82,15 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
                 </select>
               </div>
               <div>
+                <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider block mb-1">Zone</label>
+                <select value={filters.zone} onChange={set('zone')} className={selectClass}>
+                  <option value="all">All zones</option>
+                  {zones.map((z) => (
+                    <option key={z} value={z}>{z}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider block mb-1">Status</label>
                 <select value={filters.status} onChange={set('status')} className={selectClass}>
                   <option value="all">All statuses</option>
@@ -92,7 +102,7 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
             </div>
             {!isEmpty && (
               <button
-                onClick={() => onFiltersChange({ dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all' })}
+                onClick={() => onFiltersChange({ dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all' })}
                 className="mt-3 text-[11px] font-bold text-[#8a8477] hover:text-[#201f1b]"
               >
                 Clear all filters
@@ -110,7 +120,7 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
                     <div className="min-w-0">
                       <div className="text-xs font-bold text-[#201f1b] truncate">{r.address || r.location || 'Unknown location'}</div>
                       <div className="text-[10px] text-[#8a8477]">
-                        {r.categories || 'Other'} · {r.assigned_department || 'Unassigned'}
+                        {deriveZone(r)} · {r.categories || 'Other'} · {r.assigned_department || 'Unassigned'}
                         {fmtRowDate(r.timestamp) && ` · ${fmtRowDate(r.timestamp)}`}
                       </div>
                     </div>

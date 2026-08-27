@@ -194,7 +194,7 @@ export function AnalyticsPage() {
   // pre-fills one filter here, and every filter stays live and adjustable
   // in the same modal so they can be combined (e.g. MBMB + Road Damage +
   // a specific week) rather than re-clicking through charts one at a time.
-  const EMPTY_EXPLORE_FILTERS = { dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all' };
+  const EMPTY_EXPLORE_FILTERS = { dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all' };
   const [exploreFilters, setExploreFilters] = useState(null); // null = modal closed
   const openExplore = (partial) => setExploreFilters({ ...EMPTY_EXPLORE_FILTERS, ...partial });
   // null = endpoint absent or forbidden; [] = present but empty. The two mean
@@ -916,6 +916,10 @@ export function AnalyticsPage() {
     () => [...new Set(reports.map((r) => r.status).filter(Boolean))].sort(),
     [reports]
   );
+  const exploreZones = useMemo(
+    () => [...new Set(reports.map((r) => deriveZone(r)))].sort(),
+    [reports]
+  );
 
   // Every filter in exploreFilters applies together (AND), over the full
   // report set — searching "MBMB AND Road Damage AND this week" instead of
@@ -931,6 +935,7 @@ export function AnalyticsPage() {
         }
         if (exploreFilters.category !== 'all' && (r.categories || 'Other') !== exploreFilters.category) return false;
         if (exploreFilters.status !== 'all' && r.status !== exploreFilters.status) return false;
+        if (exploreFilters.zone !== 'all' && deriveZone(r) !== exploreFilters.zone) return false;
         if (exploreFilters.dateFrom || exploreFilters.dateTo) {
           if (!r.timestamp) return false;
           const t = new Date(r.timestamp);
@@ -1912,20 +1917,6 @@ export function AnalyticsPage() {
                 </div>
               </div>
 
-            {/* One explorer for all four charts — any click pre-fills a
-                single filter, but date/category/department/status all stay
-                live and combinable in the same modal afterward. */}
-            {exploreFilters && (
-              <ReportExplorerModal
-                filters={exploreFilters}
-                onFiltersChange={setExploreFilters}
-                categories={exploreCategories}
-                departments={departmentOptions}
-                statuses={exploreStatuses}
-                results={exploreResults}
-                onClose={() => setExploreFilters(null)}
-              />
-            )}
           </div>
         )}
 
@@ -2308,6 +2299,7 @@ export function AnalyticsPage() {
               reportCount={filteredReports.length}
               activeBand={cityHealthBand}
               onBandChange={setCityHealthBand}
+              onZoneClick={(zone) => openExplore({ zone })}
             />
 
             {/* Row 4: a zone breakdown that matches whichever score band is
@@ -2365,7 +2357,16 @@ export function AnalyticsPage() {
                               <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
                               <Tooltip content={<ZoneTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
                               <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
-                              <Bar dataKey="resolutionRate" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                              <Bar
+                                dataKey="resolutionRate"
+                                radius={[0, 4, 4, 0]}
+                                maxBarSize={18}
+                                cursor="pointer"
+                                onClick={(d) => {
+                                  const name = d?.payload?.name ?? d?.name;
+                                  if (name) openExplore({ zone: name });
+                                }}
+                              >
                                 {chartData.map((z) => (
                                   <Cell key={z.name} fill={gradeColor(z.resolutionRate)} />
                                 ))}
@@ -2382,6 +2383,7 @@ export function AnalyticsPage() {
                         <p className="text-[10px] text-[#8a8477] mt-2">
                           Resolution rate is the number resolved, divided by the total minus rejected reports. The dashed line at 80% marks where a passing grade starts.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
+                          {' '}Click a bar to see the reports behind it.
                         </p>
                         {/* The ranking alone doesn't say what to do about it —
                             name the worst zone and why it's worth a look. */}
@@ -2447,7 +2449,17 @@ export function AnalyticsPage() {
                               <XAxis type="number" stroke="#8a8477" fontSize={10} tickLine={false} allowDecimals={false} />
                               <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
                               <Tooltip content={<OpenZoneTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
-                              <Bar dataKey="active" fill="#c1613f" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                              <Bar
+                                dataKey="active"
+                                fill="#c1613f"
+                                radius={[0, 4, 4, 0]}
+                                maxBarSize={18}
+                                cursor="pointer"
+                                onClick={(d) => {
+                                  const name = d?.payload?.name ?? d?.name;
+                                  if (name) openExplore({ zone: name, status: 'all' });
+                                }}
+                              >
                                 <LabelList dataKey="active" position="right" style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }} />
                               </Bar>
                             </BarChart>
@@ -2456,7 +2468,8 @@ export function AnalyticsPage() {
                         <p className="text-[10px] text-[#8a8477] mt-2">
                           Open issues currently unresolved (not rejected) in each zone, right now — not weighted by
                           population or age (see Infrastructure Fragility for that). Bars aren't a pass/fail grade,
-                          since there's no per-zone target to compare against, only a city-wide one.
+                          since there's no per-zone target to compare against, only a city-wide one. Click a bar
+                          to see those reports.
                         </p>
                         <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(193,97,63,0.06)', color: '#c1613f' }}>
                           {chartData[0].name} carries {chartData[0].active} open issue{chartData[0].active === 1 ? '' : 's'} —
@@ -2491,6 +2504,23 @@ export function AnalyticsPage() {
           contractorAudit={contractorAudit}
           auditActions={auditActions}
           onClose={() => setShowReliabilityModal(false)}
+        />
+      )}
+
+      {/* Page-level (not tab-scoped) so a click from any tab — Overview
+          charts, or the City Health zone charts — can open it. Any click
+          pre-fills a single filter, but date/category/department/status/zone
+          all stay live and combinable in the same modal afterward. */}
+      {exploreFilters && (
+        <ReportExplorerModal
+          filters={exploreFilters}
+          onFiltersChange={setExploreFilters}
+          categories={exploreCategories}
+          departments={departmentOptions}
+          statuses={exploreStatuses}
+          zones={exploreZones}
+          results={exploreResults}
+          onClose={() => setExploreFilters(null)}
         />
       )}
     </div>

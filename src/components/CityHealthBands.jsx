@@ -235,7 +235,7 @@ function BandHeader({ title, subtitle, onMethodology }) {
  * defects accumulated. Band A now measures the council; Band B measures the
  * city.
  */
-export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount, activeBand, onBandChange }) {
+export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount, activeBand, onBandChange, onZoneClick }) {
   const [methodology, setMethodology] = useState(null);
 
   const spiDomains = Object.values(servicePerformance.domains);
@@ -439,7 +439,16 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                         cursor={{ fill: 'rgba(74,93,63,0.05)' }}
                       />
                       <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
-                      <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={18}>
+                      <Bar
+                        dataKey="score"
+                        radius={[0, 4, 4, 0]}
+                        maxBarSize={18}
+                        cursor="pointer"
+                        onClick={(d) => {
+                          const zone = d?.payload?.zone ?? d?.zone;
+                          if (zone) onZoneClick(zone);
+                        }}
+                      >
                         {ifiZones.map((z) => (
                           <Cell key={z.zone} fill={scoreColor(z.score)} />
                         ))}
@@ -451,6 +460,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 <p className="text-[10px] text-[#8a8477] mt-2">
                   A higher score means the zone holds up better. The dashed line at 80 marks where a passing grade starts.
                   {ifiUnscored > 0 && ` ${ifiUnscored} zone${ifiUnscored === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_INDEX} reports, or the district isn't known.`}
+                  {' '}Click a bar to see the reports behind it.
                 </p>
                 {/* The ranking alone doesn't say what to do — name the worst
                     zone and which of the three signals is actually driving
