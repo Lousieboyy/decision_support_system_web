@@ -237,6 +237,7 @@ function BandHeader({ title, subtitle, onMethodology }) {
  */
 export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount }) {
   const [methodology, setMethodology] = useState(null);
+  const [activeBand, setActiveBand] = useState('spi');
 
   const spiDomains = Object.values(servicePerformance.domains);
   const uciDomains = Object.values(urbanCondition.domains);
@@ -252,9 +253,34 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
     Resolved: p.outflow,
   }));
 
+  const BAND_TABS = [
+    { key: 'spi', label: 'Service Performance', score: servicePerformance.index },
+    { key: 'uci', label: 'Urban Condition', score: urbanCondition.index },
+    { key: 'ifi', label: 'Infrastructure Fragility', score: infrastructureFragility.index },
+  ];
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* One score band shown at a time — all three stacked at once was a lot
+          to scroll through just to see one rating. */}
+      <div className="flex bg-[#f5f1e6] p-1 rounded-xl border border-[#1f1e1a]/8 flex-wrap gap-1 self-start">
+        {BAND_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveBand(tab.key)}
+            className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeBand === tab.key
+                ? 'bg-[#4a5d3f] text-white border border-[#4a5d3f] shadow-lg'
+                : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
+            }`}
+          >
+            {tab.label} ({tab.score ?? '—'})
+          </button>
+        ))}
+      </div>
+
       {/* ── BAND A · SERVICE PERFORMANCE ───────────────────────────── */}
+      {activeBand === 'spi' && (
       <section className="space-y-4">
         <BandHeader
           title="Service Performance"
@@ -326,9 +352,11 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           </div>
         </div>
       </section>
+      )}
 
       {/* ── BAND B · URBAN CONDITION ───────────────────────────────── */}
-      <section className="space-y-4 pt-2 border-t border-[#1f1e1a]/10">
+      {activeBand === 'uci' && (
+      <section className="space-y-4">
         <BandHeader
           title="Urban Condition"
           subtitle="The actual condition of the city — how many open issues the council is dealing with. This is mostly outside the council's short-term control, and the score does not depend on how many reports get resolved."
@@ -359,9 +387,11 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           </div>
         </div>
       </section>
+      )}
 
       {/* ── BAND C · INFRASTRUCTURE FRAGILITY ──────────────────────── */}
-      <section className="space-y-4 pt-2 border-t border-[#1f1e1a]/10">
+      {activeBand === 'ifi' && (
+      <section className="space-y-4">
         <BandHeader
           title="Infrastructure Fragility"
           subtitle="Shows where the city keeps breaking because of how it was built, not just bad luck. Each zone is scored against its own population, using its full history — not just what's open right now."
@@ -455,6 +485,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           </div>
         </div>
       </section>
+      )}
 
       {methodology && (
         <MethodologyPanel kind={methodology} onClose={() => setMethodology(null)} />
