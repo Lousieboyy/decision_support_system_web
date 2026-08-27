@@ -2032,8 +2032,8 @@ export function AnalyticsPage() {
                       .sort((a, b) => b.avgResolveDays - a.avgResolveDays)[0];
                     return worst ? (
                       <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: '#b91c1c' }}>
-                        {worst.fullName} is {(worst.avgResolveDays - SLA_END_TO_END_DAYS).toFixed(1)} days over target —
-                        click its bar to see what's still open there.
+                        {worst.fullName} is {fmtDuration(worst.avgResolveDays - SLA_END_TO_END_DAYS)} over target —
+                        click its bar to see the resolved tickets that average is built from.
                       </p>
                     ) : (
                       <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: '#15803d' }}>
@@ -2056,7 +2056,11 @@ export function AnalyticsPage() {
                             maxBarSize={45}
                             onClick={(d) => {
                               const entry = d?.payload ?? d;
-                              if (entry?.name) openExplore({ department: entry.name });
+                              // Resolved only — the average this bar shows is
+                              // itself only ever computed from resolved
+                              // tickets, so an open ticket with no resolve
+                              // time yet has nothing to do with this number.
+                              if (entry?.name) openExplore({ department: entry.name, status: 'Resolved' });
                             }}
                           >
                             {measurableSLAMetrics.map((entry, index) => {
