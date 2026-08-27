@@ -2333,6 +2333,21 @@ export function AnalyticsPage() {
                 );
               };
 
+              // Percentage alone hides the actual counts behind it — "10%"
+              // reads very differently as 1 of 10 vs 5 of 50. Put the counts
+              // right on the label instead of leaving them only in the hover
+              // tooltip.
+              const ZoneRateLabel = (props) => {
+                const { x, y, width, height, index } = props;
+                const z = chartData[index];
+                if (!z) return null;
+                return (
+                  <text x={x + width + 6} y={y + height / 2} dy={3.5} fontSize={10} fontWeight={700} fill="#4b473d">
+                    {z.resolutionRate}% ({z.resolved}/{z.total - z.rejected})
+                  </text>
+                );
+              };
+
               return (
                 <div className="content-card">
                   <div className="content-card-header">
@@ -2351,7 +2366,7 @@ export function AnalyticsPage() {
                       <>
                         <div style={{ height: Math.max(220, chartData.length * 34) }}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 75, left: 10, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
                               <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
                               <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
@@ -2359,6 +2374,7 @@ export function AnalyticsPage() {
                               <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
                               <Bar
                                 dataKey="resolutionRate"
+                                isAnimationActive={false}
                                 radius={[0, 4, 4, 0]}
                                 maxBarSize={18}
                                 cursor="pointer"
@@ -2370,12 +2386,7 @@ export function AnalyticsPage() {
                                 {chartData.map((z) => (
                                   <Cell key={z.name} fill={gradeColor(z.resolutionRate)} />
                                 ))}
-                                <LabelList
-                                  dataKey="resolutionRate"
-                                  position="right"
-                                  formatter={(v) => `${v}%`}
-                                  style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
-                                />
+                                <LabelList dataKey="resolutionRate" content={ZoneRateLabel} />
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>
@@ -2426,6 +2437,19 @@ export function AnalyticsPage() {
                 );
               };
 
+              // A raw count means little on its own — put its share of the
+              // city-wide total right on the label instead of only on hover.
+              const OpenZoneLabel = (props) => {
+                const { x, y, width, height, index } = props;
+                const z = chartData[index];
+                if (!z) return null;
+                return (
+                  <text x={x + width + 6} y={y + height / 2} dy={3.5} fontSize={10} fontWeight={700} fill="#4b473d">
+                    {z.active} ({shareOf(z.active)}%)
+                  </text>
+                );
+              };
+
               return (
                 <div className="content-card">
                   <div className="content-card-header">
@@ -2444,13 +2468,14 @@ export function AnalyticsPage() {
                       <>
                         <div style={{ height: Math.max(220, chartData.length * 34) }}>
                           <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 70, left: 10, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
                               <XAxis type="number" stroke="#8a8477" fontSize={10} tickLine={false} allowDecimals={false} />
                               <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
                               <Tooltip content={<OpenZoneTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
                               <Bar
                                 dataKey="active"
+                                isAnimationActive={false}
                                 fill="#c1613f"
                                 radius={[0, 4, 4, 0]}
                                 maxBarSize={18}
@@ -2460,7 +2485,7 @@ export function AnalyticsPage() {
                                   if (name) openExplore({ zone: name, status: 'all' });
                                 }}
                               >
-                                <LabelList dataKey="active" position="right" style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }} />
+                                <LabelList dataKey="active" content={OpenZoneLabel} />
                               </Bar>
                             </BarChart>
                           </ResponsiveContainer>

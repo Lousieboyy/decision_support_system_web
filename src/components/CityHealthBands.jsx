@@ -245,6 +245,20 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
     .sort((a, b) => a.score - b.score);
   const ifiUnscored = Object.keys(infrastructureFragility.domains).length - ifiZones.length;
 
+  // A bare score doesn't say why — put the short version of the driving
+  // factor right on the label, matching the two zone charts on this tab.
+  const IFI_DRIVER_SHORT = { reportRate: 'report rate', failureRate: 'failure rate', mtbf: 'recurrence' };
+  const IfiScoreLabel = (props) => {
+    const { x, y, width, height, index } = props;
+    const z = ifiZones[index];
+    if (!z) return null;
+    return (
+      <text x={x + width + 6} y={y + height / 2} dy={3.5} fontSize={10} fontWeight={700} fill="#4b473d">
+        {z.score}{z.driver ? ` · ${IFI_DRIVER_SHORT[z.driver]}` : ''}
+      </text>
+    );
+  };
+
   const flowData = backlogFlow.map((p) => ({
     week: format(new Date(p.weekEnd), 'MMM dd'),
     Open: p.open,
@@ -415,7 +429,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
               <div className="p-5">
                 <div style={{ height: Math.max(180, ifiZones.length * 32) }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={ifiZones} layout="vertical" margin={{ top: 5, right: 40, left: 10, bottom: 5 }}>
+                    <BarChart data={ifiZones} layout="vertical" margin={{ top: 5, right: 95, left: 10, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
                       <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} />
                       <YAxis type="category" dataKey="zone" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
@@ -441,6 +455,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                       <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
                       <Bar
                         dataKey="score"
+                        isAnimationActive={false}
                         radius={[0, 4, 4, 0]}
                         maxBarSize={18}
                         cursor="pointer"
@@ -452,7 +467,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                         {ifiZones.map((z) => (
                           <Cell key={z.zone} fill={scoreColor(z.score)} />
                         ))}
-                        <LabelList dataKey="score" position="right" style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }} />
+                        <LabelList dataKey="score" content={IfiScoreLabel} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
