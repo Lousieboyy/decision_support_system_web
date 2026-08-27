@@ -122,7 +122,7 @@ const clusterMarkerColor = (status) =>
 // blend of several inputs, but this says which one actually pushed it up.
 const PRIORITY_RISK_EXPLANATION = {
   'High Public Concern': 'Mainly upvotes — a lot of people flagged this.',
-  'Safety Risk': 'Mainly urgent categories — several reports here are high-priority by type.',
+  'Safety Risk': 'Mainly category — several reports here are Road Damage, Drainage, or Fallen Tree, which the system treats as safety hazards regardless of upvotes or age.',
   'Long Overdue': "Mainly age — these reports have sat open a long time.",
   'Recurring Problem': "Systemic — it spans more than one department's category, not just report count.",
   'Many Reports': 'Mainly how many reports are clustered here.',
@@ -2292,6 +2292,7 @@ export function AnalyticsPage() {
                               color: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).color,
                               background: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).bg,
                             }}
+                            title={PRIORITY_RISK_EXPLANATION[priorityById[activeCluster.id].primaryRisk] || ''}
                           >
                             Priority {priorityById[activeCluster.id].priorityScore} · {priorityById[activeCluster.id].primaryRisk}
                           </span>
