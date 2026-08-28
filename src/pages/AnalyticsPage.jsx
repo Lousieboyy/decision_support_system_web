@@ -172,7 +172,7 @@ export function AnalyticsPage() {
     }
   }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
-  const [activeRecurringId, setActiveRecurringId] = useState(null);
+  const [activeCombinedId, setActiveCombinedId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   // The Overview charts used to each pop their own single-dimension "reports
   // matching this one click" panel — date OR category OR department, never
@@ -619,6 +619,19 @@ export function AnalyticsPage() {
       })
       .sort((a, b) => b.totalReappearances - a.totalReappearances);
   }, [reliabilityAudit, proximityRadius, minClusterSize]);
+
+  // 1c.2. Hotspots list (combined) — two different "predictive" signals in
+  // one view, per explicit request: places with several active reports
+  // piling up right now (hotspots, untouched, unclaimed/dispatchable), and
+  // resolved repairs that reappeared nearby (recurringHotspots, historical,
+  // not dispatchable). Active clusters sort first — an unaddressed pileup is
+  // more urgent than a historical pattern — each group internally sorted by
+  // its own severity measure (size vs. reappearance count), since the two
+  // aren't the same unit and forcing one ranking would be arbitrary.
+  const combinedHotspots = useMemo(() => [
+    ...hotspots.map((h) => ({ ...h, signalType: 'active' })),
+    ...recurringHotspots.map((c) => ({ ...c, signalType: 'recurring' })),
+  ], [hotspots, recurringHotspots]);
 
   // 1c.5. Reporter Trust Map calculation based on reports
   const reporterTrustMap = useMemo(() => {
@@ -1591,13 +1604,13 @@ export function AnalyticsPage() {
   }, [resolvedSystemicAdvisories, activeClusterId]);
 
   useEffect(() => {
-    if (activeRecurringId) {
-      const exists = recurringHotspots.some(c => c.id === activeRecurringId);
+    if (activeCombinedId) {
+      const exists = combinedHotspots.some(c => c.id === activeCombinedId);
       if (!exists) {
-        setActiveRecurringId(null);
+        setActiveCombinedId(null);
       }
     }
-  }, [recurringHotspots, activeRecurringId]);
+  }, [combinedHotspots, activeCombinedId]);
 
   if (loading) {
     return (
@@ -1644,8 +1657,8 @@ export function AnalyticsPage() {
   const activeCluster = activeClusterId
     ? resolvedSystemicAdvisories.find(a => a.id === activeClusterId)
     : null;
-  const activeRecurring = activeRecurringId
-    ? recurringHotspots.find(c => c.id === activeRecurringId)
+  const activeCombined = activeCombinedId
+    ? combinedHotspots.find(c => c.id === activeCombinedId)
     : null;
 
   // Predictive Hotspots list: searchable by address/category once there are
@@ -1658,10 +1671,10 @@ export function AnalyticsPage() {
     !hotspotSearchLower ||
     item.address.toLowerCase().includes(hotspotSearchLower) ||
     item.category.toLowerCase().includes(hotspotSearchLower);
-  const displayRecurringHotspots = recurringHotspots.filter(matchesHotspotSearch);
+  const displayCombinedHotspots = combinedHotspots.filter(matchesHotspotSearch);
   const displayAdvisories = resolvedSystemicAdvisories.filter(matchesHotspotSearch);
 
-  // Systemic-only now (Hotspots uses renderRecurringHotspotCard below). No
+  // Systemic-only now (Hotspots uses renderCombinedHotspotCard below). No
   // dispatch action and no priority badge: every item here is a resolved
   // report, so there's no unclaimed work to send a crew to and no "act on
   // this now" urgency to score — this is a historical co-occurrence pattern,
@@ -1699,50 +1712,73 @@ export function AnalyticsPage() {
     </div>
   );
 
-  // No dispatch action here — every item is a resolved report that came
-  // back, not unclaimed work, so there's nothing to send a crew to.
-  const renderRecurringHotspotCard = (item) => (
-    <div
-      key={item.id}
-      onClick={() => {
-        setActiveRecurringId(item.id);
-        setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
-      }}
-      style={{ borderLeftColor: '#b91c1c', borderLeftWidth: 4 }}
-      className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
-        activeRecurringId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
-      }`}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
-          <span
-            className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
-            style={{ background: 'rgba(185,28,28,0.08)', borderColor: 'rgba(185,28,28,0.20)', color: '#b91c1c' }}
-          >
-            {item.category}
-          </span>
-          <span className="text-[10px] font-bold text-[#8a8477]">
-            {item.size} repair{item.size === 1 ? '' : 's'} reappeared
-          </span>
+  // Two signal types in one card renderer: 'active' (dispatchable, unclaimed
+  // work) and 'recurring' (read-only historical evidence, no dispatch — a
+  // resolved report has nothing left to send a crew to).
+  const renderCombinedHotspotCard = (item) => {
+    const isActive = item.signalType === 'active';
+    const tone = isActive
+      ? { bg: 'rgba(180,83,9,0.10)', border: 'rgba(180,83,9,0.25)', text: '#b45309', label: 'ACTIVE' }
+      : { bg: 'rgba(185,28,28,0.08)', border: 'rgba(185,28,28,0.20)', text: '#b91c1c', label: 'RECURRING' };
+    return (
+      <div
+        key={item.id}
+        onClick={() => {
+          setActiveCombinedId(item.id);
+          setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
+        }}
+        style={{ borderLeftColor: tone.text, borderLeftWidth: 4 }}
+        className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
+          activeCombinedId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+            <span
+              className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0"
+              style={{ background: tone.bg, color: tone.text }}
+            >
+              {tone.label}
+            </span>
+            <span
+              className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
+              style={{ background: tone.bg, borderColor: tone.border, color: tone.text }}
+            >
+              {item.category}
+            </span>
+            <span className="text-[10px] font-bold text-[#8a8477]">
+              {isActive
+                ? `${item.size} active report${item.size === 1 ? '' : 's'}${item.upvotes > 0 ? ` · ${item.upvotes} upvotes` : ''}`
+                : `${item.size} repair${item.size === 1 ? '' : 's'} reappeared`}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {!isActive && (
+              <span
+                className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
+                style={{ color: tone.text, background: tone.bg }}
+                title={`${item.totalReappearances} repeat failure${item.totalReappearances === 1 ? '' : 's'} recorded nearby`}
+              >
+                {item.totalReappearances}×
+              </span>
+            )}
+            <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors" />
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span
-            className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
-            style={{ color: '#b91c1c', background: 'rgba(185,28,28,0.08)' }}
-            title={`${item.totalReappearances} repeat failure${item.totalReappearances === 1 ? '' : 's'} recorded nearby`}
-          >
-            {item.totalReappearances}×
-          </span>
-          <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors" />
+        <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
+        <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
+          {isActive
+            ? item.recommendation
+            : `A resolved ${item.category.toLowerCase()} repair near here reappeared ${item.totalReappearances} time${item.totalReappearances === 1 ? '' : 's'} — worth checking whether the original fix actually addressed the cause.`}
         </div>
+        {isActive && (
+          <div onClick={(e) => e.stopPropagation()} className="flex">
+            <ClusterDispatchAction item={item} onDispatched={loadData} />
+          </div>
+        )}
       </div>
-      <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
-      <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
-        A resolved {item.category.toLowerCase()} repair near here reappeared {item.totalReappearances} time{item.totalReappearances === 1 ? '' : 's'} —
-        worth checking whether the original fix actually addressed the cause.
-      </div>
-    </div>
-  );
+    );
+  };
 
   // The date filter cohorts by SUBMISSION date (matchesDateFilter keys off
   // r.timestamp). Saying so matters: cohorting by resolution date instead would
@@ -1840,7 +1876,7 @@ export function AnalyticsPage() {
               : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
           }`}
         >
-          Predictive Hotspots ({recurringHotspots.length + rootCauseAdvisories.length})
+          Predictive Hotspots ({combinedHotspots.length + resolvedSystemicAdvisories.length})
         </button>
       </div>
 
@@ -2334,7 +2370,7 @@ export function AnalyticsPage() {
                       : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
                   }`}
                 >
-                  Hotspots ({recurringHotspots.length})
+                  Hotspots ({combinedHotspots.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('systemic')}
@@ -2344,7 +2380,7 @@ export function AnalyticsPage() {
                       : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
                   }`}
                 >
-                  Systemic ({rootCauseAdvisories.length})
+                  Systemic ({resolvedSystemicAdvisories.length})
                 </button>
               </div>
             </div>
@@ -2416,7 +2452,7 @@ export function AnalyticsPage() {
                         )}
                       </div>
                       <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">
-                        {activeTab === 'single' ? 'Sorted by how often it has recurred, most first' : 'Sorted by cluster size, most reports first'}
+                        {activeTab === 'single' ? 'Active clusters first, then recurring failures' : 'Sorted by cluster size, most reports first'}
                       </span>
                     </div>
                     {activeTab === 'systemic' && (
@@ -2431,10 +2467,10 @@ export function AnalyticsPage() {
                     {activeTab === 'single' ? (
                       <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
                         <Info size={10} className="inline mr-1 -mt-0.5" />
-                        This shows resolved repairs that came back — a new report of the same category within{' '}
-                        {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days of the fix, evidence the original
-                        repair didn't hold. Not currently-open work — there's nothing to dispatch here, it's a
-                        signal for wherever repairs get planned.
+                        Two signals combined: <strong>Active</strong> is several reports piling up at one spot right
+                        now — real unclaimed work, dispatchable below. <strong>Recurring</strong> is a resolved repair
+                        that reappeared within {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days — evidence the
+                        original fix didn't hold. Nothing to dispatch there; it's a signal for wherever repairs get planned.
                       </p>
                     ) : (
                       <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
@@ -2446,60 +2482,71 @@ export function AnalyticsPage() {
                     )}
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
-                        displayRecurringHotspots.length === 0 ? (
-                          hotspotSearch ? (
-                            <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
-                              <CheckCircle2 className="text-[#8a8477] mb-2 mx-auto" size={24} />
-                              No hotspots match &quot;{hotspotSearch}&quot;.
-                            </div>
-                          ) : reliabilityAudit.totalReIncidence === 0 ? (
-                            // Zero here is the good outcome, not a dead end — say so
-                            // plainly and back it with the number actually checked,
-                            // matching the positive-state styling used everywhere
-                            // else on this tab (IFI's "no zone is seriously fragile",
-                            // Repair Reliability's "repairs are holding").
-                            <div className="h-48 flex flex-col items-center justify-center text-center px-6">
-                              <div
-                                className="rounded-xl px-4 py-3 max-w-sm"
-                                style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}
-                              >
-                                <CheckCircle2 className="mx-auto mb-1.5" size={20} />
-                                <p className="text-xs font-bold">Every repair has held</p>
-                                <p className="text-[11px] mt-1 leading-relaxed opacity-90">
-                                  {reliabilityAudit.totalResolved} resolved report{reliabilityAudit.totalResolved === 1 ? '' : 's'} checked for recurrence —
-                                  none came back nearby.
-                                </p>
+                        displayCombinedHotspots.length === 0 && hotspotSearch ? (
+                          <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
+                            <CheckCircle2 className="text-[#8a8477] mb-2 mx-auto" size={24} />
+                            No hotspots match &quot;{hotspotSearch}&quot;.
+                          </div>
+                        ) : (() => {
+                          const activeCards = displayCombinedHotspots.filter((h) => h.signalType === 'active');
+                          const recurringCards = displayCombinedHotspots.filter((h) => h.signalType === 'recurring');
+                          return (
+                            <>
+                              {activeCards.length > 0 && (
+                                <>
+                                  <div className="text-[9px] font-black text-[#8a8477] uppercase tracking-wider">
+                                    Currently Active ({activeCards.length})
+                                  </div>
+                                  {activeCards.map((h) => renderCombinedHotspotCard(h))}
+                                </>
+                              )}
+                              <div className="text-[9px] font-black text-[#8a8477] uppercase tracking-wider pt-1">
+                                Recurring Failures ({recurringCards.length})
                               </div>
-                            </div>
-                          ) : (
-                            // Recurrence exists somewhere, just not 2+ in the same
-                            // spot yet — the honest reason, with a real path to the
-                            // actual evidence instead of a dead "0 results" screen.
-                            <div className="h-48 flex flex-col items-center justify-center text-center px-6">
-                              <div
-                                className="rounded-xl px-4 py-3 max-w-sm"
-                                style={{ background: 'rgba(180,131,7,0.08)', color: '#8a5a00' }}
-                              >
-                                <AlertTriangle className="mx-auto mb-1.5" size={20} />
-                                <p className="text-xs font-bold">
-                                  {reliabilityAudit.totalReIncidence} repair{reliabilityAudit.totalReIncidence === 1 ? '' : 's'} reappeared, but not clustered
-                                </p>
-                                <p className="text-[11px] mt-1 leading-relaxed opacity-90">
-                                  None are close enough together yet to show as a {minClusterSize}+ cluster here.
-                                </p>
-                                <button
-                                  onClick={() => setShowReliabilityModal(true)}
-                                  className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
-                                  style={{ background: '#8a5a00', color: '#fff' }}
-                                >
-                                  See the full list in Repair Reliability →
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        ) : (
-                          displayRecurringHotspots.map((h) => renderRecurringHotspotCard(h))
-                        )
+                              {recurringCards.length > 0 ? (
+                                recurringCards.map((h) => renderCombinedHotspotCard(h))
+                              ) : hotspotSearch ? null : reliabilityAudit.totalReIncidence === 0 ? (
+                                // Zero here is the good outcome, not a dead end — say so
+                                // plainly and back it with the number actually checked,
+                                // matching the positive-state styling used everywhere
+                                // else on this tab (IFI's "no zone is seriously fragile",
+                                // Repair Reliability's "repairs are holding").
+                                <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}>
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle2 size={16} className="shrink-0" />
+                                    <p className="text-xs font-bold">Every repair has held</p>
+                                  </div>
+                                  <p className="text-[11px] mt-1 leading-relaxed opacity-90">
+                                    {reliabilityAudit.totalResolved} resolved report{reliabilityAudit.totalResolved === 1 ? '' : 's'} checked for recurrence —
+                                    none came back nearby.
+                                  </p>
+                                </div>
+                              ) : (
+                                // Recurrence exists somewhere, just not 2+ in the same
+                                // spot yet — the honest reason, with a real path to the
+                                // actual evidence instead of a dead "0 results" screen.
+                                <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(180,131,7,0.08)', color: '#8a5a00' }}>
+                                  <div className="flex items-center gap-2">
+                                    <AlertTriangle size={16} className="shrink-0" />
+                                    <p className="text-xs font-bold">
+                                      {reliabilityAudit.totalReIncidence} repair{reliabilityAudit.totalReIncidence === 1 ? '' : 's'} reappeared, but not clustered
+                                    </p>
+                                  </div>
+                                  <p className="text-[11px] mt-1 leading-relaxed opacity-90">
+                                    None are close enough together yet to show as a {minClusterSize}+ cluster here.
+                                  </p>
+                                  <button
+                                    onClick={() => setShowReliabilityModal(true)}
+                                    className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                                    style={{ background: '#8a5a00', color: '#fff' }}
+                                  >
+                                    See the full list in Repair Reliability →
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()
                       ) : (
                         displayAdvisories.length === 0 ? (
                           <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
@@ -2675,14 +2722,17 @@ export function AnalyticsPage() {
               </>
             )}
 
-            {/* Recurring-hotspot detail popup — read-only by design. Everything
-                in here is already Resolved, so there's no assignment to edit
-                and no crew to dispatch; the map's job is just to show why this
-                spot was flagged, matching the same original-to-reappearance
-                visual language as the Repair Reliability modal. */}
-            {activeRecurring && (
+            {/* Combined hotspot detail popup — content branches on signalType.
+                'recurring' is read-only (everything is already Resolved, so
+                there's nothing to dispatch): the map's job is just to show
+                why this spot was flagged, matching the original-to-
+                reappearance visual language the Repair Reliability modal
+                uses. 'active' is also read-only here — dispatch already
+                lives on the card itself, consistent with how Systemic and
+                recurring cards work; this popup is just the evidence map. */}
+            {activeCombined && (
               <>
-                <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setActiveRecurringId(null)} />
+                <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setActiveCombinedId(null)} />
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                   <div
                     className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
@@ -2690,63 +2740,109 @@ export function AnalyticsPage() {
                   >
                     <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
                       <div>
-                        <div className="text-sm font-black text-[#201f1b]">{activeRecurring.category} — recurring failure</div>
+                        <div className="text-sm font-black text-[#201f1b]">
+                          {activeCombined.category} — {activeCombined.signalType === 'active' ? 'active cluster' : 'recurring failure'}
+                        </div>
                         <div className="text-[11px] text-[#8a8477]">
-                          {activeRecurring.size} resolved repair{activeRecurring.size === 1 ? '' : 's'} · {activeRecurring.totalReappearances} reappearance{activeRecurring.totalReappearances === 1 ? '' : 's'} nearby
+                          {activeCombined.signalType === 'active'
+                            ? `${activeCombined.size} active report${activeCombined.size === 1 ? '' : 's'}${activeCombined.upvotes > 0 ? ` · ${activeCombined.upvotes} upvotes` : ''}`
+                            : `${activeCombined.size} resolved repair${activeCombined.size === 1 ? '' : 's'} · ${activeCombined.totalReappearances} reappearance${activeCombined.totalReappearances === 1 ? '' : 's'} nearby`}
                         </div>
                       </div>
-                      <button onClick={() => setActiveRecurringId(null)} className="p-2 rounded-full transition-colors" style={{ color: '#8a8477' }}>
+                      <button onClick={() => setActiveCombinedId(null)} className="p-2 rounded-full transition-colors" style={{ color: '#8a8477' }}>
                         <X size={18} />
                       </button>
                     </div>
                     <div className="p-5 overflow-y-auto space-y-4">
-                      <p className="text-xs text-[#8a8477] leading-relaxed">
-                        Each green marker is a repair the council marked Resolved. Each red marker is a later report of
-                        the same category within {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days — evidence the
-                        original fix didn't hold. This is historical only: nothing here is unclaimed work, so there's
-                        nothing to dispatch — worth a look from whoever plans repairs for this area.
-                      </p>
-                      <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 340 }}>
-                        <MapContainer key={activeRecurring.id} center={[activeRecurring.latitude, activeRecurring.longitude]} zoom={15} style={{ height: '100%', width: '100%' }}>
-                          <TileLayer
-                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                          />
-                          {activeRecurring.items.map((ticket) => (
-                            <Fragment key={ticket.id}>
-                              <CircleMarker center={[ticket.latitude, ticket.longitude]} radius={7} pathOptions={{ color: '#15803d', fillColor: '#15803d', fillOpacity: 0.85, weight: 2 }}>
-                                <Popup>
-                                  <div style={{ fontSize: 12, minWidth: 180 }}>
-                                    <div style={{ fontWeight: 700 }}>{ticket.address}</div>
-                                    <div style={{ color: '#8a8477' }}>Resolved {fmtRecurDate(ticket.resolvedAt)}</div>
-                                  </div>
-                                </Popup>
-                              </CircleMarker>
-                              {ticket.reappearances.filter((rep) => rep.latitude != null && rep.longitude != null).map((rep) => (
-                                <Fragment key={rep.id}>
-                                  <Polyline positions={[[ticket.latitude, ticket.longitude], [rep.latitude, rep.longitude]]} pathOptions={{ color: '#b91c1c', weight: 2, dashArray: '4 4' }} />
-                                  <CircleMarker center={[rep.latitude, rep.longitude]} radius={5} pathOptions={{ color: '#b91c1c', fillColor: '#fff', fillOpacity: 1, weight: 2 }}>
+                      {activeCombined.signalType === 'active' ? (
+                        <>
+                          <p className="text-xs text-[#8a8477] leading-relaxed">
+                            {activeCombined.recommendation}
+                          </p>
+                          <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 300 }}>
+                            <MapContainer key={activeCombined.id} center={[activeCombined.latitude, activeCombined.longitude]} zoom={15} style={{ height: '100%', width: '100%' }}>
+                              <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              />
+                              {activeCombined.items
+                                .filter((it) => it.latitude != null && it.longitude != null)
+                                .map((it) => {
+                                  const claimed = it.status === 'In Process' || it.status === 'In Maintenance';
+                                  const color = claimed ? '#3b82f6' : '#b45309';
+                                  return (
+                                    <CircleMarker key={it.id} center={[it.latitude, it.longitude]} radius={7} pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 2 }}>
+                                      <Popup>
+                                        <div style={{ fontSize: 12, minWidth: 180 }}>
+                                          <div style={{ fontWeight: 700 }}>{it.address || it.location || 'Unknown location'}</div>
+                                          <div style={{ color: '#8a8477' }}>Status: {it.status}</div>
+                                          {it.upvotes > 0 && <div style={{ color: '#8a8477' }}>{it.upvotes} upvotes</div>}
+                                        </div>
+                                      </Popup>
+                                    </CircleMarker>
+                                  );
+                                })}
+                              <MapResizer />
+                            </MapContainer>
+                          </div>
+                          <div className="flex items-center gap-3 flex-wrap text-[10px] text-[#8a8477]">
+                            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Waiting to be actioned</span>
+                            <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xs text-[#8a8477] leading-relaxed">
+                            Each green marker is a repair the council marked Resolved. Each red marker is a later report of
+                            the same category within {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days — evidence the
+                            original fix didn't hold. This is historical only: nothing here is unclaimed work, so there's
+                            nothing to dispatch — worth a look from whoever plans repairs for this area.
+                          </p>
+                          <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 340 }}>
+                            <MapContainer key={activeCombined.id} center={[activeCombined.latitude, activeCombined.longitude]} zoom={15} style={{ height: '100%', width: '100%' }}>
+                              <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              />
+                              {activeCombined.items.map((ticket) => (
+                                <Fragment key={ticket.id}>
+                                  <CircleMarker center={[ticket.latitude, ticket.longitude]} radius={7} pathOptions={{ color: '#15803d', fillColor: '#15803d', fillOpacity: 0.85, weight: 2 }}>
                                     <Popup>
-                                      <div style={{ fontSize: 12, minWidth: 160 }}>
-                                        <div style={{ fontWeight: 700 }}>{rep.address}</div>
-                                        <div style={{ color: '#8a8477' }}>Reappeared {fmtRecurDate(rep.at)}, {rep.distanceM}m from the original repair</div>
+                                      <div style={{ fontSize: 12, minWidth: 180 }}>
+                                        <div style={{ fontWeight: 700 }}>{ticket.address}</div>
+                                        <div style={{ color: '#8a8477' }}>Resolved {fmtRecurDate(ticket.resolvedAt)}</div>
                                       </div>
                                     </Popup>
                                   </CircleMarker>
+                                  {ticket.reappearances.filter((rep) => rep.latitude != null && rep.longitude != null).map((rep) => (
+                                    <Fragment key={rep.id}>
+                                      <Polyline positions={[[ticket.latitude, ticket.longitude], [rep.latitude, rep.longitude]]} pathOptions={{ color: '#b91c1c', weight: 2, dashArray: '4 4' }} />
+                                      <CircleMarker center={[rep.latitude, rep.longitude]} radius={5} pathOptions={{ color: '#b91c1c', fillColor: '#fff', fillOpacity: 1, weight: 2 }}>
+                                        <Popup>
+                                          <div style={{ fontSize: 12, minWidth: 160 }}>
+                                            <div style={{ fontWeight: 700 }}>{rep.address}</div>
+                                            <div style={{ color: '#8a8477' }}>Reappeared {fmtRecurDate(rep.at)}, {rep.distanceM}m from the original repair</div>
+                                          </div>
+                                        </Popup>
+                                      </CircleMarker>
+                                    </Fragment>
+                                  ))}
                                 </Fragment>
                               ))}
-                            </Fragment>
-                          ))}
-                          <MapResizer />
-                        </MapContainer>
-                      </div>
+                              <MapResizer />
+                            </MapContainer>
+                          </div>
+                        </>
+                      )}
                       <div className="space-y-2">
-                        {activeRecurring.items.map((ticket) => (
-                          <div key={ticket.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
-                            <div className="text-xs font-bold text-[#201f1b]">{ticket.address}</div>
+                        {activeCombined.items.map((it) => (
+                          <div key={it.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
+                            <div className="text-xs font-bold text-[#201f1b]">{it.address || it.location || 'Unknown location'}</div>
                             <div className="text-[10px] text-[#8a8477] mt-0.5">
-                              Resolved {fmtRecurDate(ticket.resolvedAt)} — reappeared {ticket.reappearances.length} time{ticket.reappearances.length === 1 ? '' : 's'},
-                              most recently {fmtRecurDate(ticket.reappearances[ticket.reappearances.length - 1]?.at)} ({ticket.reappearances[ticket.reappearances.length - 1]?.distanceM}m away)
+                              {activeCombined.signalType === 'active'
+                                ? <>Report #{it.id} · {it.status}{it.upvotes > 0 ? ` · ${it.upvotes} upvotes` : ''}</>
+                                : <>Resolved {fmtRecurDate(it.resolvedAt)} — reappeared {it.reappearances.length} time{it.reappearances.length === 1 ? '' : 's'},
+                                   most recently {fmtRecurDate(it.reappearances[it.reappearances.length - 1]?.at)} ({it.reappearances[it.reappearances.length - 1]?.distanceM}m away)</>}
                             </div>
                           </div>
                         ))}
