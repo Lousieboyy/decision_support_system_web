@@ -175,7 +175,13 @@ STATUS_WEIGHTS = [
     ("Rejected", 1),
 ]
 
-WORKERS = ["worker", "worker1", "worker2"]
+# Keyed by the team code that prefixes each DEPT_ASSIGNMENT value ("MBMB (...)"
+# -> "MBMB") so a report is only ever claimed by a worker on its own team.
+WORKERS_BY_TEAM = {
+    "MBMB": ["worker", "worker1"],
+    "JKR": ["worker2"],
+    "SWCorp": [],
+}
 
 def random_status():
     pool = []
@@ -347,7 +353,8 @@ def main():
                 authority_notes = f"Verified. Forwarded to {assigned_dept.split(' ')[0]}."
                 
             if status in ("In Process", "In Maintenance", "Resolved"):
-                assigned_worker = random.choice(WORKERS)
+                team_workers = WORKERS_BY_TEAM.get(assigned_dept.split(" ")[0], [])
+                assigned_worker = random.choice(team_workers) if team_workers else None
                 in_process_at = (timestamp + timedelta(hours=random.randint(12, 36))).isoformat()
                 
             if status in ("In Maintenance", "Resolved"):

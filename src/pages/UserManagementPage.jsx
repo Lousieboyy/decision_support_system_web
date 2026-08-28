@@ -189,7 +189,6 @@ export function UserManagementPage() {
               <thead className="text-xs font-bold tracking-wider uppercase" style={{ background: 'var(--cream-200)', borderBottom: '1px solid rgba(31,30,26,0.07)', color: '#8a8477' }}>
                 <tr>
                   <th className="px-6 py-4">Username</th>
-                  <th className="px-6 py-4">Display Name</th>
                   <th className="px-6 py-4">Requested Role</th>
                   <th className="px-6 py-4">Actions</th>
                 </tr>
@@ -198,7 +197,6 @@ export function UserManagementPage() {
                 {pending.map(acc => (
                    <tr key={acc.id} className="transition-colors hover:bg-[#4a5d3f]/5">
                      <td className="px-6 py-4 font-mono font-medium" style={{ color: '#8a8477' }}>{acc.username}</td>
-                     <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.agency || '—'}</td>
                     <td className="px-6 py-4"><RoleBadge role={acc.role} agency={acc.agency} /></td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
@@ -231,7 +229,6 @@ export function UserManagementPage() {
             <thead className="text-xs font-bold tracking-wider uppercase" style={{ background: 'var(--cream-200)', borderBottom: '1px solid rgba(31,30,26,0.07)', color: '#8a8477' }}>
               <tr>
                 <th className="px-6 py-4">Username</th>
-                <th className="px-6 py-4">Display Name</th>
                 <th className="px-6 py-4">Role</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Actions</th>
@@ -241,7 +238,6 @@ export function UserManagementPage() {
               {accounts.map(acc => (
                 <tr key={acc.id} className="transition-colors hover:bg-[#4a5d3f]/5">
                   <td className="px-6 py-4 font-mono font-medium" style={{ color: '#8a8477' }}>{acc.username}</td>
-                  <td className="px-6 py-4 font-semibold" style={{ color: '#201f1b' }}>{acc.agency || '—'}</td>
                   <td className="px-6 py-4"><RoleBadge role={acc.role} agency={acc.agency} /></td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${

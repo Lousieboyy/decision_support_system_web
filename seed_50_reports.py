@@ -290,7 +290,14 @@ STATUS_WEIGHTS = [
     ("Rejected", 2),
 ]
 
-WORKERS = ["worker", "worker1", "worker2"]
+# Keyed by the team code that prefixes each DEPT_ASSIGNMENT value ("MBMB (...)"
+# -> "MBMB"). SWCorp has no seeded worker account, so a report assigned there
+# is left unclaimed rather than handed to a worker from a different team.
+WORKERS_BY_TEAM = {
+    "MBMB": ["worker", "worker1"],
+    "JKR": ["worker2"],
+    "SWCorp": [],
+}
 
 def random_status():
     pool = []
@@ -364,7 +371,8 @@ def main():
                 authority_notes = f"Report verified. Forwarded to {assigned_dept.split(' ')[0]}."
                 
             if status in ("In Process", "In Maintenance", "Resolved"):
-                assigned_worker = random.choice(WORKERS)
+                team_workers = WORKERS_BY_TEAM.get(assigned_dept.split(" ")[0], [])
+                assigned_worker = random.choice(team_workers) if team_workers else None
                 in_process_at = (timestamp + timedelta(hours=random.randint(24, 72))).isoformat()
                 
             if status in ("In Maintenance", "Resolved"):
