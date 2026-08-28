@@ -369,6 +369,13 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
     .filter((d) => d.score != null)
     .sort((a, b) => a.score - b.score);
   const ifiUnscored = Object.keys(infrastructureFragility.domains).length - ifiZones.length;
+  // Unscored zones still carry a real reportCount (just under MIN_N_FOR_INDEX)
+  // — surfacing the closest ones turns "not enough data" into "here's what's
+  // coming next" instead of a dead end.
+  const ifiCloseToQualifying = Object.values(infrastructureFragility.domains)
+    .filter((d) => d.score == null)
+    .sort((a, b) => b.reportCount - a.reportCount)
+    .slice(0, 4);
 
   // A bare score doesn't say why — put the short version of the driving
   // factor right on the label, matching the two zone charts on this tab.
@@ -557,9 +564,46 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           />
 
           <div className="lg:col-span-3 content-card">
-            {ifiZones.length === 0 ? (
-              <div className="p-8 text-center text-sm text-[#8a8477]">
-                No zone yet has {MIN_N_FOR_INDEX}+ reports with a known district, so none can be scored.
+            {ifiZones.length <= 1 ? (
+              <div className="p-5 space-y-4">
+                {ifiZones.length === 1 ? (
+                  <button
+                    onClick={() => onZoneClick(ifiZones[0].zone)}
+                    className="w-full flex items-center justify-between gap-3 rounded-xl p-4 text-left cursor-pointer"
+                    style={{ background: 'rgba(74,93,63,0.05)', border: '1px solid rgba(74,93,63,0.15)' }}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Only zone scored so far</div>
+                      <div className="text-sm font-black text-[#201f1b] mt-0.5">{ifiZones[0].zone}</div>
+                      {ifiZones[0].driverLabel && (
+                        <div className="text-[11px] text-[#8a8477] mt-1 leading-relaxed max-w-md">Mainly {ifiZones[0].driverLabel}.</div>
+                      )}
+                    </div>
+                    <div className="text-2xl font-black shrink-0" style={{ color: scoreColor(ifiZones[0].score) }}>
+                      {ifiZones[0].score}
+                    </div>
+                  </button>
+                ) : (
+                  <p className="text-xs text-[#8a8477]">
+                    No zone yet has {MIN_N_FOR_INDEX}+ reports with a known district, so none can be scored.
+                  </p>
+                )}
+                {ifiCloseToQualifying.length > 0 && (
+                  <div>
+                    <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2">Closest to being scored next</div>
+                    <div className="space-y-1.5">
+                      {ifiCloseToQualifying.map((z) => (
+                        <div key={z.zone} className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-[#201f1b]">{z.zone}</span>
+                          <span className="text-[#8a8477]">{z.reportCount} of {MIN_N_FOR_INDEX} reports</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
+                      {MIN_N_FOR_INDEX - ifiCloseToQualifying[0].reportCount} more report{MIN_N_FOR_INDEX - ifiCloseToQualifying[0].reportCount === 1 ? '' : 's'} from {ifiCloseToQualifying[0].zone} and it'll get scored too.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-5">
