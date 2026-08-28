@@ -170,8 +170,14 @@ function IndexGauge({ value, label, caption, excludedCount, totalDomains, formul
 }
 
 /** Score card whose box model is identical whether or not the score exists. */
-function DomainCard({ name, score, weight, primary, secondary }) {
+function DomainCard({ name, score, weight, effectiveWeight, primary, secondary }) {
   const measured = score != null;
+  // When another category is excluded for lacking data, this one silently
+  // absorbs part of its share so the index still sums to 100% — the badge
+  // used to keep showing the fixed nominal weight regardless, which didn't
+  // match what the score above was actually built from.
+  const showEffective =
+    measured && effectiveWeight != null && Math.round(effectiveWeight * 100) !== Math.round(weight * 100);
   return (
     <div className="domain-card">
       <div className="flex items-center justify-between mb-1">
@@ -181,9 +187,13 @@ function DomainCard({ name, score, weight, primary, secondary }) {
             <span
               className="shrink-0 px-1 py-px rounded text-[9px] font-black normal-case tracking-normal"
               style={{ background: 'rgba(74,93,63,0.10)', color: '#4a5d3f' }}
-              title="How much this category counts toward the score above"
+              title={
+                showEffective
+                  ? `Normally ${Math.round(weight * 100)}% — temporarily counts for ${Math.round(effectiveWeight * 100)}% while another category is excluded for lacking data`
+                  : 'How much this category counts toward the score above'
+              }
             >
-              {Math.round(weight * 100)}%
+              {showEffective ? `${Math.round(weight * 100)}% → ${Math.round(effectiveWeight * 100)}%` : `${Math.round(weight * 100)}%`}
             </span>
           )}
         </span>
@@ -365,6 +375,20 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
 
   const spiDomains = Object.values(servicePerformance.domains);
   const uciDomains = Object.values(urbanCondition.domains);
+  // Returns each included category's real, rescaled share of the score —
+  // null for an excluded one, since its usual weight isn't being used at all
+  // right now. Kept separate from the nominal SPI_WEIGHTS/UCI_WEIGHTS table
+  // so the "how it's scored" methodology panel still documents the normal,
+  // undiluted split.
+  const effectiveWeights = (weights, excluded) => {
+    const excludedSet = new Set(excluded);
+    const weightSum = Object.entries(weights)
+      .filter(([k]) => !excludedSet.has(k))
+      .reduce((s, [, w]) => s + w, 0);
+    return (key) => (weightSum > 0 && !excludedSet.has(key) ? weights[key] / weightSum : null);
+  };
+  const spiEffectiveWeight = effectiveWeights(SPI_WEIGHTS, servicePerformance.excluded);
+  const uciEffectiveWeight = effectiveWeights(UCI_WEIGHTS, urbanCondition.excluded);
   const ifiZones = Object.values(infrastructureFragility.domains)
     .filter((d) => d.score != null)
     .sort((a, b) => a.score - b.score);
@@ -451,6 +475,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 name={d.name}
                 score={d.score}
                 weight={SPI_WEIGHTS[d.key]}
+                effectiveWeight={spiEffectiveWeight(d.key)}
                 primary={
                   d.medianDays != null
                     ? `Typical (median) time: ${fmtDuration(d.medianDays)}, vs a target of ${fmtDuration(d.targetDays)} (based on ${d.n} reports)`
@@ -530,6 +555,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 name={d.name}
                 score={d.score}
                 weight={UCI_WEIGHTS[d.key]}
+                effectiveWeight={uciEffectiveWeight(d.key)}
                 primary={
                   `${d.openCount} open · current load ${d.burden} of ${d.target} allowed` +
                   (d.medianAgeDays != null ? ` · typical time open: ${Math.round(d.medianAgeDays)} days` : '')
