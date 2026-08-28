@@ -1646,16 +1646,6 @@ export function AnalyticsPage() {
           Overview & Trends
         </button>
         <button
-          onClick={() => setActiveViewTab('hotspots')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            activeViewTab === 'hotspots'
-              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
-              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
-          }`}
-        >
-          Predictive Hotspots ({hotspots.length + rootCauseAdvisories.length})
-        </button>
-        <button
           onClick={() => setActiveViewTab('cityhealth')}
           className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'cityhealth'
@@ -1665,6 +1655,16 @@ export function AnalyticsPage() {
         >
           <Activity size={15} />
           City Health
+        </button>
+        <button
+          onClick={() => setActiveViewTab('hotspots')}
+          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeViewTab === 'hotspots'
+              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
+              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
+          }`}
+        >
+          Predictive Hotspots ({hotspots.length + rootCauseAdvisories.length})
         </button>
         <button
           onClick={() => setActiveViewTab('dispatch')}
