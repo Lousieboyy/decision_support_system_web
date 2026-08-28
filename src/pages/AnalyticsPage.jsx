@@ -621,7 +621,14 @@ export function AnalyticsPage() {
 
   // Department scopes offered by the filter, derived from the data rather than a
   // hardcoded list of three. Declared before deptSLAMetrics, which consumes it.
-  const departmentOptions = useMemo(() => deriveDepartmentOptions(reports), [reports]);
+  // JKR is deliberately excluded here — hidden from every cross-department view
+  // in Analytics (filter dropdown, SLA chart, Allocation Status chips, Report
+  // Explorer), the same way it's hidden from the Teams comparison grid. JKR's
+  // own login is unaffected — it's scoped by role, not by this list.
+  const departmentOptions = useMemo(
+    () => deriveDepartmentOptions(reports).filter((d) => d.key !== 'JKR'),
+    [reports]
+  );
 
   // 2. Department SLA Performance calculation
   const deptSLAMetrics = useMemo(() => {

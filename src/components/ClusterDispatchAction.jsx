@@ -85,7 +85,11 @@ export function ClusterDispatchAction({ item, onDispatched }) {
   useEffect(() => {
     if (!open || teams) return;
     fetchTeams()
-      .then((list) => {
+      .then((rawList) => {
+        // JKR is hidden from the picker along with everywhere else it's been
+        // hidden this session — CATEGORY_TEAM_HINT never defaults a category
+        // there anymore, so no group would try to pre-select it anyway.
+        const list = rawList.filter((t) => t.name !== 'JKR');
         setTeams(list);
         const defaults = {};
         groups.forEach((g) => {
