@@ -13,13 +13,13 @@ import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, Heart, Activity, Truck,
+  CheckCircle2, ChevronRight, Heart, Activity,
   Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
-  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor, RISK_TONE, DEFAULT_RISK_TONE,
+  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
@@ -28,7 +28,6 @@ import {
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { CityHealthBands } from '../components/CityHealthBands';
-import { DispatchAudit } from '../components/DispatchAudit';
 import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
 import { ReportExplorerModal } from '../components/ReportExplorerModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
@@ -116,24 +115,6 @@ function MapController({ focus }) {
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
-// Individual-ticket marker color for a selected hotspot's constituent
-// reports — status, not category, since category is already the cluster's
-// own badge. Only Pending/In Review/In Process/In Maintenance ever reach
-// here (hotspots only cluster active reports).
-const clusterMarkerColor = (status) =>
-  status === 'In Process' || status === 'In Maintenance' ? '#3b82f6' : '#b45309';
-
-// Plain-language reason for whichever factor primaryRisk names as the
-// biggest driver of a cluster's priority score — the score itself is a
-// blend of several inputs, but this says which one actually pushed it up.
-const PRIORITY_RISK_EXPLANATION = {
-  'High Public Concern': 'Mainly upvotes — a lot of people flagged this.',
-  'Safety Risk': 'Mainly category — several reports here are Road Damage, Drainage, or Fallen Tree, which the system treats as safety hazards regardless of upvotes or age.',
-  'Long Overdue': "Mainly age — these reports have sat open a long time.",
-  'Recurring Problem': "Systemic — it spans more than one department's category, not just report count.",
-  'Many Reports': 'Mainly how many reports are clustered here.',
-};
-
 export function AnalyticsPage() {
   const { role, user } = useAuth();
   const [reports, setReports] = useState([]);
@@ -208,7 +189,7 @@ export function AnalyticsPage() {
   const [auditActions, setAuditActions] = useState(null);
   const [activeTab, setActiveTab] = useState('single');
   const [hotspotSearch, setHotspotSearch] = useState('');
-  const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'dispatch'
+  const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'cityhealth'
   const [showReliabilityModal, setShowReliabilityModal] = useState(false);
   // Lifted out of CityHealthBands so the Zone chart below it can show the
   // dimension that matches whichever score band is currently selected,
@@ -488,6 +469,89 @@ export function AnalyticsPage() {
     return advisories.sort((a, b) => b.size - a.size);
   }, [filteredReports, proximityRadius, minClusterSize, customOverrides]);
 
+  // 1b.1. Systemic (reworked) — same cross-category root-cause detection as
+  // above (drainage undermining a road, a broken light near vandalism), but
+  // over RESOLVED reports instead of active ones. rootCauseAdvisories itself
+  // is untouched — it still feeds the PDF export and the Overview "Cross-
+  // Issue Pattern" insight, which weren't part of this request. This is a
+  // deliberate near-duplicate of the clustering logic above rather than a
+  // shared helper, matching how recurringHotspots was built independently
+  // from the active hotspots computation.
+  const resolvedSystemicAdvisories = useMemo(() => {
+    const resolved = filteredReports.filter(
+      (r) => r.status === 'Resolved' && r.latitude != null && r.longitude != null
+    );
+
+    const advisories = [];
+    const visitedReportIds = new Set();
+    const sortedResolved = [...resolved].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
+
+    sortedResolved.forEach((seedReport) => {
+      if (visitedReportIds.has(seedReport.id)) return;
+
+      const groupItems = resolved.filter((r) => {
+        const isExcluded = customOverrides[seedReport.id]?.excludedReportIds?.includes(r.id);
+        if (isExcluded) return false;
+        const dist = calculateDistance(seedReport.latitude, seedReport.longitude, r.latitude, r.longitude);
+        return dist <= proximityRadius;
+      });
+
+      if (groupItems.length < minClusterSize) return;
+
+      const categoriesInGroup = groupItems.map((r) => canonicalizeCategory(r.categories || r.ai_prediction));
+      const uniqueCategories = new Set(categoriesInGroup);
+
+      const hasRoad = uniqueCategories.has('Road Damage');
+      const hasDrain = uniqueCategories.has('Drainage System');
+      const hasLight = uniqueCategories.has('Street Lighting');
+      const hasVandalism = uniqueCategories.has('Vandalism') || uniqueCategories.has('Other Infrastructure');
+      const hasWaste = uniqueCategories.has('Waste Management');
+
+      let advisoryType = null;
+      let advisoryRec = null;
+
+      if (hasRoad && hasDrain) {
+        advisoryType = 'Drainage & Road Decay';
+        advisoryRec = 'Water likely damaged the road from underneath — check the drain before the next resurfacing here.';
+      } else if (hasLight && (hasVandalism || uniqueCategories.has('Vandalism'))) {
+        advisoryType = 'Darkness & Vandalism Zone';
+        advisoryRec = 'These kept happening together — worth checking whether the lighting fix actually held.';
+      } else if (hasWaste && hasDrain) {
+        advisoryType = 'Waste-Induced Drainage Blockages';
+        advisoryRec = 'Check whether the drain and the waste point are still both clear, not just one of them.';
+      }
+
+      if (advisoryType) {
+        groupItems.forEach((r) => visitedReportIds.add(r.id));
+
+        const avgLat = groupItems.reduce((sum, item) => sum + item.latitude, 0) / groupItems.length;
+        const avgLng = groupItems.reduce((sum, item) => sum + item.longitude, 0) / groupItems.length;
+        const totalUpvotes = groupItems.reduce((sum, item) => sum + (item.upvotes || 0), 0);
+
+        const defaultAddress = seedReport.address || seedReport.location || 'Melaka District';
+        const override = customOverrides[seedReport.id] || {};
+        const address = override.customAddress || `Systemic Zone: ${defaultAddress}`;
+        const recommendation = override.customRecommendation || advisoryRec;
+
+        advisories.push({
+          id: `resolved-advisory-${seedReport.id}`,
+          seedId: seedReport.id,
+          category: advisoryType,
+          size: groupItems.length,
+          latitude: avgLat,
+          longitude: avgLng,
+          address,
+          defaultAddress: `Systemic Zone: ${defaultAddress}`,
+          upvotes: totalUpvotes,
+          recommendation,
+          items: groupItems,
+        });
+      }
+    });
+
+    return advisories.sort((a, b) => b.size - a.size);
+  }, [filteredReports, proximityRadius, minClusterSize, customOverrides]);
+
   // 1c. Repair reliability audit — every authority with a resolved ticket,
   // not a fixed shortlist. See buildReliabilityAudit for the methodology.
   const reliabilityAudit = useMemo(() => buildReliabilityAudit(filteredReports), [filteredReports]);
@@ -672,15 +736,6 @@ export function AnalyticsPage() {
     // Sort by priority score descending
     return computed.sort((a, b) => b.priorityScore - a.priorityScore);
   }, [hotspots, rootCauseAdvisories, reporterTrustMap, proximityRadius]);
-
-  // Lookup so the Predictive Hotspots list can show the same priority score
-  // and risk badge as the Dispatch & Audit queue, instead of a second,
-  // inconsistent ranking (currently raw cluster size) for the same clusters.
-  const priorityById = useMemo(() => {
-    const map = {};
-    prioritizedDispatchQueue.forEach((item) => { map[item.id] = item; });
-    return map;
-  }, [prioritizedDispatchQueue]);
 
   // Department scopes offered by the filter, derived from the data rather than a
   // hardcoded list of three. Declared before deptSLAMetrics, which consumes it.
@@ -1508,12 +1563,21 @@ export function AnalyticsPage() {
 
   useEffect(() => {
     if (activeClusterId) {
-      const exists = hotspots.some(h => h.id === activeClusterId) || rootCauseAdvisories.some(a => a.id === activeClusterId);
+      const exists = resolvedSystemicAdvisories.some(a => a.id === activeClusterId);
       if (!exists) {
         setActiveClusterId(null);
       }
     }
-  }, [hotspots, rootCauseAdvisories, activeClusterId]);
+  }, [resolvedSystemicAdvisories, activeClusterId]);
+
+  useEffect(() => {
+    if (activeRecurringId) {
+      const exists = recurringHotspots.some(c => c.id === activeRecurringId);
+      if (!exists) {
+        setActiveRecurringId(null);
+      }
+    }
+  }, [recurringHotspots, activeRecurringId]);
 
   if (loading) {
     return (
@@ -1558,7 +1622,7 @@ export function AnalyticsPage() {
   }
 
   const activeCluster = activeClusterId
-    ? rootCauseAdvisories.find(a => a.id === activeClusterId)
+    ? resolvedSystemicAdvisories.find(a => a.id === activeClusterId)
     : null;
   const activeRecurring = activeRecurringId
     ? recurringHotspots.find(c => c.id === activeRecurringId)
@@ -1575,63 +1639,45 @@ export function AnalyticsPage() {
     item.address.toLowerCase().includes(hotspotSearchLower) ||
     item.category.toLowerCase().includes(hotspotSearchLower);
   const displayRecurringHotspots = recurringHotspots.filter(matchesHotspotSearch);
-  const displayAdvisories = [...rootCauseAdvisories]
-    .filter(matchesHotspotSearch)
-    .sort((a, b) => (priorityById[b.id]?.priorityScore ?? 0) - (priorityById[a.id]?.priorityScore ?? 0));
+  const displayAdvisories = resolvedSystemicAdvisories.filter(matchesHotspotSearch);
 
-  const renderHotspotCard = (item, isSystemic) => {
-    const priority = priorityById[item.id];
-    const tone = priority ? (RISK_TONE[priority.primaryRisk] || DEFAULT_RISK_TONE) : DEFAULT_RISK_TONE;
-    const badge = isSystemic
-      ? { bg: 'rgba(99,102,241,0.10)', border: 'rgba(99,102,241,0.25)', text: '#4338ca' }
-      : { bg: 'rgba(74,93,63,0.10)', border: 'rgba(74,93,63,0.20)', text: '#4a5d3f' };
-    return (
-      <div
-        key={item.id}
-        onClick={() => {
-          setActiveClusterId(item.id);
-          setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
-        }}
-        style={{ borderLeftColor: tone.color, borderLeftWidth: 4 }}
-        className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
-          activeClusterId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
-        }`}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <span
-              className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
-              style={{ background: badge.bg, borderColor: badge.border, color: badge.text }}
-            >
-              {item.category}
-            </span>
-            <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
-              {item.size} active report{item.size === 1 ? '' : 's'}{item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {priority && (
-              <span
-                className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
-                style={{ color: tone.color, background: tone.bg }}
-                title={`Priority ${priority.priorityScore} of 100 — ${priority.primaryRisk}`}
-              >
-                {priority.priorityScore}
-              </span>
-            )}
-            <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors" />
-          </div>
+  // Systemic-only now (Hotspots uses renderRecurringHotspotCard below). No
+  // dispatch action and no priority badge: every item here is a resolved
+  // report, so there's no unclaimed work to send a crew to and no "act on
+  // this now" urgency to score — this is a historical co-occurrence pattern,
+  // not an action queue.
+  const renderHotspotCard = (item) => (
+    <div
+      key={item.id}
+      onClick={() => {
+        setActiveClusterId(item.id);
+        setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
+      }}
+      style={{ borderLeftColor: '#4338ca', borderLeftWidth: 4 }}
+      className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
+        activeClusterId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <span
+            className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
+            style={{ background: 'rgba(99,102,241,0.10)', borderColor: 'rgba(99,102,241,0.25)', color: '#4338ca' }}
+          >
+            {item.category}
+          </span>
+          <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
+            {item.size} resolved report{item.size === 1 ? '' : 's'}{item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
+          </span>
         </div>
-        <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
-        <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
-          {item.recommendation}
-        </div>
-        <div onClick={(e) => e.stopPropagation()} className="flex">
-          <ClusterDispatchAction item={item} onDispatched={loadData} />
-        </div>
+        <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors shrink-0" />
       </div>
-    );
-  };
+      <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
+      <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
+        {item.recommendation}
+      </div>
+    </div>
+  );
 
   // No dispatch action here — every item is a resolved report that came
   // back, not unclaimed work, so there's nothing to send a crew to.
@@ -1775,17 +1821,6 @@ export function AnalyticsPage() {
           }`}
         >
           Predictive Hotspots ({recurringHotspots.length + rootCauseAdvisories.length})
-        </button>
-        <button
-          onClick={() => setActiveViewTab('dispatch')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            activeViewTab === 'dispatch'
-              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
-              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
-          }`}
-        >
-          <Truck size={15} />
-          Dispatch &amp; Audit
         </button>
       </div>
 
@@ -2361,7 +2396,7 @@ export function AnalyticsPage() {
                         )}
                       </div>
                       <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">
-                        {activeTab === 'single' ? 'Sorted by how often it has recurred, most first' : 'Sorted by priority, highest first'}
+                        {activeTab === 'single' ? 'Sorted by how often it has recurred, most first' : 'Sorted by cluster size, most reports first'}
                       </span>
                     </div>
                     {activeTab === 'systemic' && (
@@ -2384,9 +2419,9 @@ export function AnalyticsPage() {
                     ) : (
                       <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
                         <Info size={10} className="inline mr-1 -mt-0.5" />
-                        Priority score combines report count, upvotes, how urgent the category is, and how long it's
-                        been open — reports tightly clustered together and from reporters with an accurate track
-                        record count for more. Same score the Dispatch & Audit queue uses.
+                        Built from resolved reports only — two or more different categories (e.g. drainage and road
+                        damage) that were both fixed near each other, suggesting one caused the other. Not
+                        currently-open work — there's nothing to dispatch here, it's a pattern worth investigating.
                       </p>
                     )}
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
@@ -2403,10 +2438,10 @@ export function AnalyticsPage() {
                         displayAdvisories.length === 0 ? (
                           <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
                             <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
-                            {rootCauseAdvisories.length === 0 ? 'No systemic cross-department issues detected.' : `No systemic issues match "${hotspotSearch}".`}
+                            {resolvedSystemicAdvisories.length === 0 ? 'No resolved systemic cross-category patterns detected.' : `No systemic issues match "${hotspotSearch}".`}
                           </div>
                         ) : (
-                          displayAdvisories.map((a) => renderHotspotCard(a, true))
+                          displayAdvisories.map((a) => renderHotspotCard(a))
                         )
                       )}
                     </div>
@@ -2426,19 +2461,7 @@ export function AnalyticsPage() {
                   >
                     <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {priorityById[activeCluster.id] && (
-                          <span
-                            className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
-                            style={{
-                              color: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).color,
-                              background: (RISK_TONE[priorityById[activeCluster.id].primaryRisk] || DEFAULT_RISK_TONE).bg,
-                            }}
-                            title={PRIORITY_RISK_EXPLANATION[priorityById[activeCluster.id].primaryRisk] || ''}
-                          >
-                            Priority {priorityById[activeCluster.id].priorityScore} · {priorityById[activeCluster.id].primaryRisk}
-                          </span>
-                        )}
-                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[#4a5d3f]/10 border border-[#4a5d3f]/20 text-[#4a5d3f]">
+                        <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-[rgba(99,102,241,0.10)] border border-[rgba(99,102,241,0.25)] text-[#4338ca]">
                           {activeCluster.category}
                         </span>
                       </div>
@@ -2465,13 +2488,7 @@ export function AnalyticsPage() {
                             <Circle
                               center={[activeCluster.latitude, activeCluster.longitude]}
                               radius={proximityRadius}
-                              pathOptions={{
-                                color: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
-                                fillColor: activeCluster.id.startsWith('advisory-') ? '#6366f1' : '#4a5d3f',
-                                fillOpacity: 0.06,
-                                weight: 1.5,
-                                dashArray: activeCluster.id.startsWith('advisory-') ? '6, 6' : undefined
-                              }}
+                              pathOptions={{ color: '#6366f1', fillColor: '#6366f1', fillOpacity: 0.06, weight: 1.5, dashArray: '6, 6' }}
                             />
                             {activeCluster.items
                               .filter((it) => it.latitude != null && it.longitude != null)
@@ -2480,12 +2497,7 @@ export function AnalyticsPage() {
                                   key={it.id}
                                   center={[it.latitude, it.longitude]}
                                   radius={7}
-                                  pathOptions={{
-                                    color: clusterMarkerColor(it.status),
-                                    fillColor: clusterMarkerColor(it.status),
-                                    fillOpacity: 0.9,
-                                    weight: 2,
-                                  }}
+                                  pathOptions={{ color: '#15803d', fillColor: '#15803d', fillOpacity: 0.9, weight: 2 }}
                                 >
                                   <Popup>
                                     <div style={{ fontSize: 12, minWidth: 180 }}>
@@ -2501,17 +2513,9 @@ export function AnalyticsPage() {
                           </MapContainer>
                         </div>
                         <div className="flex items-center gap-3 flex-wrap mt-2 text-[10px] text-[#8a8477]">
-                          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Waiting to be actioned</span>
-                          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
+                          <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#15803d' }} /> Resolved report</span>
                           <span>Click a marker for that report's detail.</span>
                         </div>
-                        {priorityById[activeCluster.id] && (
-                          <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
-                            <Info size={10} className="inline mr-1 -mt-0.5" />
-                            Priority {priorityById[activeCluster.id].priorityScore} of 100.{' '}
-                            {PRIORITY_RISK_EXPLANATION[priorityById[activeCluster.id].primaryRisk] || ''}
-                          </p>
-                        )}
                       </div>
 
                       {/* Edit Name */}
@@ -2917,17 +2921,6 @@ export function AnalyticsPage() {
               );
             })()}
 
-          </div>
-        )}
-
-        {/* ==================== DISPATCH & AUDIT TAB ==================== */}
-        {activeViewTab === 'dispatch' && (
-          <div className="space-y-6 animate-fade-in">
-            {filterBar}
-            <DispatchAudit
-              dispatchQueue={prioritizedDispatchQueue}
-              onDispatched={loadData}
-            />
           </div>
         )}
 
