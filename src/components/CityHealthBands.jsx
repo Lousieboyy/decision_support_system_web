@@ -555,7 +555,11 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           <IndexGauge
             value={infrastructureFragility.index}
             label="Fragility"
-            caption={`${ifiZones.length} zone${ifiZones.length === 1 ? '' : 's'} scored`}
+            caption={
+              ifiZones.length === 1
+                ? `This is ${ifiZones[0].zone}'s score, not yet a citywide average — only one zone has enough reports.`
+                : `${ifiZones.length} zone${ifiZones.length === 1 ? '' : 's'} scored`
+            }
             excludedCount={0}
             totalDomains={ifiZones.length}
             formula="Each zone below blends three signals into its own score — this number is those zone scores averaged, weighted by population."
@@ -578,6 +582,11 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                       {ifiZones[0].driverLabel && (
                         <div className="text-[11px] text-[#8a8477] mt-1 leading-relaxed max-w-md">Mainly {ifiZones[0].driverLabel}.</div>
                       )}
+                      <div className="text-[10px] text-[#8a8477] mt-2 leading-relaxed max-w-md">
+                        {ifiZones[0].reportCount} reports · {ifiZones[0].district} district · {ifiZones[0].ratePer10k.toFixed(1)} per 10,000 residents
+                        {ifiZones[0].failureRatePct != null && <> · {ifiZones[0].failureRatePct}% of repairs broke again</>}
+                        {ifiZones[0].mtbfDays != null && <> · avg {Math.round(ifiZones[0].mtbfDays)}d between problems</>}
+                      </div>
                     </div>
                     <div className="text-2xl font-black shrink-0" style={{ color: scoreColor(ifiZones[0].score) }}>
                       {ifiZones[0].score}
