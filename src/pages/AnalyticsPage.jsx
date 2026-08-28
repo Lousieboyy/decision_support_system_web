@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, Fragment } from 'react';
 import { fetchAllReports, fetchAuthorityActions } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
@@ -7,7 +7,7 @@ import {
   BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar, LabelList,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
@@ -74,6 +74,12 @@ function HeatmapLayer({ points, ready }) {
   }, [map, points, ready]);
   return null;
 }
+
+const fmtRecurDate = (v) => {
+  if (!v) return 'unknown date';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy');
+};
 
 // Forces Leaflet to recalculate container size on render
 function MapResizer() {
@@ -185,6 +191,7 @@ export function AnalyticsPage() {
     }
   }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
+  const [activeRecurringId, setActiveRecurringId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   // The Overview charts used to each pop their own single-dimension "reports
   // matching this one click" panel — date OR category OR department, never
@@ -485,6 +492,62 @@ export function AnalyticsPage() {
   // not a fixed shortlist. See buildReliabilityAudit for the methodology.
   const reliabilityAudit = useMemo(() => buildReliabilityAudit(filteredReports), [filteredReports]);
   const contractorAudit = reliabilityAudit.rows;
+
+  // 1c.1. Predictive Hotspots (reworked) — recurring-failure locations, not
+  // currently-open backlog. A resolved report that reappeared nearby within
+  // REINCIDENCE.radiusM/windowDays means the earlier fix didn't hold; this
+  // proximity-clusters those flagged reports using the same evidence
+  // buildReliabilityAudit already computed, instead of re-deriving it.
+  // Deliberately has no dispatch action: every report in a cluster here is
+  // already Resolved, so there is no unclaimed work to send a crew to — this
+  // is a "watch this area, the real cause likely wasn't fixed" signal, not
+  // an action queue. hotspots/rootCauseAdvisories (above) are untouched and
+  // still drive Dispatch & Audit, the Overview KPI cards, and Systemic.
+  const recurringHotspots = useMemo(() => {
+    const flagged = reliabilityAudit.rows
+      .flatMap((row) => row.tickets)
+      .filter((t) => t.reappearances.length > 0 && t.latitude != null && t.longitude != null);
+
+    const clusters = [];
+    flagged.forEach((ticket) => {
+      let foundCluster = false;
+      for (const cluster of clusters) {
+        if (cluster.category === ticket.category) {
+          const match = cluster.items.some(
+            (item) => calculateDistance(item.latitude, item.longitude, ticket.latitude, ticket.longitude) <= proximityRadius
+          );
+          if (match) {
+            cluster.items.push(ticket);
+            foundCluster = true;
+            break;
+          }
+        }
+      }
+      if (!foundCluster) {
+        clusters.push({ id: `recur-${clusters.length + 1}`, category: ticket.category, items: [ticket] });
+      }
+    });
+
+    return clusters
+      .filter((c) => c.items.length >= minClusterSize)
+      .map((c) => {
+        const totalReappearances = c.items.reduce((sum, t) => sum + t.reappearances.length, 0);
+        const avgLat = c.items.reduce((sum, t) => sum + t.latitude, 0) / c.items.length;
+        const avgLng = c.items.reduce((sum, t) => sum + t.longitude, 0) / c.items.length;
+        const representative = [...c.items].sort((a, b) => b.reappearances.length - a.reappearances.length)[0];
+        return {
+          id: c.id,
+          category: c.category,
+          size: c.items.length,
+          totalReappearances,
+          latitude: avgLat,
+          longitude: avgLng,
+          address: representative.address,
+          items: c.items,
+        };
+      })
+      .sort((a, b) => b.totalReappearances - a.totalReappearances);
+  }, [reliabilityAudit, proximityRadius, minClusterSize]);
 
   // 1c.5. Reporter Trust Map calculation based on reports
   const reporterTrustMap = useMemo(() => {
@@ -1495,21 +1558,23 @@ export function AnalyticsPage() {
   }
 
   const activeCluster = activeClusterId
-    ? (hotspots.find(h => h.id === activeClusterId) || rootCauseAdvisories.find(a => a.id === activeClusterId))
+    ? rootCauseAdvisories.find(a => a.id === activeClusterId)
+    : null;
+  const activeRecurring = activeRecurringId
+    ? recurringHotspots.find(c => c.id === activeRecurringId)
     : null;
 
-  // Predictive Hotspots list: ranked by the same priority score as the
-  // Dispatch & Audit queue (not raw cluster size) so the most urgent item is
-  // always first, and searchable by address/category once there are more
-  // than a handful of clusters to scan.
+  // Predictive Hotspots list: searchable by address/category once there are
+  // more than a handful of clusters to scan. Systemic stays ranked by the
+  // same priority score as the Dispatch & Audit queue; the recurring-failure
+  // Hotspots list is ranked by total reappearances instead (already sorted
+  // that way by the recurringHotspots memo).
   const hotspotSearchLower = hotspotSearch.trim().toLowerCase();
   const matchesHotspotSearch = (item) =>
     !hotspotSearchLower ||
     item.address.toLowerCase().includes(hotspotSearchLower) ||
     item.category.toLowerCase().includes(hotspotSearchLower);
-  const displayHotspots = [...hotspots]
-    .filter(matchesHotspotSearch)
-    .sort((a, b) => (priorityById[b.id]?.priorityScore ?? 0) - (priorityById[a.id]?.priorityScore ?? 0));
+  const displayRecurringHotspots = recurringHotspots.filter(matchesHotspotSearch);
   const displayAdvisories = [...rootCauseAdvisories]
     .filter(matchesHotspotSearch)
     .sort((a, b) => (priorityById[b.id]?.priorityScore ?? 0) - (priorityById[a.id]?.priorityScore ?? 0));
@@ -1567,6 +1632,51 @@ export function AnalyticsPage() {
       </div>
     );
   };
+
+  // No dispatch action here — every item is a resolved report that came
+  // back, not unclaimed work, so there's nothing to send a crew to.
+  const renderRecurringHotspotCard = (item) => (
+    <div
+      key={item.id}
+      onClick={() => {
+        setActiveRecurringId(item.id);
+        setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
+      }}
+      style={{ borderLeftColor: '#b91c1c', borderLeftWidth: 4 }}
+      className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
+        activeRecurringId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <span
+            className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
+            style={{ background: 'rgba(185,28,28,0.08)', borderColor: 'rgba(185,28,28,0.20)', color: '#b91c1c' }}
+          >
+            {item.category}
+          </span>
+          <span className="text-[10px] font-bold text-[#8a8477]">
+            {item.size} repair{item.size === 1 ? '' : 's'} reappeared
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span
+            className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
+            style={{ color: '#b91c1c', background: 'rgba(185,28,28,0.08)' }}
+            title={`${item.totalReappearances} repeat failure${item.totalReappearances === 1 ? '' : 's'} recorded nearby`}
+          >
+            {item.totalReappearances}×
+          </span>
+          <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors" />
+        </div>
+      </div>
+      <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
+      <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
+        A resolved {item.category.toLowerCase()} repair near here reappeared {item.totalReappearances} time{item.totalReappearances === 1 ? '' : 's'} —
+        worth checking whether the original fix actually addressed the cause.
+      </div>
+    </div>
+  );
 
   // The date filter cohorts by SUBMISSION date (matchesDateFilter keys off
   // r.timestamp). Saying so matters: cohorting by resolution date instead would
@@ -1664,7 +1774,7 @@ export function AnalyticsPage() {
               : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
           }`}
         >
-          Predictive Hotspots ({hotspots.length + rootCauseAdvisories.length})
+          Predictive Hotspots ({recurringHotspots.length + rootCauseAdvisories.length})
         </button>
         <button
           onClick={() => setActiveViewTab('dispatch')}
@@ -2169,7 +2279,7 @@ export function AnalyticsPage() {
                       : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
                   }`}
                 >
-                  Hotspots ({hotspots.length})
+                  Hotspots ({recurringHotspots.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('systemic')}
@@ -2250,7 +2360,9 @@ export function AnalyticsPage() {
                           </button>
                         )}
                       </div>
-                      <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">Sorted by priority, highest first</span>
+                      <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">
+                        {activeTab === 'single' ? 'Sorted by how often it has recurred, most first' : 'Sorted by priority, highest first'}
+                      </span>
                     </div>
                     {activeTab === 'systemic' && (
                       <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
@@ -2261,21 +2373,31 @@ export function AnalyticsPage() {
                         other. Fixing the visible symptom without the cause tends to bring it back.
                       </p>
                     )}
-                    <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
-                      <Info size={10} className="inline mr-1 -mt-0.5" />
-                      Priority score combines report count, upvotes, how urgent the category is, and how long it's
-                      been open — reports tightly clustered together and from reporters with an accurate track
-                      record count for more. Same score the Dispatch & Audit queue uses.
-                    </p>
+                    {activeTab === 'single' ? (
+                      <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
+                        <Info size={10} className="inline mr-1 -mt-0.5" />
+                        This shows resolved repairs that came back — a new report of the same category within{' '}
+                        {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days of the fix, evidence the original
+                        repair didn't hold. Not currently-open work — there's nothing to dispatch here, it's a
+                        signal for wherever repairs get planned.
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
+                        <Info size={10} className="inline mr-1 -mt-0.5" />
+                        Priority score combines report count, upvotes, how urgent the category is, and how long it's
+                        been open — reports tightly clustered together and from reporters with an accurate track
+                        record count for more. Same score the Dispatch & Audit queue uses.
+                      </p>
+                    )}
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
-                        displayHotspots.length === 0 ? (
+                        displayRecurringHotspots.length === 0 ? (
                           <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
                             <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
-                            {hotspots.length === 0 ? 'No high-density active hotspots detected.' : `No hotspots match "${hotspotSearch}".`}
+                            {recurringHotspots.length === 0 ? 'No recurring-failure locations detected.' : `No hotspots match "${hotspotSearch}".`}
                           </div>
                         ) : (
-                          displayHotspots.map((h) => renderHotspotCard(h, false))
+                          displayRecurringHotspots.map((h) => renderRecurringHotspotCard(h))
                         )
                       ) : (
                         displayAdvisories.length === 0 ? (
@@ -2476,6 +2598,88 @@ export function AnalyticsPage() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Recurring-hotspot detail popup — read-only by design. Everything
+                in here is already Resolved, so there's no assignment to edit
+                and no crew to dispatch; the map's job is just to show why this
+                spot was flagged, matching the same original-to-reappearance
+                visual language as the Repair Reliability modal. */}
+            {activeRecurring && (
+              <>
+                <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setActiveRecurringId(null)} />
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                  <div
+                    className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
+                    style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
+                  >
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
+                      <div>
+                        <div className="text-sm font-black text-[#201f1b]">{activeRecurring.category} — recurring failure</div>
+                        <div className="text-[11px] text-[#8a8477]">
+                          {activeRecurring.size} resolved repair{activeRecurring.size === 1 ? '' : 's'} · {activeRecurring.totalReappearances} reappearance{activeRecurring.totalReappearances === 1 ? '' : 's'} nearby
+                        </div>
+                      </div>
+                      <button onClick={() => setActiveRecurringId(null)} className="p-2 rounded-full transition-colors" style={{ color: '#8a8477' }}>
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div className="p-5 overflow-y-auto space-y-4">
+                      <p className="text-xs text-[#8a8477] leading-relaxed">
+                        Each green marker is a repair the council marked Resolved. Each red marker is a later report of
+                        the same category within {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days — evidence the
+                        original fix didn't hold. This is historical only: nothing here is unclaimed work, so there's
+                        nothing to dispatch — worth a look from whoever plans repairs for this area.
+                      </p>
+                      <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 340 }}>
+                        <MapContainer key={activeRecurring.id} center={[activeRecurring.latitude, activeRecurring.longitude]} zoom={15} style={{ height: '100%', width: '100%' }}>
+                          <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          />
+                          {activeRecurring.items.map((ticket) => (
+                            <Fragment key={ticket.id}>
+                              <CircleMarker center={[ticket.latitude, ticket.longitude]} radius={7} pathOptions={{ color: '#15803d', fillColor: '#15803d', fillOpacity: 0.85, weight: 2 }}>
+                                <Popup>
+                                  <div style={{ fontSize: 12, minWidth: 180 }}>
+                                    <div style={{ fontWeight: 700 }}>{ticket.address}</div>
+                                    <div style={{ color: '#8a8477' }}>Resolved {fmtRecurDate(ticket.resolvedAt)}</div>
+                                  </div>
+                                </Popup>
+                              </CircleMarker>
+                              {ticket.reappearances.filter((rep) => rep.latitude != null && rep.longitude != null).map((rep) => (
+                                <Fragment key={rep.id}>
+                                  <Polyline positions={[[ticket.latitude, ticket.longitude], [rep.latitude, rep.longitude]]} pathOptions={{ color: '#b91c1c', weight: 2, dashArray: '4 4' }} />
+                                  <CircleMarker center={[rep.latitude, rep.longitude]} radius={5} pathOptions={{ color: '#b91c1c', fillColor: '#fff', fillOpacity: 1, weight: 2 }}>
+                                    <Popup>
+                                      <div style={{ fontSize: 12, minWidth: 160 }}>
+                                        <div style={{ fontWeight: 700 }}>{rep.address}</div>
+                                        <div style={{ color: '#8a8477' }}>Reappeared {fmtRecurDate(rep.at)}, {rep.distanceM}m from the original repair</div>
+                                      </div>
+                                    </Popup>
+                                  </CircleMarker>
+                                </Fragment>
+                              ))}
+                            </Fragment>
+                          ))}
+                          <MapResizer />
+                        </MapContainer>
+                      </div>
+                      <div className="space-y-2">
+                        {activeRecurring.items.map((ticket) => (
+                          <div key={ticket.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
+                            <div className="text-xs font-bold text-[#201f1b]">{ticket.address}</div>
+                            <div className="text-[10px] text-[#8a8477] mt-0.5">
+                              Resolved {fmtRecurDate(ticket.resolvedAt)} — reappeared {ticket.reappearances.length} time{ticket.reappearances.length === 1 ? '' : 's'},
+                              most recently {fmtRecurDate(ticket.reappearances[ticket.reappearances.length - 1]?.at)} ({ticket.reappearances[ticket.reappearances.length - 1]?.distanceM}m away)
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
