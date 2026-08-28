@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, Fragment } from 'react';
+import { useEffect, useState, useMemo, useRef, Fragment } from 'react';
 import { fetchAllReports, fetchAuthorityActions } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
@@ -198,6 +198,11 @@ export function AnalyticsPage() {
   // else entirely.
   const [showActiveHotspotsModal, setShowActiveHotspotsModal] = useState(false);
   const [activeHotspotFocusId, setActiveHotspotFocusId] = useState(null);
+  const [activeHotspotMapFocus, setActiveHotspotMapFocus] = useState(null);
+  // Leaflet layer instances keyed by hotspot id, so clicking a list card can
+  // imperatively open that marker's popup on the map — react-leaflet has no
+  // declarative "open this popup" prop, the layer itself does.
+  const activeHotspotMarkerRefs = useRef({});
   // Lifted out of CityHealthBands so the Zone chart below it can show the
   // dimension that matches whichever score band is currently selected,
   // instead of the same resolution-rate chart under every tab.
@@ -574,10 +579,18 @@ export function AnalyticsPage() {
   // is a "watch this area, the real cause likely wasn't fixed" signal, not
   // an action queue. hotspots/rootCauseAdvisories (above) are untouched and
   // still drive Dispatch & Audit, the Overview KPI cards, and Systemic.
-  const recurringHotspots = useMemo(() => {
-    const flagged = reliabilityAudit.rows
+  // Extracted so the empty-state below can show a real example ticket
+  // instead of just an abstract count, without re-deriving this list.
+  const flaggedReappearedTickets = useMemo(() =>
+    reliabilityAudit.rows
       .flatMap((row) => row.tickets)
-      .filter((t) => t.reappearances.length > 0 && t.latitude != null && t.longitude != null);
+      .filter((t) => t.reappearances.length > 0 && t.latitude != null && t.longitude != null)
+      .sort((a, b) => b.reappearances.length - a.reappearances.length),
+    [reliabilityAudit]
+  );
+
+  const recurringHotspots = useMemo(() => {
+    const flagged = flaggedReappearedTickets;
 
     const clusters = [];
     flagged.forEach((ticket) => {
@@ -618,7 +631,7 @@ export function AnalyticsPage() {
         };
       })
       .sort((a, b) => b.totalReappearances - a.totalReappearances);
-  }, [reliabilityAudit, proximityRadius, minClusterSize]);
+  }, [flaggedReappearedTickets, proximityRadius, minClusterSize]);
 
   // 1c.5. Reporter Trust Map calculation based on reports
   const reporterTrustMap = useMemo(() => {
@@ -1599,6 +1612,17 @@ export function AnalyticsPage() {
     }
   }, [recurringHotspots, activeRecurringId]);
 
+  // Clicking a card in the Active Hotspots popup list only moves state — this
+  // is what actually makes the map respond, opening the real Leaflet popup on
+  // that marker instead of just leaving a subtle highlight the admin has to
+  // go hunting for on the map themselves.
+  useEffect(() => {
+    if (showActiveHotspotsModal && activeHotspotFocusId) {
+      const marker = activeHotspotMarkerRefs.current[activeHotspotFocusId];
+      if (marker) marker.openPopup();
+    }
+  }, [activeHotspotFocusId, showActiveHotspotsModal]);
+
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -1926,26 +1950,29 @@ export function AnalyticsPage() {
                   <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.hotspotsCount} Zones</div>
                   <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Areas with several reports close together</div>
                   {/* The zone count alone doesn't say what's clustering —
-                      the category breakdown does. */}
+                      the category breakdown does. Grid instead of flex-wrap
+                      so the badges line up in even columns regardless of how
+                      long each category name is, instead of ragged rows. */}
                   {hotspotCategoryBreakdown.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-3 pt-3 border-t border-[#1f1e1a]/6">
+                    <div className="grid grid-cols-2 gap-1 mt-3 pt-3 border-t border-[#1f1e1a]/6">
                       {hotspotCategoryBreakdown.map(([category, count]) => (
                         <button
                           key={category}
                           onClick={() => openExplore({ category })}
-                          className="px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer"
+                          className="flex items-center justify-between gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer text-left"
                           style={{ background: 'rgba(193,97,63,0.08)', color: '#c1613f' }}
                           title={`${count} hotspot zone${count === 1 ? '' : 's'} in ${category} — click to see those reports`}
                         >
-                          {category} {count}
+                          <span className="truncate">{category}</span>
+                          <span className="shrink-0">{count}</span>
                         </button>
                       ))}
                     </div>
                   )}
                   <button
                     onClick={() => setShowActiveHotspotsModal(true)}
-                    className="mt-2 text-[9px] font-bold underline decoration-dotted underline-offset-2 cursor-pointer"
-                    style={{ color: '#4a5d3f' }}
+                    className="mt-3 w-full px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer text-center"
+                    style={{ background: '#c1613f', color: '#fff' }}
                   >
                     Full breakdown →
                   </button>
@@ -2469,18 +2496,33 @@ export function AnalyticsPage() {
                           </div>
                         ) : (
                           // Recurrence exists somewhere, just not 2+ in the same
-                          // spot yet — the honest reason, with a real path to the
-                          // actual evidence instead of a dead "0 results" screen.
+                          // spot yet. The raw count already lives on the Overview
+                          // KPI card (Repair Reliability), so repeating it here
+                          // would just be noise — a real example of what "the fix
+                          // didn't hold" actually looks like is more useful than
+                          // another number, and gives admin something concrete to
+                          // recognize the pattern from next time it happens.
                           <div className="rounded-xl px-4 py-3" style={{ background: 'rgba(180,131,7,0.08)', color: '#8a5a00' }}>
                             <div className="flex items-center gap-2">
                               <AlertTriangle size={16} className="shrink-0" />
-                              <p className="text-xs font-bold">
-                                {reliabilityAudit.totalReIncidence} repair{reliabilityAudit.totalReIncidence === 1 ? '' : 's'} reappeared, but not clustered
-                              </p>
+                              <p className="text-xs font-bold">Not clustered yet — here's what that looks like</p>
                             </div>
                             <p className="text-[11px] mt-1 leading-relaxed opacity-90">
-                              None are close enough together yet to show as a {minClusterSize}+ cluster here.
+                              No {minClusterSize}+ group in the same spot yet, but this is a real repair that came back:
                             </p>
+                            <div className="mt-2 space-y-1.5">
+                              {flaggedReappearedTickets.slice(0, 2).map((t) => (
+                                <div key={t.id} className="rounded-lg px-3 py-2" style={{ background: 'rgba(255,255,255,0.55)' }}>
+                                  <div className="text-[11px] font-bold" style={{ color: '#201f1b' }}>
+                                    {t.category} — {t.address}
+                                  </div>
+                                  <div className="text-[10px] mt-0.5 opacity-90">
+                                    Resolved {fmtRecurDate(t.resolvedAt)} — reappeared {t.reappearances.length} time{t.reappearances.length === 1 ? '' : 's'},
+                                    most recently {fmtRecurDate(t.reappearances[t.reappearances.length - 1]?.at)} ({t.reappearances[t.reappearances.length - 1]?.distanceM}m away)
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                             <button
                               onClick={() => setShowReliabilityModal(true)}
                               className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
@@ -3000,7 +3042,7 @@ export function AnalyticsPage() {
           <div
             className="fixed inset-0 z-40 overlay-fade-in"
             style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
-            onClick={() => { setShowActiveHotspotsModal(false); setActiveHotspotFocusId(null); }}
+            onClick={() => { setShowActiveHotspotsModal(false); setActiveHotspotFocusId(null); setActiveHotspotMapFocus(null); }}
           />
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
@@ -3015,7 +3057,7 @@ export function AnalyticsPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setShowActiveHotspotsModal(false); setActiveHotspotFocusId(null); }}
+                  onClick={() => { setShowActiveHotspotsModal(false); setActiveHotspotFocusId(null); setActiveHotspotMapFocus(null); }}
                   className="p-2 rounded-full transition-colors"
                   style={{ color: '#8a8477' }}
                 >
@@ -3032,6 +3074,7 @@ export function AnalyticsPage() {
                     {hotspots.map((h) => (
                       <CircleMarker
                         key={h.id}
+                        ref={(instance) => { if (instance) activeHotspotMarkerRefs.current[h.id] = instance; }}
                         center={[h.latitude, h.longitude]}
                         radius={activeHotspotFocusId === h.id ? 12 : 7 + Math.min(h.size, 8)}
                         pathOptions={{
@@ -3050,6 +3093,7 @@ export function AnalyticsPage() {
                         </Popup>
                       </CircleMarker>
                     ))}
+                    <MapController focus={activeHotspotMapFocus} />
                     <MapResizer />
                   </MapContainer>
                 </div>
@@ -3060,7 +3104,10 @@ export function AnalyticsPage() {
                     hotspots.map((h) => (
                       <div
                         key={h.id}
-                        onClick={() => setActiveHotspotFocusId(h.id)}
+                        onClick={() => {
+                          setActiveHotspotFocusId(h.id);
+                          setActiveHotspotMapFocus({ center: [h.latitude, h.longitude], zoom: 15, trigger: Date.now() });
+                        }}
                         className={`p-4 border rounded-xl space-y-2 cursor-pointer transition-all ${
                           activeHotspotFocusId === h.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8 hover:border-[#4a5d3f]/30'
                         }`}
