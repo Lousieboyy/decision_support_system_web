@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, Fragment } from 'react';
-import { fetchAllReports, fetchAuthorityActions } from '../api/reportsApi';
+import { fetchAllReports, fetchAuthorityActions, getImageUrl } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
@@ -79,6 +79,22 @@ const fmtRecurDate = (v) => {
   const d = new Date(v);
   return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy');
 };
+
+// Renders nothing when there's no photo, rather than a placeholder box —
+// most reports won't have one, and an empty frame on every card just adds
+// visual noise without telling the admin anything.
+function CardThumb({ path, alt }) {
+  const url = getImageUrl(path);
+  if (!url) return null;
+  return (
+    <img
+      src={url}
+      alt={alt || ''}
+      loading="lazy"
+      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-[#1f1e1a]/10"
+    />
+  );
+}
 
 // Forces Leaflet to recalculate container size on render
 function MapResizer() {
@@ -336,6 +352,13 @@ export function AnalyticsPage() {
         const sortedItems = [...c.items].sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
         const defaultAddress = sortedItems[0].address || sortedItems[0].location || 'Melaka District';
         const totalUpvotes = c.items.reduce((sum, item) => sum + (item.upvotes || 0), 0);
+        const latestDate = c.items.reduce((max, item) => {
+          const t = item.timestamp ? new Date(item.timestamp).getTime() : NaN;
+          return !isNaN(t) && t > max ? t : max;
+        }, 0);
+        // Most upvoted report with a photo, so the thumbnail is representative
+        // instead of whichever report happened to be pushed into the cluster first.
+        const thumbSource = sortedItems.find((item) => item.image_path)?.image_path || null;
 
         // Check if there are overrides for this seedId
         const override = customOverrides[c.seedId] || {};
@@ -374,9 +397,13 @@ export function AnalyticsPage() {
           upvotes: totalUpvotes,
           recommendation,
           items: c.items,
+          latestDate,
+          thumbSource,
         };
       })
-      .sort((a, b) => b.size - a.size);
+      // Newest activity first — an admin scanning the list should see what
+      // just happened before an older, larger cluster that's already known.
+      .sort((a, b) => b.latestDate - a.latestDate);
   }, [filteredReports, proximityRadius, minClusterSize, customOverrides]);
 
   // 1b. Cross-Department Systemic Root-Cause advisories
@@ -539,6 +566,13 @@ export function AnalyticsPage() {
         const avgLat = groupItems.reduce((sum, item) => sum + item.latitude, 0) / groupItems.length;
         const avgLng = groupItems.reduce((sum, item) => sum + item.longitude, 0) / groupItems.length;
         const totalUpvotes = groupItems.reduce((sum, item) => sum + (item.upvotes || 0), 0);
+        const latestDate = groupItems.reduce((max, item) => {
+          const t = item.resolved_at ? new Date(item.resolved_at).getTime() : NaN;
+          return !isNaN(t) && t > max ? t : max;
+        }, 0);
+        const thumbSource = groupItems.find((item) => item.completion_image_path)?.completion_image_path
+          || groupItems.find((item) => item.image_path)?.image_path
+          || null;
 
         const defaultAddress = seedReport.address || seedReport.location || 'Melaka District';
         const override = customOverrides[seedReport.id] || {};
@@ -557,11 +591,13 @@ export function AnalyticsPage() {
           upvotes: totalUpvotes,
           recommendation,
           items: groupItems,
+          latestDate,
+          thumbSource,
         });
       }
     });
 
-    return advisories.sort((a, b) => b.size - a.size);
+    return advisories.sort((a, b) => b.latestDate - a.latestDate);
   }, [filteredReports, proximityRadius, minClusterSize, customOverrides]);
 
   // 1c. Repair reliability audit — every authority with a resolved ticket,
@@ -581,13 +617,19 @@ export function AnalyticsPage() {
   // still drive Dispatch & Audit, the Overview KPI cards, and Systemic.
   // Extracted so the empty-state below can show a real example ticket
   // instead of just an abstract count, without re-deriving this list.
-  const flaggedReappearedTickets = useMemo(() =>
-    reliabilityAudit.rows
+  // Sorted by most recent reappearance so the example shown is the newest
+  // occurrence of the pattern, not just the one that's reappeared the most.
+  const flaggedReappearedTickets = useMemo(() => {
+    const mostRecentReappearance = (t) =>
+      t.reappearances.reduce((max, r) => {
+        const at = r.at ? new Date(r.at).getTime() : NaN;
+        return !isNaN(at) && at > max ? at : max;
+      }, 0);
+    return reliabilityAudit.rows
       .flatMap((row) => row.tickets)
       .filter((t) => t.reappearances.length > 0 && t.latitude != null && t.longitude != null)
-      .sort((a, b) => b.reappearances.length - a.reappearances.length),
-    [reliabilityAudit]
-  );
+      .sort((a, b) => mostRecentReappearance(b) - mostRecentReappearance(a));
+  }, [reliabilityAudit]);
 
   const recurringHotspots = useMemo(() => {
     const flagged = flaggedReappearedTickets;
@@ -619,6 +661,16 @@ export function AnalyticsPage() {
         const avgLat = c.items.reduce((sum, t) => sum + t.latitude, 0) / c.items.length;
         const avgLng = c.items.reduce((sum, t) => sum + t.longitude, 0) / c.items.length;
         const representative = [...c.items].sort((a, b) => b.reappearances.length - a.reappearances.length)[0];
+        // Latest date is the most recent reappearance across the cluster —
+        // when the pattern last showed up, not when the original was fixed.
+        const latestDate = c.items.reduce((max, t) => {
+          const mostRecent = t.reappearances.reduce((m, r) => {
+            const at = r.at ? new Date(r.at).getTime() : NaN;
+            return !isNaN(at) && at > m ? at : m;
+          }, 0);
+          return mostRecent > max ? mostRecent : max;
+        }, 0);
+        const thumbSource = c.items.find((t) => t.imagePath)?.imagePath || null;
         return {
           id: c.id,
           category: c.category,
@@ -628,9 +680,11 @@ export function AnalyticsPage() {
           longitude: avgLng,
           address: representative.address,
           items: c.items,
+          latestDate,
+          thumbSource,
         };
       })
-      .sort((a, b) => b.totalReappearances - a.totalReappearances);
+      .sort((a, b) => b.latestDate - a.latestDate);
   }, [flaggedReappearedTickets, proximityRadius, minClusterSize]);
 
   // 1c.5. Reporter Trust Map calculation based on reports
@@ -1701,8 +1755,8 @@ export function AnalyticsPage() {
         activeClusterId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap flex-1">
           <span
             className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
             style={{ background: 'rgba(99,102,241,0.10)', borderColor: 'rgba(99,102,241,0.25)', color: '#4338ca' }}
@@ -1713,12 +1767,18 @@ export function AnalyticsPage() {
             {item.size} resolved report{item.size === 1 ? '' : 's'}{item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
           </span>
         </div>
-        <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors shrink-0" />
+        <CardThumb path={item.thumbSource} alt={item.category} />
+        <ChevronRight size={12} className="text-[#8a8477] group-hover:text-[#201f1b] transition-colors shrink-0 mt-1" />
       </div>
       <div className="text-xs text-[#4b473d] font-bold">{item.address}</div>
       <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
         {item.recommendation}
       </div>
+      {item.latestDate > 0 && (
+        <div className="text-[10px] text-[#8a8477]" title={new Date(item.latestDate).toLocaleString()}>
+          Last resolved {fmtRecurDate(item.latestDate)}
+        </div>
+      )}
     </div>
   );
 
@@ -1737,8 +1797,8 @@ export function AnalyticsPage() {
         activeRecurringId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
       }`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-wrap">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap flex-1">
           <span
             className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
             style={{ background: 'rgba(185,28,28,0.08)', borderColor: 'rgba(185,28,28,0.20)', color: '#b91c1c' }}
@@ -1749,6 +1809,7 @@ export function AnalyticsPage() {
             {item.size} repair{item.size === 1 ? '' : 's'} reappeared
           </span>
         </div>
+        <CardThumb path={item.thumbSource} alt={item.category} />
         <div className="flex items-center gap-1.5 shrink-0">
           <span
             className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wide"
@@ -1764,6 +1825,11 @@ export function AnalyticsPage() {
       <div className="text-[11px] leading-relaxed text-[#8a8477] italic">
         A resolved {item.category.toLowerCase()} repair near here reappeared {item.totalReappearances} time{item.totalReappearances === 1 ? '' : 's'} — worth checking whether the original fix actually addressed the cause.
       </div>
+      {item.latestDate > 0 && (
+        <div className="text-[10px] text-[#8a8477]" title={new Date(item.latestDate).toLocaleString()}>
+          Most recently reappeared {fmtRecurDate(item.latestDate)}
+        </div>
+      )}
     </div>
   );
 
@@ -2442,7 +2508,7 @@ export function AnalyticsPage() {
                         )}
                       </div>
                       <span className="text-[10px] font-semibold text-[#8a8477] shrink-0">
-                        Sorted by cluster size, most reports first
+                        Newest activity first
                       </span>
                     </div>
                     {activeTab === 'systemic' && (
@@ -2602,6 +2668,7 @@ export function AnalyticsPage() {
                                       <div style={{ fontWeight: 700 }}>{it.address || it.location || 'Unknown location'}</div>
                                       <div style={{ color: '#8a8477', marginTop: 2 }}>Category: {it.categories || activeCluster.category}</div>
                                       <div style={{ color: '#8a8477' }}>Status: {it.status}</div>
+                                      {it.resolved_at && <div style={{ color: '#8a8477' }}>Resolved {fmtRecurDate(it.resolved_at)}</div>}
                                       {it.upvotes > 0 && <div style={{ color: '#8a8477' }}>{it.upvotes} upvotes</div>}
                                     </div>
                                   </Popup>
@@ -2680,7 +2747,10 @@ export function AnalyticsPage() {
                           <span className="px-1.5 py-0.5 rounded bg-[#f5f1e6] text-[#4b473d] text-[9px] font-black">{activeCluster.items.length} Reports</span>
                         </label>
                         <div className="max-h-[220px] overflow-y-auto pr-1 space-y-2 scrollbar-thin">
-                          {activeCluster.items.map((item) => (
+                          {activeCluster.items
+                            .slice()
+                            .sort((a, b) => (new Date(b.resolved_at).getTime() || 0) - (new Date(a.resolved_at).getTime() || 0))
+                            .map((item) => (
                             <div key={item.id} className="flex items-start gap-2.5 p-2.5 bg-[#f7f4ec] border border-[#1f1e1a]/8 rounded-lg text-left">
                               <input
                                 type="checkbox"
@@ -2695,8 +2765,10 @@ export function AnalyticsPage() {
                                 </p>
                                 <p className="text-[9px] text-[#8a8477] font-medium mt-0.5">
                                   Report #{item.id} | {item.status} | {item.upvotes || 0} Upvotes
+                                  {item.resolved_at ? ` | Resolved ${fmtRecurDate(item.resolved_at)}` : ''}
                                 </p>
                               </div>
+                              <CardThumb path={item.completion_image_path || item.image_path} alt={item.categories} />
                             </div>
                           ))}
                         </div>
@@ -2773,13 +2845,25 @@ export function AnalyticsPage() {
                         </MapContainer>
                       </div>
                       <div className="space-y-2">
-                        {activeRecurring.items.map((ticket) => (
-                          <div key={ticket.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
-                            <div className="text-xs font-bold text-[#201f1b]">{ticket.address}</div>
-                            <div className="text-[10px] text-[#8a8477] mt-0.5">
-                              Resolved {fmtRecurDate(ticket.resolvedAt)} — reappeared {ticket.reappearances.length} time{ticket.reappearances.length === 1 ? '' : 's'},
-                              most recently {fmtRecurDate(ticket.reappearances[ticket.reappearances.length - 1]?.at)} ({ticket.reappearances[ticket.reappearances.length - 1]?.distanceM}m away)
+                        {activeRecurring.items
+                          .slice()
+                          .sort((a, b) => {
+                            const latest = (t) => t.reappearances.reduce((max, r) => {
+                              const at = r.at ? new Date(r.at).getTime() : NaN;
+                              return !isNaN(at) && at > max ? at : max;
+                            }, 0);
+                            return latest(b) - latest(a);
+                          })
+                          .map((ticket) => (
+                          <div key={ticket.id} className="rounded-xl p-3 border border-[#1f1e1a]/8 flex items-start gap-2.5" style={{ background: 'var(--cream-100)' }}>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-bold text-[#201f1b]">{ticket.address}</div>
+                              <div className="text-[10px] text-[#8a8477] mt-0.5">
+                                Resolved {fmtRecurDate(ticket.resolvedAt)} — reappeared {ticket.reappearances.length} time{ticket.reappearances.length === 1 ? '' : 's'},
+                                most recently {fmtRecurDate(ticket.reappearances[ticket.reappearances.length - 1]?.at)} ({ticket.reappearances[ticket.reappearances.length - 1]?.distanceM}m away)
+                              </div>
                             </div>
+                            <CardThumb path={ticket.imagePath} alt={ticket.category} />
                           </div>
                         ))}
                       </div>
@@ -3053,7 +3137,7 @@ export function AnalyticsPage() {
                 <div>
                   <div className="text-sm font-black text-[#201f1b]">Active Hotspots</div>
                   <div className="text-[11px] text-[#8a8477]">
-                    {hotspots.length} zone{hotspots.length === 1 ? '' : 's'} with several active reports close together
+                    {hotspots.length} zone{hotspots.length === 1 ? '' : 's'} with several active reports close together — newest activity first
                   </div>
                 </div>
                 <button
@@ -3089,6 +3173,9 @@ export function AnalyticsPage() {
                           <div style={{ fontSize: 12, minWidth: 160 }}>
                             <div style={{ fontWeight: 700 }}>{h.category}</div>
                             <div style={{ color: '#8a8477' }}>{h.size} active reports · {h.address}</div>
+                            {h.latestDate > 0 && (
+                              <div style={{ color: '#8a8477' }}>Latest {fmtRecurDate(h.latestDate)}</div>
+                            )}
                           </div>
                         </Popup>
                       </CircleMarker>
@@ -3112,19 +3199,27 @@ export function AnalyticsPage() {
                           activeHotspotFocusId === h.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8 hover:border-[#4a5d3f]/30'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span
-                            className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
-                            style={{ background: 'rgba(180,83,9,0.10)', borderColor: 'rgba(180,83,9,0.25)', color: '#b45309' }}
-                          >
-                            {h.category}
-                          </span>
-                          <span className="text-[10px] font-bold text-[#8a8477]">
-                            {h.size} active report{h.size === 1 ? '' : 's'}{h.upvotes > 0 && ` · ${h.upvotes} upvotes`}
-                          </span>
+                        <div className="flex items-start justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                            <span
+                              className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
+                              style={{ background: 'rgba(180,83,9,0.10)', borderColor: 'rgba(180,83,9,0.25)', color: '#b45309' }}
+                            >
+                              {h.category}
+                            </span>
+                            <span className="text-[10px] font-bold text-[#8a8477]">
+                              {h.size} active report{h.size === 1 ? '' : 's'}{h.upvotes > 0 && ` · ${h.upvotes} upvotes`}
+                            </span>
+                          </div>
+                          <CardThumb path={h.thumbSource} alt={h.category} />
                         </div>
                         <div className="text-xs text-[#4b473d] font-bold">{h.address}</div>
                         <div className="text-[11px] leading-relaxed text-[#8a8477] italic">{h.recommendation}</div>
+                        {h.latestDate > 0 && (
+                          <div className="text-[10px] text-[#8a8477]" title={new Date(h.latestDate).toLocaleString()}>
+                            Latest report {fmtRecurDate(h.latestDate)}
+                          </div>
+                        )}
                         <div onClick={(e) => e.stopPropagation()} className="flex">
                           <ClusterDispatchAction item={h} onDispatched={loadData} />
                         </div>

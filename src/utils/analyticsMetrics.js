@@ -636,6 +636,10 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
       onTime,
       latitude: r.latitude,
       longitude: r.longitude,
+      // Completion photo shows the "after" — the state that later turned out
+      // not to hold — so it's preferred over the original submission photo
+      // when both exist.
+      imagePath: r.completion_image_path || r.image_path || null,
       // One original repair can attract more than one later complaint —
       // a single boolean+fields here used to silently overwrite earlier
       // matches, so a ticket that reappeared 5 times looked identical to
@@ -682,6 +686,7 @@ export function buildReliabilityAudit(reports, { minResolved = 1 } = {}) {
             distanceM: Math.round(nearestDist),
             latitude: report.latitude,
             longitude: report.longitude,
+            imagePath: report.image_path || null,
           });
         }
         incidents.push({
