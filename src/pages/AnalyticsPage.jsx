@@ -2440,10 +2440,55 @@ export function AnalyticsPage() {
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
                         displayRecurringHotspots.length === 0 ? (
-                          <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
-                            <CheckCircle2 className="text-[#8a8477] mb-2 animate-pulse mx-auto" size={24} />
-                            {recurringHotspots.length === 0 ? 'No recurring-failure locations detected.' : `No hotspots match "${hotspotSearch}".`}
-                          </div>
+                          hotspotSearch ? (
+                            <div className="h-48 flex flex-col items-center justify-center text-[#8a8477] text-xs text-center">
+                              <CheckCircle2 className="text-[#8a8477] mb-2 mx-auto" size={24} />
+                              No hotspots match &quot;{hotspotSearch}&quot;.
+                            </div>
+                          ) : reliabilityAudit.totalReIncidence === 0 ? (
+                            // Zero here is the good outcome, not a dead end — say so
+                            // plainly and back it with the number actually checked,
+                            // matching the positive-state styling used everywhere
+                            // else on this tab (IFI's "no zone is seriously fragile",
+                            // Repair Reliability's "repairs are holding").
+                            <div className="h-48 flex flex-col items-center justify-center text-center px-6">
+                              <div
+                                className="rounded-xl px-4 py-3 max-w-sm"
+                                style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}
+                              >
+                                <CheckCircle2 className="mx-auto mb-1.5" size={20} />
+                                <p className="text-xs font-bold">Every repair has held</p>
+                                <p className="text-[11px] mt-1 leading-relaxed opacity-90">
+                                  {reliabilityAudit.totalResolved} resolved report{reliabilityAudit.totalResolved === 1 ? '' : 's'} checked for recurrence —
+                                  none came back nearby.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            // Recurrence exists somewhere, just not 2+ in the same
+                            // spot yet — the honest reason, with a real path to the
+                            // actual evidence instead of a dead "0 results" screen.
+                            <div className="h-48 flex flex-col items-center justify-center text-center px-6">
+                              <div
+                                className="rounded-xl px-4 py-3 max-w-sm"
+                                style={{ background: 'rgba(180,131,7,0.08)', color: '#8a5a00' }}
+                              >
+                                <AlertTriangle className="mx-auto mb-1.5" size={20} />
+                                <p className="text-xs font-bold">
+                                  {reliabilityAudit.totalReIncidence} repair{reliabilityAudit.totalReIncidence === 1 ? '' : 's'} reappeared, but not clustered
+                                </p>
+                                <p className="text-[11px] mt-1 leading-relaxed opacity-90">
+                                  None are close enough together yet to show as a {minClusterSize}+ cluster here.
+                                </p>
+                                <button
+                                  onClick={() => setShowReliabilityModal(true)}
+                                  className="text-[11px] font-bold underline mt-2"
+                                >
+                                  See the full list in Repair Reliability →
+                                </button>
+                              </div>
+                            </div>
+                          )
                         ) : (
                           displayRecurringHotspots.map((h) => renderRecurringHotspotCard(h))
                         )
