@@ -66,7 +66,7 @@ function ReliabilityTooltip({ active, payload }) {
     <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
       <div className="font-bold text-[#201f1b] mb-1">{d.name}</div>
       <div className="text-[#4b473d] space-y-0.5">
-        <div>{d.resolvedCount ?? 0} resolved tickets</div>
+        <div>{d.resolvedCount ?? 0} resolved reports</div>
         <div>
           {d.reIncidence > 0 ? (
             <span className="text-[#c1613f] font-bold">{d.reIncidence} repeat failure{d.reIncidence === 1 ? '' : 's'}</span>
@@ -192,10 +192,10 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
     doc.setDrawColor(180); doc.line(M, y, 196, y); y += 2;
 
     heading('Summary');
-    line((selectedRow?.resolvedCount ?? 0) + ' resolved tickets total, ' + filteredMappable.length + ' shown after filters');
+    line((selectedRow?.resolvedCount ?? 0) + ' resolved reports total, ' + filteredMappable.length + ' shown after filters');
     line((selectedRow?.reIncidence ?? 0) + ' repeat failure(s) overall' + (selectedGrade ? ', Grade ' + selectedGrade.grade : ''));
 
-    heading('Tickets (' + filteredMappable.length + ')');
+    heading('Reports (' + filteredMappable.length + ')');
     row(['Address', 'Category', 'Status', 'Resolved', 'Days'], [65, 40, 20, 30, 20], true);
     filteredMappable.forEach((t) => {
       row([
@@ -237,7 +237,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
 
           <div className="p-5 overflow-y-auto">
             <p className="text-xs text-[#8a8477] mb-4 leading-relaxed">
-              A new complaint of the same category within {REINCIDENCE.radiusM}m and{' '}
+              A new report of the same category within {REINCIDENCE.radiusM}m and{' '}
               {REINCIDENCE.windowDays} days of a resolved one suggests the earlier repair did
               not hold. This is the closest thing available to a measure of the city's actual
               condition rather than the council's response speed.
@@ -282,14 +282,14 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                   </ResponsiveContainer>
                 </div>
                 <p className="text-[10px] text-[#8a8477] -mt-1 mb-2">
-                  Click a bar to see every resolved ticket behind that department's numbers.
+                  Click a bar to see every resolved report behind that department's numbers.
                 </p>
               </>
             )}
 
             <p className="text-[10px] text-[#8a8477] mt-3 leading-relaxed">
-              On-time rate is the share of resolved tickets closed within{' '}
-              {SLA_END_TO_END_DAYS} days, measured from submission. Tickets missing either
+              On-time rate is the share of resolved reports closed within{' '}
+              {SLA_END_TO_END_DAYS} days, measured from submission. Reports missing either
               date are excluded from both sides of the ratio rather than counted as on time.
             </p>
 
@@ -320,7 +320,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
               {!selectedAuthority ? (
                 <div className="text-center text-[#8a8477] py-8 text-xs leading-relaxed">
                   Click a department bar above to see the evidence behind its numbers —<br />
-                  every resolved ticket, which ones missed the SLA, and which ones came back.
+                  every resolved report, which ones missed the SLA, and which ones came back.
                 </div>
               ) : (
                 <>
@@ -345,13 +345,13 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                     </div>
                   </div>
                   <p className="text-xs text-[#8a8477] mb-1 leading-relaxed">
-                    {selectedRow?.resolvedCount ?? 0} resolved ticket{selectedRow?.resolvedCount === 1 ? '' : 's'}
+                    {selectedRow?.resolvedCount ?? 0} resolved report{selectedRow?.resolvedCount === 1 ? '' : 's'}
                     {' · '}
                     {flaggedTicketCount > 0 ? (
                       <span className="text-[#c1613f] font-bold">{flaggedTicketCount} place{flaggedTicketCount === 1 ? '' : 's'} keep{flaggedTicketCount === 1 ? 's' : ''} breaking again</span>
                     ) : 'nothing has broken again'}
                     {selectedGrade && <> · Grade <strong style={{ color: rateColor(selectedRow.rate) }}>{selectedGrade.grade}</strong></>}
-                    {' — every ticket below, most recently resolved first.'}
+                    {' — every report below, most recently resolved first.'}
                   </p>
                   {selectedRow?.reIncidence > 0 && (
                     <p className="text-[11px] text-[#8a8477] mb-3 leading-relaxed">
@@ -363,11 +363,11 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                   )}
                   {!selectedRow?.tickets?.length ? (
                     <div className="text-center text-[#8a8477] py-6 text-xs">
-                      No resolved tickets with both a submitted and resolved date for {selectedAuthority}.
+                      No resolved reports with both a submitted and resolved date for {selectedAuthority}.
                     </div>
                   ) : mappable.length === 0 ? (
                     <div className="text-center text-[#8a8477] py-6 text-xs">
-                      None of these tickets have usable coordinates to plot.
+                      None of these reports have usable coordinates to plot.
                     </div>
                   ) : (
                     <>
@@ -426,7 +426,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       {filteredMappable.length === 0 ? (
                         <div className="text-center text-[#8a8477] py-6 text-xs">
                           No {STATUS_FILTERS.find((f) => f.key === statusFilter)?.label.toLowerCase()}
-                          {categoryFilter !== 'all' ? ` ${categoryFilter}` : ''} tickets
+                          {categoryFilter !== 'all' ? ` ${categoryFilter}` : ''} reports
                           {(dateFrom || dateTo) ? ' in this date range' : ''} for {selectedAuthority}.
                         </div>
                       ) : (
@@ -512,8 +512,8 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                         <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#15803d' }} /> On time</span>
                         <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Late</span>
                         <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b91c1c' }} /> Repeat failure (red dashed line to where it reappeared)</span>
-                        <span className="inline-flex items-center gap-1"><span className="w-3 h-0 border-t border-dashed inline-block" style={{ borderColor: '#8a8477' }} /> Within {AREA_RADIUS_M}m of another ticket</span>
-                        {unmapped > 0 && <span>{unmapped} ticket{unmapped === 1 ? '' : 's'} without usable coordinates not shown</span>}
+                        <span className="inline-flex items-center gap-1"><span className="w-3 h-0 border-t border-dashed inline-block" style={{ borderColor: '#8a8477' }} /> Within {AREA_RADIUS_M}m of another report</span>
+                        {unmapped > 0 && <span>{unmapped} report{unmapped === 1 ? '' : 's'} without usable coordinates not shown</span>}
                       </div>
                       </>
                       )}

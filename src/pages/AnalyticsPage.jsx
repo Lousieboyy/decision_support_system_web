@@ -805,7 +805,7 @@ export function AnalyticsPage() {
         healthStatus = 'Backlog Warning';
         const top = dominantOpenCategory(selectedDept);
         const catNote = top ? ` (mostly ${top.category.toLowerCase()})` : '';
-        recommendation = `${backlog} open tickets${catNote} — bring in extra crew.`;
+        recommendation = `${backlog} open reports${catNote} — bring in extra crew.`;
       }
 
       return {
@@ -838,7 +838,7 @@ export function AnalyticsPage() {
       const helperDept = deptSLAMetrics.find((d) => d.name !== worstBacklogDept && d.backlog <= 2);
       const top = dominantOpenCategory(worstBacklogDept);
       const catNote = top ? ` (mostly ${top.category.toLowerCase()})` : '';
-      recommendation = `${worstBacklogDept}: ${maxBacklog} open tickets${catNote}. ${
+      recommendation = `${worstBacklogDept}: ${maxBacklog} open reports${catNote}. ${
         helperDept ? `${helperDept.name} could help.` : 'No department has room to help.'
       }`;
     }
@@ -932,7 +932,7 @@ export function AnalyticsPage() {
     return Object.entries(daysMap).map(([date, count]) => ({
       date: format(parseISO(date), 'MMM dd'),
       rawDate: date,
-      Complaints: count,
+      Reports: count,
     }));
   }, [trendRange, filteredReports]);
 
@@ -942,11 +942,11 @@ export function AnalyticsPage() {
     if (trendChartData.length < 14) return null;
     const last7 = trendChartData.slice(-7);
     const prior7 = trendChartData.slice(-14, -7);
-    const last7Sum = last7.reduce((s, d) => s + d.Complaints, 0);
-    const prior7Sum = prior7.reduce((s, d) => s + d.Complaints, 0);
+    const last7Sum = last7.reduce((s, d) => s + d.Reports, 0);
+    const prior7Sum = prior7.reduce((s, d) => s + d.Reports, 0);
     const pctChange = prior7Sum > 0 ? Math.round(((last7Sum - prior7Sum) / prior7Sum) * 100) : null;
-    const peak = [...trendChartData].sort((a, b) => b.Complaints - a.Complaints)[0];
-    return { last7Sum, prior7Sum, pctChange, peak: peak.Complaints > 0 ? peak : null };
+    const peak = [...trendChartData].sort((a, b) => b.Reports - a.Reports)[0];
+    return { last7Sum, prior7Sum, pctChange, peak: peak.Reports > 0 ? peak : null };
   }, [trendChartData]);
 
   // 5. Category distribution chart data
@@ -1163,7 +1163,7 @@ export function AnalyticsPage() {
     deptSLAMetrics.forEach(dept => {
       if (dept.backlog > INSIGHT.backlogAlertTickets) {
         insights.push({ id: `dept-overload-${dept.name}`, type: 'warning', title: `${dept.name} Department Overloaded`,
-          description: `${dept.name} has ${dept.backlog} active backlog tickets with an average resolution time of ${dept.avgResolveDays} days. This exceeds the 3-day SLA target.`,
+          description: `${dept.name} has ${dept.backlog} active backlog reports with an average resolution time of ${dept.avgResolveDays} days. This exceeds the 3-day SLA target.`,
           zone: 'Department-wide', action: `Move 15–20% of crew capacity from less-busy departments to ${dept.name} for the next work cycle.` });
       }
     });
@@ -1195,7 +1195,7 @@ export function AnalyticsPage() {
     const bestDept = deptSLAMetrics.filter(d => d.assigned > 0).sort((a, b) => a.avgResolveDays - b.avgResolveDays)[0];
     if (bestDept && bestDept.avgResolveDays <= 3 && bestDept.resolved > 0) {
       insights.push({ id: 'sla-achievement', type: 'success', title: `${bestDept.name} Exceeding SLA Targets`,
-        description: `${bestDept.name} maintained an average resolution time of ${bestDept.avgResolveDays} days, within the 3-day SLA target. ${bestDept.resolved} tickets resolved.`,
+        description: `${bestDept.name} maintained an average resolution time of ${bestDept.avgResolveDays} days, within the 3-day SLA target. ${bestDept.resolved} reports resolved.`,
         zone: 'Department-wide', action: `Recognize ${bestDept.name}'s performance and share how they work with other departments.` });
     }
 
@@ -1216,12 +1216,12 @@ export function AnalyticsPage() {
     if (spi != null && spi < 60) {
       insights.push({ id: 'spi-poor', type: 'critical', title: 'Service performance below target',
         description: `Service Performance score is ${spi} of 100. The council is missing its own targets across multiple steps.`,
-        zone: 'City-wide', action: 'Start with the step that takes up the largest share of the total time, shown in the "Where the time goes" chart.' });
+        zone: 'City-wide', action: 'Check the SLA chart below for the department furthest over target and start there.' });
     }
     if (uci != null && uci < 60) {
       insights.push({ id: 'uci-poor', type: 'critical', title: 'Urban condition is getting worse',
         description: `Urban Condition score is ${uci} of 100. Open issues are piling up faster than the agreed limit, no matter how fast the council responds.`,
-        zone: 'City-wide', action: 'This is a capacity or budget problem, not a process problem — resolving tickets faster alone will not fix it.' });
+        zone: 'City-wide', action: 'This is a capacity or budget problem, not a process problem — resolving reports faster alone will not fix it.' });
     }
     if (spi != null && uci != null && spi >= 80 && uci < 60) {
       insights.push({ id: 'spi-uci-divergence', type: 'info', title: 'Responding well, but falling behind',
@@ -1303,7 +1303,7 @@ export function AnalyticsPage() {
 
       // Headline figures.
       heading('Headline');
-      line('Active complaints: ' + kpiStats.active + ' of ' + kpiStats.total);
+      line('Active reports: ' + kpiStats.active + ' of ' + kpiStats.total);
       line('Average resolution: ' + (kpiStats.avgDays == null ? 'insufficient data' : kpiStats.avgDays + ' days'));
       line('Service Performance Index: ' + (servicePerformance.index ?? 'insufficient data') +
         (servicePerformance.excluded.length ? '  (' + servicePerformance.excluded.length + ' domains omitted)' : ''));
@@ -1342,7 +1342,7 @@ export function AnalyticsPage() {
 
       // Repeat-failure audit.
       heading('Repeat-failure audit');
-      line('A new complaint of the same category within ' + REINCIDENCE.radiusM + 'm and ' + REINCIDENCE.windowDays + ' days of a resolved one.');
+      line('A new report of the same category within ' + REINCIDENCE.radiusM + 'm and ' + REINCIDENCE.windowDays + ' days of a resolved one.');
       y += 1;
       row(['Department', 'Repeats', 'Resolved', 'On-time', 'Grade'], [70, 25, 25, 25, 20], true);
       contractorAudit.forEach((d) => {
@@ -1541,7 +1541,7 @@ export function AnalyticsPage() {
               {item.category}
             </span>
             <span className="text-[10px] font-bold text-[#8a8477] flex items-center gap-1">
-              {item.size} {isSystemic ? 'reports' : 'active defects'}{item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
+              {item.size} active report{item.size === 1 ? '' : 's'}{item.upvotes > 0 && ` · ${item.upvotes} upvotes`}
             </span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -1691,7 +1691,7 @@ export function AnalyticsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
                 <div>
-                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Complaints</div>
+                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Active Reports</div>
                   <div className="text-2xl font-black text-[#201f1b] mt-1">{kpiStats.active}</div>
                   <div className="text-[10px] text-[#8a8477] font-medium mt-0.5">Out of {kpiStats.total} total reports</div>
                   {/* What kind of active — untouched vs already being worked
@@ -1804,9 +1804,9 @@ export function AnalyticsPage() {
                   <div className="text-[9px] text-[#8a8477] mt-1.5 pt-1.5 border-t border-[#1f1e1a]/6 leading-relaxed">
                     {selectedDept === 'all'
                       ? (kpiStats.healthStatus === 'Optimal'
-                          ? `Optimal means every department has ${INSIGHT.backlogAlertTickets} or fewer open tickets waiting.`
-                          : `Triggers when any department has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`)
-                      : `Scoped to ${kpiStats.worstBacklogDept} — triggers once it has more than ${INSIGHT.backlogAlertTickets} open tickets waiting.`}
+                          ? `Optimal means every department has ${INSIGHT.backlogAlertTickets} or fewer open reports waiting.`
+                          : `Triggers when any department has more than ${INSIGHT.backlogAlertTickets} open reports waiting.`)
+                      : `Scoped to ${kpiStats.worstBacklogDept} — triggers once it has more than ${INSIGHT.backlogAlertTickets} open reports waiting.`}
                   </div>
                   {/* Backlog alone only says "is work piling up" — resolve
                       time and on-time rate say "is it moving fast enough"
@@ -1850,9 +1850,9 @@ export function AnalyticsPage() {
                   <div className="mt-1.5 pt-1.5 border-t border-[#1f1e1a]/6">
                     <div className="text-[8px] font-bold text-[#8a8477] uppercase tracking-wider mb-1">Requirements checked</div>
                     <ul className="space-y-0.5 text-[8px] text-[#8a8477] leading-relaxed">
-                      <li>• Backlog — {INSIGHT.backlogAlertTickets} or fewer tickets waiting</li>
+                      <li>• Backlog — {INSIGHT.backlogAlertTickets} or fewer reports waiting</li>
                       <li>• Resolve time — {fmtDuration(SLA_END_TO_END_DAYS)} or under, on average</li>
-                      <li>• On-time rate — 60%+ of resolved tickets within {fmtDuration(SLA_END_TO_END_DAYS)}</li>
+                      <li>• On-time rate — 60%+ of resolved reports within {fmtDuration(SLA_END_TO_END_DAYS)}</li>
                     </ul>
                   </div>
                 </div>
@@ -1879,7 +1879,7 @@ export function AnalyticsPage() {
                       : `${reliabilityAudit.overallHoldRate}% of past repairs have held`}
                   </div>
                   <div className="text-[11px] text-[#8a8477] font-medium mt-0.5">
-                    Across {reliabilityAudit.totalResolved} resolved tickets, {reliabilityAudit.totalReIncidence} reappeared nearby within {REINCIDENCE.windowDays} days —
+                    Across {reliabilityAudit.totalResolved} resolved reports, {reliabilityAudit.totalReIncidence} reappeared nearby within {REINCIDENCE.windowDays} days —
                     the only figure on this tab built from every closed report, not just what's still open.
                   </div>
                 </div>
@@ -1911,7 +1911,7 @@ export function AnalyticsPage() {
               <div className="content-card lg:col-span-2 min-w-0">
                 <div className="content-card-header">
                   <div className="content-card-title">
-                    Ticket Volume Trends
+                    Report Volume Trends
                   </div>
                   <span className="text-[11px] text-[#8a8477]">
                     {format(trendRange.start, 'd MMM yyyy')} – {format(trendRange.end, 'd MMM yyyy')}
@@ -1926,7 +1926,7 @@ export function AnalyticsPage() {
                         ({trendInsight.last7Sum} vs {trendInsight.prior7Sum} reports).{' '}</>
                       )}
                       {trendInsight.peak && (
-                        <>Busiest day: <button onClick={() => openExplore({ dateFrom: `${trendInsight.peak.rawDate}T00:00`, dateTo: `${trendInsight.peak.rawDate}T23:59` })} className="underline decoration-dotted underline-offset-2 hover:opacity-70">{trendInsight.peak.date} ({trendInsight.peak.Complaints})</button>.</>
+                        <>Busiest day: <button onClick={() => openExplore({ dateFrom: `${trendInsight.peak.rawDate}T00:00`, dateTo: `${trendInsight.peak.rawDate}T23:59` })} className="underline decoration-dotted underline-offset-2 hover:opacity-70">{trendInsight.peak.date} ({trendInsight.peak.Reports})</button>.</>
                       )}
                     </p>
                   )}
@@ -1937,7 +1937,7 @@ export function AnalyticsPage() {
                         margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                         onClick={(e) => {
                           const point = e?.activePayload?.[0]?.payload;
-                          if (point && point.Complaints > 0) {
+                          if (point && point.Reports > 0) {
                             openExplore({ dateFrom: `${point.rawDate}T00:00`, dateTo: `${point.rawDate}T23:59` });
                           }
                         }}
@@ -1952,7 +1952,7 @@ export function AnalyticsPage() {
                         <XAxis dataKey="date" stroke="#8a8477" fontSize={10} tickLine={false} />
                         <YAxis stroke="#8a8477" fontSize={10} tickLine={false} />
                         <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid rgba(31,30,26,0.10)', borderRadius: 8, color: '#201f1b', fontSize: 12 }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                        <Area type="monotone" dataKey="Complaints" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTrend)" />
+                        <Area type="monotone" dataKey="Reports" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorTrend)" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
@@ -2026,9 +2026,9 @@ export function AnalyticsPage() {
             <div className="content-card min-w-0">
                 <div className="content-card-header">
                   <div className="content-card-title">
-                    {selectedDept === 'all' 
-                      ? 'Average Days to Resolve Complaints vs SLA Target (3 Days)' 
-                      : `${selectedDept} Ticket Status Breakdown`}
+                    {selectedDept === 'all'
+                      ? 'Average Days to Resolve Reports vs SLA Target (3 Days)'
+                      : `${selectedDept} Report Status Breakdown`}
                   </div>
                 </div>
                 <div className="p-5">
@@ -2039,7 +2039,7 @@ export function AnalyticsPage() {
                     return worst ? (
                       <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: '#b91c1c' }}>
                         {worst.fullName} is {fmtDuration(worst.avgResolveDays - SLA_END_TO_END_DAYS)} over target —
-                        click its bar to see the resolved tickets that average is built from.
+                        click its bar to see the resolved reports that average is built from.
                       </p>
                     ) : (
                       <p className="text-xs font-semibold leading-relaxed mb-3" style={{ color: '#15803d' }}>
@@ -2125,7 +2125,7 @@ export function AnalyticsPage() {
               <div className="content-card-header">
                 <div className="content-card-title">
                   <MapPin size={16} className="text-[#4a5d3f] mr-2" />
-                  Melaka Complaint Density Heatmap
+                  Melaka Report Density Heatmap
                 </div>
               </div>
               <div className="p-5">
@@ -2208,8 +2208,8 @@ export function AnalyticsPage() {
                   </div>
                   <div className="flex-1 min-w-[240px] space-y-1.5">
                     <div className="flex items-center justify-between text-xs font-bold text-[#4b473d]">
-                      <span>Minimum Complaint Density</span>
-                      <span className="text-[#4a5d3f] font-bold">{minClusterSize}+ tickets</span>
+                      <span>Minimum Report Density</span>
+                      <span className="text-[#4a5d3f] font-bold">{minClusterSize}+ reports</span>
                     </div>
                     <div className="grid grid-cols-4 gap-1.5">
                       {[2, 3, 4, 5, 6, 8, 10, 15].map((val) => (
@@ -2381,7 +2381,7 @@ export function AnalyticsPage() {
                         <div className="flex items-center gap-3 flex-wrap mt-2 text-[10px] text-[#8a8477]">
                           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#b45309' }} /> Waiting to be actioned</span>
                           <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full inline-block" style={{ background: '#3b82f6' }} /> Already being worked</span>
-                          <span>Click a marker for that ticket's detail.</span>
+                          <span>Click a marker for that report's detail.</span>
                         </div>
                         {priorityById[activeCluster.id] && (
                           <p className="text-[10px] text-[#8a8477] leading-relaxed mt-2">
@@ -2449,11 +2449,11 @@ export function AnalyticsPage() {
                         />
                       </div>
 
-                      {/* Exclude / Include Tickets List */}
+                      {/* Exclude / Include Reports List */}
                       <div className="flex flex-col min-h-0 pt-2 border-t border-[#1f1e1a]/8">
                         <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2 flex items-center justify-between">
-                          <span>Constituent Issues</span>
-                          <span className="px-1.5 py-0.5 rounded bg-[#f5f1e6] text-[#4b473d] text-[9px] font-black">{activeCluster.items.length} Tickets</span>
+                          <span>Constituent Reports</span>
+                          <span className="px-1.5 py-0.5 rounded bg-[#f5f1e6] text-[#4b473d] text-[9px] font-black">{activeCluster.items.length} Reports</span>
                         </label>
                         <div className="max-h-[220px] overflow-y-auto pr-1 space-y-2 scrollbar-thin">
                           {activeCluster.items.map((item) => (
@@ -2463,7 +2463,7 @@ export function AnalyticsPage() {
                                 checked={!(customOverrides[activeCluster.seedId]?.excludedReportIds?.includes(item.id))}
                                 onChange={() => handleToggleExcludeTicket(activeCluster.seedId, item.id)}
                                 className="mt-0.5 cursor-pointer accent-[#4a5d3f] rounded border-[#1f1e1a]/15"
-                                title="Exclude this ticket from cluster"
+                                title="Exclude this report from cluster"
                               />
                               <div className="min-w-0 flex-1">
                                 <p className="text-[11px] leading-relaxed text-[#4b473d] truncate font-semibold">

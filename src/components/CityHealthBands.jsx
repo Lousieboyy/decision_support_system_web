@@ -36,16 +36,16 @@ const BAND_ACTIONS = {
   spi: {
     A: 'Every step is beating its target — no action needed. If this holds, the targets may be worth tightening.',
     B: 'On track. Keep monitoring — no action needed right now.',
-    C: "Slipping in places. Check the \"Where the time goes\" chart on Overview for the step actually falling behind.",
+    C: 'Slipping in places. Check which category below is falling behind its own target.',
     D: 'Falling behind its own targets. Reassign capacity to the slowest step in the categories below.',
-    F: "Missing its own targets badly. Start with the step taking the largest share of time — see \"Where the time goes\" on Overview.",
+    F: 'Missing its own targets badly. Start with whichever category below is taking the longest — that\'s the step to fix first.',
   },
   uci: {
     A: 'Open issues are well within the agreed limits — no action needed.',
     B: 'Comfortably within limits. Keep monitoring.',
     C: 'Approaching the limit in places — check which category below is closest to its cap.',
     D: 'Over the agreed limit. This is a capacity question — consider more crew, not faster processing.',
-    F: 'Far over the agreed limit, no matter how fast tickets get resolved. Needs more capacity or budget, not process changes.',
+    F: 'Far over the agreed limit, no matter how fast reports get resolved. Needs more capacity or budget, not process changes.',
   },
   ifi: {
     A: 'No zone is fragile by design — no action needed.',
@@ -125,7 +125,7 @@ function IndexGauge({ value, label, caption, excludedCount, totalDomains, formul
           </span>
         </div>
       ) : (
-        <div className="mt-5 text-base font-bold text-[#8a8477]">Not enough data</div>
+        <div className="mt-5 text-base font-bold text-[#8a8477]">Insufficient data</div>
       )}
       {/* Where does "critical" actually start? The full scale, not just the
           one number this happens to land on. */}
@@ -212,7 +212,7 @@ function DomainCard({ name, score, weight, primary, secondary }) {
 function MethodologyPanel({ kind, onClose }) {
   const config = {
     spi: {
-      title: 'Service Performance Score',
+      title: 'Service Performance Index',
       subtitle: 'This measures the council. Every part of the score is something the council controls.',
       rows: Object.entries(SPI_WEIGHTS).map(([k, w]) => ({
         key: {
@@ -233,7 +233,7 @@ function MethodologyPanel({ kind, onClose }) {
       ),
     },
     uci: {
-      title: 'Urban Condition Score',
+      title: 'Urban Condition Index',
       subtitle: "This measures the city itself. It does not count how many reports get resolved, since that describes how fast the council works, not the actual condition of the city.",
       rows: Object.entries(UCI_WEIGHTS).map(([k, w]) => ({
         key: k,
@@ -249,7 +249,7 @@ function MethodologyPanel({ kind, onClose }) {
       ),
     },
     ifi: {
-      title: 'Infrastructure Fragility Score',
+      title: 'Infrastructure Fragility Index',
       subtitle: "This measures each zone using its full history, not just what's open right now — the only score here that looks at the past this way. Neither Service Performance nor Urban Condition shows where infrastructure is weak because of how it was built, rather than by bad luck.",
       rows: Object.entries(IFI_WEIGHTS).map(([k, w]) => ({
         key: {
@@ -449,7 +449,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                     ? `Typical (median) time: ${fmtDuration(d.medianDays)}, vs a target of ${fmtDuration(d.targetDays)} (based on ${d.n} reports)`
                     : `${d.n} dispatched reports`
                 }
-                secondary={`Not enough data — ${d.n} of ${d.key === 'firstPass' ? MIN_N_FOR_SCORE : MIN_N_FOR_STAGE} reports needed`}
+                secondary={`Insufficient data — ${d.n} of ${d.key === 'firstPass' ? MIN_N_FOR_SCORE : MIN_N_FOR_STAGE} reports needed`}
               />
             ))}
           </div>
@@ -527,7 +527,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                   `${d.openCount} open · current load ${d.burden} of ${d.target} allowed` +
                   (d.medianAgeDays != null ? ` · typical time open: ${Math.round(d.medianAgeDays)} days` : '')
                 }
-                secondary="Not enough data — no reports in this category"
+                secondary="Insufficient data — no reports in this category"
               />
             ))}
           </div>

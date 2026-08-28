@@ -455,7 +455,7 @@ export function ReportsPage() {
             )}
             {(currentRole === 'admin' || currentRole === 'authority' || currentRole?.startsWith('authority_')) && (
               <span className="ml-2">
-                Looking for patterns across the city instead of a single ticket?{' '}
+                Looking for patterns across the city instead of a single report?{' '}
                 <Link to="/" className="font-semibold" style={{ color: '#3d4d34' }}>See Analytics →</Link>
               </span>
             )}

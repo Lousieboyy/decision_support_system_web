@@ -19,6 +19,10 @@ describe('City Health — three indices', () => {
   });
 
   it('opens the Infrastructure Fragility methodology panel with live weights', () => {
+    // Only one band is mounted at a time (tabbed, not stacked) — its section
+    // has to be selected before the heading exists in the DOM at all.
+    cy.contains('button', 'Infrastructure Fragility').click();
+
     cy.contains('h2', 'Infrastructure Fragility')
       .parents('section')
       .contains('button', 'Methodology')
@@ -29,9 +33,11 @@ describe('City Health — three indices', () => {
     // panel — confirm the population-source disclosure is present, since
     // that's the one methodological limitation worth surfacing to a reader.
     cy.contains('Department of Statistics Malaysia').should('be.visible');
-    cy.contains('failureRate').should('be.visible');
-    cy.contains('reportRate').should('be.visible');
-    cy.contains('mtbf').should('be.visible');
+    // Row labels are humanized from the raw weight keys (failureRate,
+    // reportRate, mtbf), not shown verbatim.
+    cy.contains('Failure rate').should('be.visible');
+    cy.contains('Report rate').should('be.visible');
+    cy.contains('Time between problems').should('be.visible');
   });
 });
 
@@ -43,6 +49,7 @@ describe('Infrastructure Fragility — insufficient-data handling', () => {
     // built on 2-3 reports.
     cy.login('mbmb', 'password');
     cy.contains('button', 'City Health').click();
+    cy.contains('button', 'Infrastructure Fragility').click();
 
     cy.contains('h2', 'Infrastructure Fragility')
       .parents('section')
