@@ -191,6 +191,13 @@ export function AnalyticsPage() {
   const [hotspotSearch, setHotspotSearch] = useState('');
   const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'cityhealth'
   const [showReliabilityModal, setShowReliabilityModal] = useState(false);
+  // Predictive Hotspots (the tab) moved to resolved-only clustering, so it no
+  // longer shows active-report clusters or their map — this KPI card still
+  // counts active hotspots (hotspots is untouched), so it needs its own place
+  // to show them, instead of linking to a tab that now displays something
+  // else entirely.
+  const [showActiveHotspotsModal, setShowActiveHotspotsModal] = useState(false);
+  const [activeHotspotFocusId, setActiveHotspotFocusId] = useState(null);
   // Lifted out of CityHealthBands so the Zone chart below it can show the
   // dimension that matches whichever score band is currently selected,
   // instead of the same resolution-rate chart under every tab.
@@ -1937,7 +1944,7 @@ export function AnalyticsPage() {
                     </div>
                   )}
                   <button
-                    onClick={() => setActiveViewTab('hotspots')}
+                    onClick={() => setShowActiveHotspotsModal(true)}
                     className="mt-2 text-[9px] font-bold underline decoration-dotted underline-offset-2 cursor-pointer"
                     style={{ color: '#4a5d3f' }}
                   >
@@ -2482,7 +2489,8 @@ export function AnalyticsPage() {
                                 </p>
                                 <button
                                   onClick={() => setShowReliabilityModal(true)}
-                                  className="text-[11px] font-bold underline mt-2"
+                                  className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                                  style={{ background: '#8a5a00', color: '#fff' }}
                                 >
                                   See the full list in Repair Reliability →
                                 </button>
@@ -2990,6 +2998,107 @@ export function AnalyticsPage() {
           auditActions={auditActions}
           onClose={() => setShowReliabilityModal(false)}
         />
+      )}
+
+      {/* Active Hotspots (KPI card breakdown) — the "here's unclaimed work
+          right now" view Predictive Hotspots used to be, before that tab
+          became resolved-only. hotspots itself was never touched by that
+          rework, so this is real active data with real dispatchable work,
+          unlike everything else this session that removed dispatch. */}
+      {showActiveHotspotsModal && (
+        <>
+          <div
+            className="fixed inset-0 z-40 overlay-fade-in"
+            style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+            onClick={() => { setShowActiveHotspotsModal(false); setActiveHotspotFocusId(null); }}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
+              style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
+                <div>
+                  <div className="text-sm font-black text-[#201f1b]">Active Hotspots</div>
+                  <div className="text-[11px] text-[#8a8477]">
+                    {hotspots.length} zone{hotspots.length === 1 ? '' : 's'} with several active reports close together
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowActiveHotspotsModal(false); setActiveHotspotFocusId(null); }}
+                  className="p-2 rounded-full transition-colors"
+                  style={{ color: '#8a8477' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="overflow-y-auto">
+                <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 mx-5 mt-5" style={{ height: 260 }}>
+                  <MapContainer center={[2.1896, 102.2501]} zoom={12} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {hotspots.map((h) => (
+                      <CircleMarker
+                        key={h.id}
+                        center={[h.latitude, h.longitude]}
+                        radius={activeHotspotFocusId === h.id ? 12 : 7 + Math.min(h.size, 8)}
+                        pathOptions={{
+                          color: '#b45309',
+                          fillColor: '#b45309',
+                          fillOpacity: activeHotspotFocusId === h.id ? 1 : 0.55,
+                          weight: activeHotspotFocusId === h.id ? 3 : 2,
+                        }}
+                        eventHandlers={{ click: () => setActiveHotspotFocusId(h.id) }}
+                      >
+                        <Popup>
+                          <div style={{ fontSize: 12, minWidth: 160 }}>
+                            <div style={{ fontWeight: 700 }}>{h.category}</div>
+                            <div style={{ color: '#8a8477' }}>{h.size} active reports · {h.address}</div>
+                          </div>
+                        </Popup>
+                      </CircleMarker>
+                    ))}
+                    <MapResizer />
+                  </MapContainer>
+                </div>
+                <div className="p-5 space-y-3">
+                  {hotspots.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-[#8a8477]">No active hotspots at the current clustering settings.</div>
+                  ) : (
+                    hotspots.map((h) => (
+                      <div
+                        key={h.id}
+                        onClick={() => setActiveHotspotFocusId(h.id)}
+                        className={`p-4 border rounded-xl space-y-2 cursor-pointer transition-all ${
+                          activeHotspotFocusId === h.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8 hover:border-[#4a5d3f]/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span
+                            className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border shrink-0"
+                            style={{ background: 'rgba(180,83,9,0.10)', borderColor: 'rgba(180,83,9,0.25)', color: '#b45309' }}
+                          >
+                            {h.category}
+                          </span>
+                          <span className="text-[10px] font-bold text-[#8a8477]">
+                            {h.size} active report{h.size === 1 ? '' : 's'}{h.upvotes > 0 && ` · ${h.upvotes} upvotes`}
+                          </span>
+                        </div>
+                        <div className="text-xs text-[#4b473d] font-bold">{h.address}</div>
+                        <div className="text-[11px] leading-relaxed text-[#8a8477] italic">{h.recommendation}</div>
+                        <div onClick={(e) => e.stopPropagation()} className="flex">
+                          <ClusterDispatchAction item={h} onDispatched={loadData} />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Page-level (not tab-scoped) so a click from any tab — Overview
