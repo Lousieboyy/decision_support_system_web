@@ -365,7 +365,10 @@ export function TeamsPage() {
   // an authority handles their own department by default and doesn't see
   // the others; admin is the "just monitor everything" role.
   const teams = data.teams || [];
-  const visibleTeams = isAdmin ? teams : teams.filter(t => t.is_mine);
+  // JKR is hidden from the admin comparison grid specifically — still a
+  // valid transfer destination above, and still visible to JKR's own
+  // authority/worker logins via the is_mine branch below.
+  const visibleTeams = isAdmin ? teams.filter(t => t.name !== 'JKR') : teams.filter(t => t.is_mine);
   const worstFirst = [...visibleTeams].sort((a, b) => {
     const rank = { bottleneck: 0, strained: 1, healthy: 2 };
     return rank[a.status] - rank[b.status];
