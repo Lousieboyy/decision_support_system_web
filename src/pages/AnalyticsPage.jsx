@@ -1352,14 +1352,27 @@ export function AnalyticsPage() {
   }, [filteredReports, servicePerformance, urbanCondition, infrastructureFragility, zoneScorecard, deptSLAMetrics, rootCauseAdvisories]);
 
   // 6. Coordinates list for density Heatmap
+  // Recurring-failure density, matching the rest of this tab: every original
+  // resolved report that later reappeared, plus every place it reappeared —
+  // not raw active-report density, which would be a different, older signal
+  // ("here's current backlog") than what the rest of the page now shows.
   const heatmapPoints = useMemo(() => {
-    return filteredReports
-      .filter((r) => r.status !== 'Resolved' && r.status !== 'Rejected' && r.latitude && r.longitude)
-      .map((r) => ({
-        latitude: parseFloat(r.latitude),
-        longitude: parseFloat(r.longitude),
-      }));
-  }, [filteredReports]);
+    const points = [];
+    reliabilityAudit.rows.forEach((row) => {
+      row.tickets.forEach((t) => {
+        if (t.reappearances.length === 0) return;
+        if (t.latitude != null && t.longitude != null) {
+          points.push({ latitude: parseFloat(t.latitude), longitude: parseFloat(t.longitude) });
+        }
+        t.reappearances.forEach((rep) => {
+          if (rep.latitude != null && rep.longitude != null) {
+            points.push({ latitude: parseFloat(rep.latitude), longitude: parseFloat(rep.longitude) });
+          }
+        });
+      });
+    });
+    return points;
+  }, [reliabilityAudit]);
 
   // 7. PDF Exporter
   /**
@@ -2270,7 +2283,7 @@ export function AnalyticsPage() {
               <div className="content-card-header">
                 <div className="content-card-title">
                   <MapPin size={16} className="text-[#4a5d3f] mr-2" />
-                  Melaka Report Density Heatmap
+                  Melaka Recurring-Failure Density Heatmap
                 </div>
               </div>
               <div className="p-5">
