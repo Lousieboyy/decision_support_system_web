@@ -330,14 +330,14 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       <button
                         onClick={exportEvidencePDF}
                         disabled={!selectedRow?.tickets?.length}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-opacity hover:opacity-80"
                         style={{ background: '#3d4d34', color: '#fff' }}
                       >
                         <FileDown size={11} /> Export PDF
                       </button>
                       <button
                         onClick={() => setSelectedAuthority(null)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold transition-opacity hover:opacity-70"
                         style={{ background: 'rgba(74,93,63,0.1)', color: '#3d4d34' }}
                       >
                         Clear <X size={11} />

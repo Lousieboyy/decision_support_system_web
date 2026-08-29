@@ -1305,6 +1305,7 @@ export function AnalyticsPage() {
             (domain.medianAgeDays != null ? `, typical age ${Math.round(domain.medianAgeDays)} days.` : '.'),
           zone: 'City-wide',
           action: `Clear the oldest ${domain.name.toLowerCase()} defects first — their age is what's driving this number up.`,
+          exploreFilter: { category: key },
         });
       }
     });
@@ -1323,6 +1324,7 @@ export function AnalyticsPage() {
             : d.driver === 'mtbf'
             ? `Set up regular inspections in ${zone} instead of waiting for the next resident report.`
             : `Check whether ${zone} has enough resources for how often problems actually happen there.`,
+          exploreFilter: { zone },
         });
       }
     });
@@ -1332,7 +1334,8 @@ export function AnalyticsPage() {
     if (topZone) {
       insights.push({ id: 'top-zone', type: 'success', title: `${topZone.name} — Top Performing Zone`,
         description: `${topZone.resolutionRate}% resolution rate across ${topZone.total} reports. Average resolution time: ${topZone.avgDays} days.`,
-        zone: topZone.name, action: `Recognize this zone's performance and use its approach as an example for zones that are behind.` });
+        zone: topZone.name, action: `Recognize this zone's performance and use its approach as an example for zones that are behind.`,
+        exploreFilter: { zone: topZone.name } });
     }
 
     // 3. Neglected zones (aged unresolved reports)
@@ -1347,7 +1350,8 @@ export function AnalyticsPage() {
       if (worstZone) {
         insights.push({ id: 'neglected-zone', type: 'critical', title: `Neglected Zone: ${worstZone[0]}`,
           description: `${worstZone[1]} reports older than 14 days are still unresolved in ${worstZone[0]}. This shows an ongoing gap in response that needs urgent attention.`,
-          zone: worstZone[0], action: `Send a priority inspection team to ${worstZone[0]} and review why department assignment is slow there.` });
+          zone: worstZone[0], action: `Send a priority inspection team to ${worstZone[0]} and review why department assignment is slow there.`,
+          exploreFilter: { zone: worstZone[0] } });
       }
     }
 
@@ -1356,7 +1360,8 @@ export function AnalyticsPage() {
       if (dept.backlog > INSIGHT.backlogAlertTickets) {
         insights.push({ id: `dept-overload-${dept.name}`, type: 'warning', title: `${dept.name} Department Overloaded`,
           description: `${dept.name} has ${dept.backlog} active backlog reports with an average resolution time of ${dept.avgResolveDays} days. This exceeds the 3-day SLA target.`,
-          zone: 'Department-wide', action: `Move 15–20% of crew capacity from less-busy departments to ${dept.name} for the next work cycle.` });
+          zone: 'Department-wide', action: `Move 15–20% of crew capacity from less-busy departments to ${dept.name} for the next work cycle.`,
+          exploreFilter: { department: dept.name } });
       }
     });
 
@@ -1372,7 +1377,8 @@ export function AnalyticsPage() {
       const topCat = Object.entries(catCounts).sort((a, b) => b[1] - a[1])[0];
       insights.push({ id: 'volume-spike', type: 'warning', title: `${pctIncrease}% Increase in Reports This Week`,
         description: `${last7} reports this week, compared with ${prev7} last week. ${topCat ? `Most common type: ${topCat[0]} (${topCat[1]} reports).` : ''} This could be due to the season or a specific event.`,
-        zone: 'City-wide', action: `Look into what's causing this, and prepare extra response capacity if it continues.` });
+        zone: 'City-wide', action: `Look into what's causing this, and prepare extra response capacity if it continues.`,
+        exploreFilter: topCat ? { category: topCat[0] } : null });
     }
 
     // 6. Cross-category correlation
@@ -1388,7 +1394,8 @@ export function AnalyticsPage() {
     if (bestDept && bestDept.avgResolveDays <= 3 && bestDept.resolved > 0) {
       insights.push({ id: 'sla-achievement', type: 'success', title: `${bestDept.name} Exceeding SLA Targets`,
         description: `${bestDept.name} maintained an average resolution time of ${bestDept.avgResolveDays} days, within the 3-day SLA target. ${bestDept.resolved} reports resolved.`,
-        zone: 'Department-wide', action: `Recognize ${bestDept.name}'s performance and share how they work with other departments.` });
+        zone: 'Department-wide', action: `Recognize ${bestDept.name}'s performance and share how they work with other departments.`,
+        exploreFilter: { department: bestDept.name } });
     }
 
     // 8. High citizen engagement
@@ -1999,6 +2006,73 @@ export function AnalyticsPage() {
               </div>
             </div>
 
+            {/* Today's Priorities — actionableInsights already computes rule-based
+                findings (SLA misses, deteriorating categories, fragile zones, top/
+                neglected zones, department overload, volume spikes, cross-category
+                patterns, SLA achievements, SPI/UCI divergence), each with its own
+                recommended action, not just a number. It previously only reached
+                admins through the PDF export — this surfaces the same list live,
+                since it's the most directly actionable thing on the page. Cards
+                with a real report-level filter (zone/category/department) are
+                clickable through to Explore; the handful that are page-level
+                verdicts (e.g. overall SPI/UCI standing) aren't, and are styled
+                plainly so that distinction stays honest instead of implying every
+                card responds to a click. */}
+            {actionableInsights.length > 0 && (
+              <div className="content-card">
+                <div className="content-card-header">
+                  <div className="content-card-title">Today's Priorities</div>
+                  <span className="text-[11px] text-[#8a8477]">{actionableInsights.length} finding{actionableInsights.length === 1 ? '' : 's'}</span>
+                </div>
+                <div className="p-5 space-y-3 max-h-[420px] overflow-y-auto scrollbar-thin">
+                  {actionableInsights.map((ins) => {
+                    const tone = {
+                      critical: { border: '#b91c1c', bg: 'rgba(185,28,28,0.06)', badge: '#b91c1c', label: 'Critical' },
+                      warning: { border: '#b45309', bg: 'rgba(180,83,9,0.06)', badge: '#b45309', label: 'Warning' },
+                      info: { border: '#4338ca', bg: 'rgba(67,56,202,0.06)', badge: '#4338ca', label: 'Info' },
+                      success: { border: '#15803d', bg: 'rgba(21,128,61,0.06)', badge: '#15803d', label: 'Good' },
+                    }[ins.type] || { border: '#8a8477', bg: 'rgba(138,132,119,0.06)', badge: '#8a8477', label: 'Note' };
+                    const content = (
+                      <>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span
+                            className="text-[9px] font-black uppercase tracking-wide px-1.5 py-0.5 rounded"
+                            style={{ color: tone.badge, background: 'rgba(255,255,255,0.7)' }}
+                          >
+                            {tone.label}
+                          </span>
+                          <span className="text-[9px] font-semibold text-[#8a8477]">{ins.zone}</span>
+                        </div>
+                        <div className="text-sm font-bold text-[#201f1b] mt-1.5">{ins.title}</div>
+                        <div className="text-xs text-[#4b473d] leading-relaxed mt-1">{ins.description}</div>
+                        <div className="text-xs font-bold mt-2" style={{ color: tone.badge }}>
+                          → {ins.action}
+                        </div>
+                      </>
+                    );
+                    return ins.exploreFilter ? (
+                      <button
+                        key={ins.id}
+                        onClick={() => openExplore(ins.exploreFilter)}
+                        className="w-full text-left p-4 rounded-xl border-l-4 cursor-pointer transition-opacity hover:opacity-80"
+                        style={{ background: tone.bg, borderLeftColor: tone.border }}
+                      >
+                        {content}
+                      </button>
+                    ) : (
+                      <div
+                        key={ins.id}
+                        className="p-4 rounded-xl border-l-4"
+                        style={{ background: tone.bg, borderLeftColor: tone.border }}
+                      >
+                        {content}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
@@ -2605,7 +2679,7 @@ export function AnalyticsPage() {
                             </div>
                             <button
                               onClick={() => setShowReliabilityModal(true)}
-                              className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer"
+                              className="mt-3 px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-opacity hover:opacity-80"
                               style={{ background: '#8a5a00', color: '#fff' }}
                             >
                               See the full list in Repair Reliability →

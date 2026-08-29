@@ -175,7 +175,7 @@ export function ClusterDispatchAction({ item, onDispatched }) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 whitespace-nowrap"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold shrink-0 whitespace-nowrap transition-opacity hover:opacity-80"
         style={{ background: '#3d4d34', color: '#fff' }}
       >
         <Send size={12} /> Dispatch
@@ -285,7 +285,7 @@ export function ClusterDispatchAction({ item, onDispatched }) {
           <div className="flex justify-end gap-2">
             <button
               onClick={close}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors hover:bg-[#f5f1e6]"
               style={{ color: '#4b473d' }}
             >
               Cancel
@@ -293,7 +293,7 @@ export function ClusterDispatchAction({ item, onDispatched }) {
             <button
               onClick={handleConfirm}
               disabled={!allAssigned || busy}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold disabled:opacity-50 transition-opacity hover:opacity-80"
               style={{ background: '#3d4d34', color: '#fff' }}
             >
               {busy ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}

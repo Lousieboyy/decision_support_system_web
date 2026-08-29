@@ -599,7 +599,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 {ifiZones.length === 1 ? (
                   <button
                     onClick={() => onZoneClick(ifiZones[0].zone)}
-                    className="w-full flex items-center justify-between gap-3 rounded-xl p-4 text-left cursor-pointer"
+                    className="w-full flex items-center justify-between gap-3 rounded-xl p-4 text-left cursor-pointer transition-opacity hover:opacity-80"
                     style={{ background: 'rgba(74,93,63,0.05)', border: '1px solid rgba(74,93,63,0.15)' }}
                   >
                     <div className="min-w-0">
