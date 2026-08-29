@@ -24,7 +24,7 @@ import {
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
   buildServicePerformance, buildUrbanCondition, buildBacklogFlow, buildFunnel,
-  buildReliabilityAudit, buildInfrastructureFragility, fmtDuration,
+  buildReliabilityAudit, buildInfrastructureFragility, fmtDuration, reportDurationDays,
 } from '../utils/analyticsMetrics';
 import { AnalyticsFilterBar } from '../components/AnalyticsFilterBar';
 import { CityHealthBands } from '../components/CityHealthBands';
@@ -204,7 +204,7 @@ export function AnalyticsPage() {
   // pre-fills one filter here, and every filter stays live and adjustable
   // in the same modal so they can be combined (e.g. MBMB + Road Damage +
   // a specific week) rather than re-clicking through charts one at a time.
-  const EMPTY_EXPLORE_FILTERS = { dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all' };
+  const EMPTY_EXPLORE_FILTERS = { dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all', durationMin: '', durationMax: '' };
   const [exploreFilters, setExploreFilters] = useState(null); // null = modal closed
   const openExplore = (partial) => setExploreFilters({ ...EMPTY_EXPLORE_FILTERS, ...partial });
   // null = endpoint absent or forbidden; [] = present but empty. The two mean
@@ -1206,6 +1206,12 @@ export function AnalyticsPage() {
           const reportDate = r.timestamp.split('T')[0];
           if (exploreFilters.dateFrom && reportDate < exploreFilters.dateFrom.split('T')[0]) return false;
           if (exploreFilters.dateTo && reportDate > exploreFilters.dateTo.split('T')[0]) return false;
+        }
+        if (exploreFilters.durationMin !== '' || exploreFilters.durationMax !== '') {
+          const days = reportDurationDays(r);
+          if (days == null) return false;
+          if (exploreFilters.durationMin !== '' && days < Number(exploreFilters.durationMin)) return false;
+          if (exploreFilters.durationMax !== '' && days > Number(exploreFilters.durationMax)) return false;
         }
         return true;
       })

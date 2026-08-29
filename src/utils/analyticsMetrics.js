@@ -260,6 +260,24 @@ export function endToEndDays(report) {
 }
 
 /**
+ * Duration to show next to a single report in a list — end-to-end for a
+ * resolved one, still-running age otherwise. Distinct from endToEndDays,
+ * which is null for anything not yet resolved (correct for an SLA average
+ * that shouldn't count unfinished work, wrong for a report list where "3
+ * days and still open" is exactly the number someone browsing wants to
+ * see).
+ */
+export function reportDurationDays(report, now = Date.now()) {
+  const start = toDate(report?.timestamp);
+  if (start == null) return null;
+  const end = report?.status === 'Resolved' && report?.resolved_at != null
+    ? toDate(report.resolved_at)
+    : now;
+  if (end == null) return null;
+  return Math.max(0, (end - start) / MS_PER_DAY);
+}
+
+/**
  * Aggregates stage durations across a set of reports.
  *
  * `cohort` is 'all' (default) or 'resolved'. Under 'all' every stage is

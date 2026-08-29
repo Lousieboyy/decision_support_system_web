@@ -1,6 +1,8 @@
-import { X } from 'lucide-react';
+import { useState } from 'react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { deriveZone } from '../utils/analyticsMetrics';
+import { deriveZone, reportDurationDays, fmtDuration } from '../utils/analyticsMetrics';
+import { getImageUrl } from '../api/reportsApi';
 
 const fmtRowDate = (timestamp) => {
   if (!timestamp) return null;
@@ -15,6 +17,33 @@ const selectClass =
 const dateClass =
   'bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#201f1b] outline-none w-full';
 
+const PAGE_SIZE = 8;
+
+// Renders nothing when there's no photo, rather than a placeholder box —
+// most reports won't have one, and an empty frame on every row just adds
+// visual noise without telling the admin anything.
+function RowThumb({ report }) {
+  const url = getImageUrl(report.completion_image_path || report.image_path);
+  if (!url) {
+    return (
+      <div
+        className="w-12 h-12 rounded-lg shrink-0 flex items-center justify-center text-[8px] font-bold uppercase tracking-wide text-center"
+        style={{ background: 'rgba(31,30,26,0.05)', color: '#8a8477' }}
+      >
+        No photo
+      </div>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={report.categories || ''}
+      loading="lazy"
+      className="w-12 h-12 rounded-lg object-cover shrink-0 border border-[#1f1e1a]/10"
+    />
+  );
+}
+
 /**
  * The single "find reports" tool behind all four Overview charts. It used
  * to be four separate single-dimension popups (click a day, OR a category,
@@ -24,12 +53,30 @@ const dateClass =
  * pre-fills one field, and the rest stay adjustable in the same modal.
  */
 export function ReportExplorerModal({ filters, onFiltersChange, categories, departments, statuses, zones, results, onClose }) {
+  const [page, setPage] = useState(1);
+  // A new filter selection should always land back on page 1 — staying on
+  // page 3 of a list that just shrank to one page would either show
+  // nothing or an out-of-range slice. Reset during render (React's own
+  // documented pattern for "adjust state when a prop changes") rather
+  // than an effect, since `filters` is a fresh object every time a filter
+  // changes — comparing references here is exactly as reliable and skips
+  // the extra render an effect-based reset would cost.
+  const [prevFilters, setPrevFilters] = useState(filters);
+  if (filters !== prevFilters) {
+    setPrevFilters(filters);
+    setPage(1);
+  }
+
   if (!filters) return null;
 
   const set = (field) => (e) => onFiltersChange({ ...filters, [field]: e.target.value });
   const isEmpty =
     !filters.dateFrom && !filters.dateTo &&
-    filters.category === 'all' && filters.department === 'all' && filters.status === 'all' && filters.zone === 'all';
+    filters.category === 'all' && filters.department === 'all' && filters.status === 'all' && filters.zone === 'all' &&
+    filters.durationMin === '' && filters.durationMax === '';
+
+  const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+  const pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
@@ -62,7 +109,7 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
                 <input type="datetime-local" value={filters.dateTo} onChange={set('dateTo')} className={dateClass} />
               </div>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
               <div>
                 <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider block mb-1">Category</label>
                 <select value={filters.category} onChange={set('category')} className={selectClass}>
@@ -100,9 +147,39 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
                 </select>
               </div>
             </div>
+            {/* Days open/to-resolve — same reportDurationDays used on each
+                row below, so filtering by it and reading it off a row use
+                the exact same number, not two different definitions of
+                "duration" that could disagree. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider block mb-1">Min days open/to-resolve</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={filters.durationMin}
+                  onChange={set('durationMin')}
+                  placeholder="0"
+                  className={dateClass}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider block mb-1">Max days open/to-resolve</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={filters.durationMax}
+                  onChange={set('durationMax')}
+                  placeholder="No limit"
+                  className={dateClass}
+                />
+              </div>
+            </div>
             {!isEmpty && (
               <button
-                onClick={() => onFiltersChange({ dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all' })}
+                onClick={() => onFiltersChange({ dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all', durationMin: '', durationMax: '' })}
                 className="mt-3 text-[11px] font-bold text-[#8a8477] hover:text-[#201f1b]"
               >
                 Clear all filters
@@ -110,31 +187,64 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
             )}
           </div>
 
-          <div className="p-5 overflow-y-auto">
+          <div className="p-5 overflow-y-auto flex-1">
             {results.length === 0 ? (
               <div className="text-center text-[#8a8477] py-6 text-xs">No reports match these filters.</div>
             ) : (
               <div className="space-y-2">
-                {results.map((r) => (
-                  <div key={r.id} className="rounded-xl p-3 border border-[#1f1e1a]/8 flex items-center justify-between gap-3" style={{ background: 'var(--cream-100)' }}>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-[#201f1b] truncate">{r.address || r.location || 'Unknown location'}</div>
-                      <div className="text-[10px] text-[#8a8477]">
-                        {deriveZone(r)} · {r.categories || 'Other'} · {r.assigned_department || 'Unassigned'}
-                        {fmtRowDate(r.timestamp) && ` · ${fmtRowDate(r.timestamp)}`}
+                {pageResults.map((r) => {
+                  const days = reportDurationDays(r);
+                  return (
+                    <div key={r.id} className="rounded-xl p-3 border border-[#1f1e1a]/8 flex items-center gap-3" style={{ background: 'var(--cream-100)' }}>
+                      <RowThumb report={r} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-[#201f1b] truncate">{r.address || r.location || 'Unknown location'}</div>
+                        <div className="text-[10px] text-[#8a8477]">
+                          {deriveZone(r)} · {r.categories || 'Other'} · {r.assigned_department || 'Unassigned'}
+                          {fmtRowDate(r.timestamp) && ` · ${fmtRowDate(r.timestamp)}`}
+                        </div>
+                        {days != null && (
+                          <div className="text-[10px] font-semibold mt-0.5" style={{ color: r.status === 'Resolved' ? '#15803d' : '#b45309' }}>
+                            {r.status === 'Resolved' ? `Took ${fmtDuration(days)} to resolve` : `Open ${fmtDuration(days)}`}
+                          </div>
+                        )}
                       </div>
+                      <span
+                        className="text-[10px] font-black uppercase tracking-wide shrink-0"
+                        style={{ color: r.status === 'Resolved' ? '#15803d' : r.status === 'Rejected' ? '#8a8477' : '#b45309' }}
+                      >
+                        {r.status}
+                      </span>
                     </div>
-                    <span
-                      className="text-[10px] font-black uppercase tracking-wide shrink-0"
-                      style={{ color: r.status === 'Resolved' ? '#15803d' : r.status === 'Rejected' ? '#8a8477' : '#b45309' }}
-                    >
-                      {r.status}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
+
+          {results.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-[#1f1e1a]/8 shrink-0">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
+                style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+              >
+                <ChevronLeft size={12} /> Prev
+              </button>
+              <span className="text-[11px] font-semibold text-[#8a8477]">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
+                style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+              >
+                Next <ChevronRight size={12} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </>
