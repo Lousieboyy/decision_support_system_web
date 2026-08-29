@@ -1941,6 +1941,64 @@ export function AnalyticsPage() {
           <div className="space-y-6 animate-fade-in">
             {filterBar}
 
+            {/* Repair reliability — the one figure built from every resolved
+                report, not just whatever is still open. Answers "does the
+                city actually get better" rather than "how fast do we close
+                tickets", and is why a report keeps mattering after it's
+                fixed. Placed first and styled as a headline banner instead
+                of another KPI card — everything below it is diagnostic
+                (backlog, speed, clustering), this is the verdict. */}
+            <div
+              className="rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center gap-4 justify-between text-white"
+              style={{ background: 'linear-gradient(135deg, #3d4d34, #28311e)' }}
+            >
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.14)' }}>
+                  <Activity size={26} />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.65)' }}>Repair Reliability</div>
+                  <div className="text-2xl sm:text-3xl font-black mt-0.5">
+                    {reliabilityAudit.overallHoldRate == null
+                      ? <span className="text-base" style={{ color: 'rgba(255,255,255,0.7)' }}>Insufficient data</span>
+                      : `${reliabilityAudit.overallHoldRate}% of past repairs have held`}
+                  </div>
+                  <div className="text-[11px] font-medium mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                    Across {reliabilityAudit.totalResolved} resolved reports, {reliabilityAudit.totalReIncidence} reappeared nearby within {REINCIDENCE.windowDays} days —
+                    the only figure on this tab built from every closed report, not just what's still open.
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 self-stretch sm:self-auto">
+                {/* Only meaningful as a cross-department comparison. A
+                    department-scoped authority's view has exactly one
+                    department in it, so "needs attention: [their own name]"
+                    is trivially true and confusing rather than informative.
+                    Now a real button (was static text) so it doesn't sit
+                    next to "Full breakdown" looking equally important but
+                    behaving differently — same chip-and-hover treatment as
+                    every other clickable summary below. */}
+                {reliabilityAudit.worst && reliabilityAudit.rows.length > 1 && (
+                  <button
+                    onClick={() => openExplore({ department: reliabilityAudit.worst.name })}
+                    className="text-right px-3 py-1.5 rounded-lg cursor-pointer transition-opacity hover:opacity-75"
+                    style={{ background: 'rgba(255,255,255,0.10)' }}
+                    title={`${reliabilityAudit.worst.name} — click to see its reports`}
+                  >
+                    <div className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.6)' }}>Needs attention</div>
+                    <div className="text-sm font-bold" style={{ color: '#ffb870' }}>{reliabilityAudit.worst.name}</div>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowReliabilityModal(true)}
+                  className="px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer transition-opacity hover:opacity-80"
+                  style={{ background: '#fff', color: '#3d4d34' }}
+                >
+                  Full breakdown →
+                </button>
+              </div>
+            </div>
+
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
               <div className="bg-white border border-[#1f1e1a]/8 rounded-2xl p-6">
@@ -1956,7 +2014,7 @@ export function AnalyticsPage() {
                         <button
                           key={status}
                           onClick={() => openExplore({ status })}
-                          className="px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer"
+                          className="px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-opacity hover:opacity-70"
                           style={{ background: 'rgba(74,93,63,0.08)', color: '#4a5d3f' }}
                           title={`${count} ${status} — click to see them`}
                         >
@@ -1990,7 +2048,8 @@ export function AnalyticsPage() {
                       {kpiStats.fastestSLA && (
                         <button
                           onClick={() => openExplore({ department: kpiStats.fastestSLA.name })}
-                          className="flex items-center justify-between w-full text-[9px] font-semibold cursor-pointer"
+                          className="flex items-center justify-between w-full px-2 py-1 rounded text-[9px] font-semibold cursor-pointer transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(21,128,61,0.06)' }}
                         >
                           <span className="text-[#8a8477]">Fastest</span>
                           <span style={{ color: '#15803d' }}>{kpiStats.fastestSLA.name} — {fmtDuration(kpiStats.fastestSLA.avgResolveDays)}</span>
@@ -1999,7 +2058,8 @@ export function AnalyticsPage() {
                       {kpiStats.slowestSLA && (
                         <button
                           onClick={() => openExplore({ department: kpiStats.slowestSLA.name })}
-                          className="flex items-center justify-between w-full text-[9px] font-semibold cursor-pointer"
+                          className="flex items-center justify-between w-full px-2 py-1 rounded text-[9px] font-semibold cursor-pointer transition-opacity hover:opacity-70"
+                          style={{ background: 'rgba(185,28,28,0.06)' }}
                         >
                           <span className="text-[#8a8477]">Slowest</span>
                           <span style={{ color: '#b91c1c' }}>{kpiStats.slowestSLA.name} — {fmtDuration(kpiStats.slowestSLA.avgResolveDays)}</span>
@@ -2025,7 +2085,7 @@ export function AnalyticsPage() {
                         <button
                           key={category}
                           onClick={() => openExplore({ category })}
-                          className="flex items-center justify-between gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer text-left"
+                          className="flex items-center justify-between gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer text-left transition-opacity hover:opacity-70"
                           style={{ background: 'rgba(193,97,63,0.08)', color: '#c1613f' }}
                           title={`${count} hotspot zone${count === 1 ? '' : 's'} in ${category} — click to see those reports`}
                         >
@@ -2037,7 +2097,7 @@ export function AnalyticsPage() {
                   )}
                   <button
                     onClick={() => setShowActiveHotspotsModal(true)}
-                    className="mt-3 w-full px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer text-center"
+                    className="mt-3 w-full px-3 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer text-center transition-opacity hover:opacity-80"
                     style={{ background: '#c1613f', color: '#fff' }}
                   >
                     Full breakdown →
@@ -2082,7 +2142,7 @@ export function AnalyticsPage() {
                         <button
                           key={d.name}
                           onClick={() => openExplore({ department: d.name })}
-                          className="flex items-center justify-between gap-2 px-2 py-1 rounded text-left cursor-pointer"
+                          className="flex items-center justify-between gap-2 px-2 py-1 rounded text-left cursor-pointer transition-opacity hover:opacity-70"
                           style={{ background: failing ? 'rgba(185,28,28,0.06)' : 'rgba(21,128,61,0.06)' }}
                           title={`${d.fullName} — click to see its reports`}
                         >
@@ -2113,52 +2173,6 @@ export function AnalyticsPage() {
                     </ul>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Repair reliability — the one figure built from every resolved
-                report, not just whatever is still open. Answers "does the
-                city actually get better" rather than "how fast do we close
-                tickets", and is why a report keeps mattering after it's fixed. */}
-            <div
-              className="rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between"
-              style={{ background: 'linear-gradient(135deg, rgba(74,93,63,0.09), rgba(74,93,63,0.02))', border: '1px solid rgba(74,93,63,0.20)' }}
-            >
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: 'rgba(74,93,63,0.15)', color: '#3d4d34' }}>
-                  <Activity size={22} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-[#8a8477] uppercase tracking-wider">Repair Reliability</div>
-                  <div className="text-2xl font-black text-[#201f1b] mt-0.5">
-                    {reliabilityAudit.overallHoldRate == null
-                      ? <span className="text-base text-[#8a8477]">Insufficient data</span>
-                      : `${reliabilityAudit.overallHoldRate}% of past repairs have held`}
-                  </div>
-                  <div className="text-[11px] text-[#8a8477] font-medium mt-0.5">
-                    Across {reliabilityAudit.totalResolved} resolved reports, {reliabilityAudit.totalReIncidence} reappeared nearby within {REINCIDENCE.windowDays} days —
-                    the only figure on this tab built from every closed report, not just what's still open.
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 shrink-0 self-stretch sm:self-auto">
-                {/* Only meaningful as a cross-department comparison. A
-                    department-scoped authority's view has exactly one
-                    department in it, so "needs attention: [their own name]"
-                    is trivially true and confusing rather than informative. */}
-                {reliabilityAudit.worst && reliabilityAudit.rows.length > 1 && (
-                  <div className="text-right">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#8a8477]">Needs attention</div>
-                    <div className="text-sm font-bold" style={{ color: '#c1613f' }}>{reliabilityAudit.worst.name}</div>
-                  </div>
-                )}
-                <button
-                  onClick={() => setShowReliabilityModal(true)}
-                  className="px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap"
-                  style={{ background: '#3d4d34', color: '#fff' }}
-                >
-                  Full breakdown →
-                </button>
               </div>
             </div>
 
