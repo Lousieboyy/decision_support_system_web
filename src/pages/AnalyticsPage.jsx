@@ -2461,7 +2461,12 @@ export function AnalyticsPage() {
                       <>
                         <button
                           onClick={() => {
-                            const idx = heatmapMonth === 'all' ? 0 : Math.max(0, heatmapMonths.indexOf(heatmapMonth) - 1);
+                            // Coming from "All time" starts at the most recent
+                            // month, not the oldest — an admin stepping through
+                            // wants to see what's currently breaking first, then
+                            // dig backward into history, not wade through months
+                            // of the past to reach the present.
+                            const idx = heatmapMonth === 'all' ? heatmapMonths.length - 1 : Math.max(0, heatmapMonths.indexOf(heatmapMonth) - 1);
                             setHeatmapMonth(heatmapMonths[idx]);
                           }}
                           disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) <= 0}
@@ -2476,7 +2481,7 @@ export function AnalyticsPage() {
                         </span>
                         <button
                           onClick={() => {
-                            const idx = heatmapMonth === 'all' ? 0 : Math.min(heatmapMonths.length - 1, heatmapMonths.indexOf(heatmapMonth) + 1);
+                            const idx = heatmapMonth === 'all' ? heatmapMonths.length - 1 : Math.min(heatmapMonths.length - 1, heatmapMonths.indexOf(heatmapMonth) + 1);
                             setHeatmapMonth(heatmapMonths[idx]);
                           }}
                           disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) >= heatmapMonths.length - 1}
