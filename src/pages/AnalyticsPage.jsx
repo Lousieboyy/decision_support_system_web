@@ -1476,9 +1476,18 @@ export function AnalyticsPage() {
     return [...set].sort();
   }, [heatmapPoints]);
 
+  // Cumulative up to the selected month, not that month in isolation — a
+  // single isolated month can look like a disconnected blip, while
+  // cumulative actually shows the pattern building (or not) as the admin
+  // steps forward, which is the point of watching it change over time.
   const displayedHeatmapPoints = useMemo(() => {
     if (heatmapMonth === 'all') return heatmapPoints;
-    return heatmapPoints.filter((p) => p.date && !isNaN(new Date(p.date).getTime()) && format(new Date(p.date), 'yyyy-MM') === heatmapMonth);
+    return heatmapPoints.filter((p) => {
+      if (!p.date) return false;
+      const d = new Date(p.date);
+      if (isNaN(d.getTime())) return false;
+      return format(d, 'yyyy-MM') <= heatmapMonth;
+    });
   }, [heatmapPoints, heatmapMonth]);
 
   // 7. PDF Exporter
@@ -2477,7 +2486,7 @@ export function AnalyticsPage() {
                           <ChevronLeft size={13} />
                         </button>
                         <span className="text-[11px] font-bold text-[#201f1b] min-w-[100px] text-center">
-                          {heatmapMonth === 'all' ? 'Step through months' : format(new Date(heatmapMonth + '-02'), 'MMMM yyyy')}
+                          {heatmapMonth === 'all' ? 'Step through months' : `Through ${format(new Date(heatmapMonth + '-02'), 'MMMM yyyy')}`}
                         </span>
                         <button
                           onClick={() => {
