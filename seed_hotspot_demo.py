@@ -321,21 +321,33 @@ def build_row(*, category, lat, lng, address, timestamp, status,
 
     if status in ("In Review", "In Process", "In Maintenance", "Resolved"):
         assigned_dept = DEPT_ASSIGNMENT[category]
-        reviewed_at = (timestamp + timedelta(hours=random.randint(1, 24))).isoformat()
+        reviewed_at = (timestamp + timedelta(hours=random.randint(1, 12))).isoformat()
         forwarded_at = reviewed_at
         authority_notes = f"Report verified. Forwarded to {assigned_dept.split(' ')[0]}."
 
     if status in ("In Process", "In Maintenance", "Resolved"):
         team_workers = WORKERS_BY_TEAM.get(assigned_dept.split(" ")[0], [])
         assigned_worker = random.choice(team_workers) if team_workers else None
-        in_process_at = (timestamp + timedelta(hours=random.randint(24, 72))).isoformat()
+        in_process_at = (timestamp + timedelta(hours=random.randint(12, 24))).isoformat()
 
     if status in ("In Maintenance", "Resolved"):
-        in_maintenance_at = (timestamp + timedelta(hours=random.randint(72, 120))).isoformat()
+        in_maintenance_at = (timestamp + timedelta(hours=random.randint(24, 40))).isoformat()
 
     if status == "Resolved":
-        resolve_delta = timedelta(days=resolved_after_days) if resolved_after_days is not None \
-            else timedelta(hours=random.randint(120, 240))
+        if resolved_after_days is not None:
+            resolve_delta = timedelta(days=resolved_after_days)
+        else:
+            # A chain that always lands past the 3-day SLA target (the
+            # previous 120-240h range) meant every single resolved report
+            # counted as late, so on-time rate always computed to a flat
+            # 0% no matter the department — the Repair Reliability chart's
+            # bars were correctly rendering 0%-wide, not actually broken.
+            # Splitting into a genuine on-time/late mix gives real,
+            # department-varying numbers instead.
+            if random.random() < 0.45:
+                resolve_delta = timedelta(hours=random.randint(42, 70))  # on time
+            else:
+                resolve_delta = timedelta(hours=random.randint(74, 220))  # late
         resolved_at = (timestamp + resolve_delta).isoformat()
 
     if status == "Rejected":

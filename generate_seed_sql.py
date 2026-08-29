@@ -49,12 +49,22 @@ def sql_str(value):
     return f"'{escaped}'"
 
 
-def sql_ts(value):
-    """Timestamp literal, or NULL. `value` is either a datetime or an ISO string."""
+def sql_native_ts(value):
+    """Literal for the one real `timestamp without time zone` column
+    ("timestamp" itself). Cast via ::timestamp, not ::timestamptz — the
+    latter parses the string's +00:00 offset into an absolute instant and
+    then, on implicit assignment into a tz-naive column, CONVERTS it using
+    the connection's session timezone, silently shifting every wall-clock
+    value by that offset (found this shifting resolved dates by 8 hours
+    on a session with an Asia/Kuala_Lumpur-like default). ::timestamp
+    instead takes the literal's wall-clock digits as-is and discards the
+    offset, matching how the Python seed path inserts the same value via
+    a bound datetime with no implicit timezone conversion at all.
+    """
     if value is None:
         return "NULL"
     iso = value.isoformat() if hasattr(value, "isoformat") else str(value)
-    return f"'{iso}'::timestamptz"
+    return f"'{iso}'::timestamp"
 
 
 def sql_num(value):
@@ -68,8 +78,16 @@ def format_row(row):
         val = row[key]
         if col in ("longitude", "latitude", "worker_completed", "upvotes"):
             parts.append(sql_num(val))
-        elif col in ("timestamp", "forwarded_at", "reviewed_at", "in_process_at", "in_maintenance_at", "resolved_at"):
-            parts.append(sql_ts(val))
+        elif col == "timestamp":
+            parts.append(sql_native_ts(val))
+        elif col in ("forwarded_at", "reviewed_at", "in_process_at", "in_maintenance_at", "resolved_at"):
+            # These are varchar columns (an existing schema quirk, not
+            # something this script controls) storing plain ISO-8601
+            # strings — no timestamp cast at all, just the same quoted
+            # string literal used for every other text field, so Postgres
+            # can't reformat or reinterpret it.
+            iso = val.isoformat() if hasattr(val, "isoformat") else val
+            parts.append(sql_str(iso))
         else:
             parts.append(sql_str(val))
     return "  (" + ", ".join(parts) + ")"

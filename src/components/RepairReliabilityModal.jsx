@@ -256,6 +256,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       <Tooltip content={<ReliabilityTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
                       <Bar
                         dataKey="rate"
+                        isAnimationActive={false}
                         radius={[0, 4, 4, 0]}
                         maxBarSize={26}
                         cursor="pointer"
