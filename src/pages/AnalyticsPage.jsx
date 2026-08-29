@@ -13,7 +13,7 @@ import 'leaflet.heat';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, Heart, Activity,
+  CheckCircle2, ChevronRight, ChevronLeft, Heart, Activity,
   Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
@@ -138,6 +138,13 @@ export function AnalyticsPage() {
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [error, setError] = useState(null);
   const [mapReady, setMapReady] = useState(false);
+  const [heatmapMonth, setHeatmapMonth] = useState('all');
+  // Hovering a card highlights it on the persistent density map above the
+  // list — clicking a card already pans that map via mapFocus, but it also
+  // opens a detail popup that immediately covers the map, so that pan was
+  // never actually visible. Hover gives feedback on the map the admin can
+  // actually see, without needing to open (and close) every card.
+  const [heatmapHighlight, setHeatmapHighlight] = useState(null);
 
   // Scoping and Filter State
   const [dateFilter, setDateFilter] = useState('custom');
@@ -1443,17 +1450,36 @@ export function AnalyticsPage() {
       row.tickets.forEach((t) => {
         if (t.reappearances.length === 0) return;
         if (t.latitude != null && t.longitude != null) {
-          points.push({ latitude: parseFloat(t.latitude), longitude: parseFloat(t.longitude) });
+          points.push({ latitude: parseFloat(t.latitude), longitude: parseFloat(t.longitude), date: t.resolvedAt });
         }
         t.reappearances.forEach((rep) => {
           if (rep.latitude != null && rep.longitude != null) {
-            points.push({ latitude: parseFloat(rep.latitude), longitude: parseFloat(rep.longitude) });
+            points.push({ latitude: parseFloat(rep.latitude), longitude: parseFloat(rep.longitude), date: rep.at });
           }
         });
       });
     });
     return points;
   }, [reliabilityAudit]);
+
+  // Month key (yyyy-MM) present in the heatmap data, oldest first — lets the
+  // admin step through months to see where recurring failures shifted over
+  // time, instead of one static all-time blend that hides that movement.
+  const heatmapMonths = useMemo(() => {
+    const set = new Set();
+    heatmapPoints.forEach((p) => {
+      if (!p.date) return;
+      const d = new Date(p.date);
+      if (isNaN(d.getTime())) return;
+      set.add(format(d, 'yyyy-MM'));
+    });
+    return [...set].sort();
+  }, [heatmapPoints]);
+
+  const displayedHeatmapPoints = useMemo(() => {
+    if (heatmapMonth === 'all') return heatmapPoints;
+    return heatmapPoints.filter((p) => p.date && !isNaN(new Date(p.date).getTime()) && format(new Date(p.date), 'yyyy-MM') === heatmapMonth);
+  }, [heatmapPoints, heatmapMonth]);
 
   // 7. PDF Exporter
   /**
@@ -1757,6 +1783,10 @@ export function AnalyticsPage() {
         setActiveClusterId(item.id);
         setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
       }}
+      onMouseEnter={() => {
+        setHeatmapHighlight({ lat: item.latitude, lng: item.longitude, label: item.category });
+        setMapFocus({ center: [item.latitude, item.longitude], zoom: 14.5, trigger: Date.now() });
+      }}
       style={{ borderLeftColor: '#4338ca', borderLeftWidth: 4 }}
       className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
         activeClusterId === item.id ? 'bg-[#4a5d3f]/10 border-[#4a5d3f]/50 shadow-md' : 'bg-[#f7f4ec] border-[#1f1e1a]/8'
@@ -1798,6 +1828,10 @@ export function AnalyticsPage() {
       onClick={() => {
         setActiveRecurringId(item.id);
         setMapFocus({ center: [item.latitude, item.longitude], zoom: 15.5, trigger: Date.now() });
+      }}
+      onMouseEnter={() => {
+        setHeatmapHighlight({ lat: item.latitude, lng: item.longitude, label: item.category });
+        setMapFocus({ center: [item.latitude, item.longitude], zoom: 14.5, trigger: Date.now() });
       }}
       style={{ borderLeftColor: '#b91c1c', borderLeftWidth: 4 }}
       className={`p-4 border rounded-xl space-y-2 hover:border-[#4a5d3f]/40 transition-all cursor-pointer group text-left ${
@@ -2407,6 +2441,58 @@ export function AnalyticsPage() {
                 </div>
               </div>
               <div className="p-5">
+                {/* Month walkthrough — heatmapPoints alone blends every
+                    reappearance into one static all-time picture, which
+                    can't show whether the pattern is spreading, shifting,
+                    or dying out. Stepping through months lets the admin
+                    watch that movement instead of inferring it. */}
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setHeatmapMonth('all')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-opacity hover:opacity-80 ${
+                        heatmapMonth === 'all' ? '' : 'hover:bg-[#f5f1e6]'
+                      }`}
+                      style={heatmapMonth === 'all' ? { background: '#4a5d3f', color: '#fff' } : { color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+                    >
+                      All time
+                    </button>
+                    {heatmapMonths.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => {
+                            const idx = heatmapMonth === 'all' ? 0 : Math.max(0, heatmapMonths.indexOf(heatmapMonth) - 1);
+                            setHeatmapMonth(heatmapMonths[idx]);
+                          }}
+                          disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) <= 0}
+                          className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
+                          style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+                          title="Previous month"
+                        >
+                          <ChevronLeft size={13} />
+                        </button>
+                        <span className="text-[11px] font-bold text-[#201f1b] min-w-[100px] text-center">
+                          {heatmapMonth === 'all' ? 'Step through months' : format(new Date(heatmapMonth + '-02'), 'MMMM yyyy')}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const idx = heatmapMonth === 'all' ? 0 : Math.min(heatmapMonths.length - 1, heatmapMonths.indexOf(heatmapMonth) + 1);
+                            setHeatmapMonth(heatmapMonths[idx]);
+                          }}
+                          disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) >= heatmapMonths.length - 1}
+                          className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
+                          style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+                          title="Next month"
+                        >
+                          <ChevronRight size={13} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-[#8a8477]">
+                    {displayedHeatmapPoints.length} point{displayedHeatmapPoints.length === 1 ? '' : 's'} shown
+                  </span>
+                </div>
                 <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '380px', width: '100%' }}>
                   <MapContainer
                     center={[2.1896, 102.2501]}
@@ -2418,12 +2504,24 @@ export function AnalyticsPage() {
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
-                    <HeatmapLayer points={heatmapPoints} ready={mapReady} />
+                    <HeatmapLayer points={displayedHeatmapPoints} ready={mapReady} />
+                    {/* Hovering a card below sets this — the only way the
+                        admin can actually see a card "sync" to this map,
+                        since clicking opens a popup that covers it. */}
+                    {heatmapHighlight && (
+                      <CircleMarker
+                        center={[heatmapHighlight.lat, heatmapHighlight.lng]}
+                        radius={14}
+                        pathOptions={{ color: '#c1613f', fillColor: '#c1613f', fillOpacity: 0.2, weight: 3 }}
+                      >
+                        <Popup>{heatmapHighlight.label}</Popup>
+                      </CircleMarker>
+                    )}
                     <MapResizer />
                     <MapController focus={mapFocus} />
                   </MapContainer>
                 </div>
-                <p className="text-[10px] text-[#8a8477] mt-2.5">Click a hotspot below to open its full detail with the individual reports on a map.</p>
+                <p className="text-[10px] text-[#8a8477] mt-2.5">Hover a card below to highlight it here. Click to open its full detail with the individual reports on a map.</p>
               </div>
             </div>
 
@@ -2447,7 +2545,7 @@ export function AnalyticsPage() {
                       : 'text-[#8a8477] hover:text-[#201f1b] border border-transparent'
                   }`}
                 >
-                  Hotspots ({recurringHotspots.length})
+                  Recurring Failures ({recurringHotspots.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('systemic')}
