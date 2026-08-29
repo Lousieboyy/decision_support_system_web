@@ -17,7 +17,7 @@ const selectClass =
 const dateClass =
   'bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-[#201f1b] outline-none w-full';
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 10;
 
 // Renders nothing when there's no photo, rather than a placeholder box —
 // most reports won't have one, and an empty frame on every row just adds
@@ -83,7 +83,7 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
       <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div
-          className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
+          className="w-full max-w-3xl max-h-[94vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
           style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
