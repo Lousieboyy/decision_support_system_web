@@ -223,32 +223,48 @@ TITLES = {
     "Road Sign": ["Stop Sign Down", "Faded Sign", "Bent Speed Sign", "Missing Name Sign", "Damaged Direction Sign"],
 }
 
-EXISTING_IMAGES = [
-    "uploads/01dcf303-5d18-4d04-901e-47710a911dad.jpg",
-    "uploads/067beb81-aa38-4875-8302-0f0f876a7588.jpg",
-    "uploads/0875155a-9c73-4a91-a1d8-b9f8645ff1d9.jpg",
-    "uploads/191037f6-c48f-4368-8ab3-6c9ac54d2e90.jpg",
-    "uploads/219e8d25-cfdd-421a-843b-3485a928146a.jpg",
-    "uploads/31dfbbf5-5685-49b9-9d63-131093e32f95.jpg",
-    "uploads/34677595-c1d9-4fec-8df6-151218e66418.jpg",
-    "uploads/35c1fa2b-4b88-4be5-ba87-0bcf7af2611e.png",
-    "uploads/5362d52e-27fc-424d-96d1-85b73f489715.jpg",
-    "uploads/5b6a4bbc-f168-4431-aff8-36445cafc524.jpg",
-    "uploads/606e2bef-dbe0-4071-b188-02f969ead250.webp",
-    "uploads/6e6e5c4b-9adc-4731-a2a8-4585179d7bf2.jpg",
-    "uploads/787207c4-ab94-4a1e-bb32-5141564f971b.jpg",
-    "uploads/7ef34019-c803-4d2b-9ec9-57eec4386aa0.jpg",
-    "uploads/92c9384e-99db-4a4b-bb68-591a9387acbb.jpg",
-    "uploads/97f1b732-d50a-49fc-a8e2-40fa86d4ae3c.jpg",
-    "uploads/af30f21b-3909-4363-a26b-234227986b81.png",
-    "uploads/c30418c7-6d50-4765-afc7-84c89aa4d7f1.png",
-    "uploads/c9bad6b6-3069-4261-b62e-4be2146138ce.jpg",
-    "uploads/cf528fb5-395c-463b-9017-82e7c72639b1.jpg",
-    "uploads/d109eece-d094-48f8-9c39-1e925a936f26.png",
-    "uploads/e6b98283-4e2d-4854-bc1e-371409298a3c.jpg",
-    "uploads/ebab1a7c-d550-4cdf-99f3-9ed33877474b.jpg",
-    "uploads/fff147ee-40c4-42ef-8d35-9f5635937185.jpg",
-]
+# Every file in ai_backend/uploads/ was actually opened and checked before
+# being listed here. The original pool (reused from seed_50_reports.py) was
+# a flat "pick a good variety" grab from that folder with no verification —
+# it turned out to include AI-testing screenshots, an abstract graphic, and
+# two files that are not infrastructure photos at all (personal photos of
+# people, not a public issue). None of those are listed below, in any
+# category. Categories with no genuinely matching photo in the folder map
+# to an empty list on purpose — build_row() leaves the image blank rather
+# than assigning something mismatched or inappropriate. A report with no
+# photo is honest; a report with the wrong photo isn't.
+CATEGORY_IMAGES = {
+    "Road Damage": [
+        "uploads/0875155a-9c73-4a91-a1d8-b9f8645ff1d9.jpg",
+        "uploads/34677595-c1d9-4fec-8df6-151218e66418.jpg",
+    ],
+    "Street Lighting": [
+        "uploads/191037f6-c48f-4368-8ab3-6c9ac54d2e90.jpg",
+        "uploads/6e6e5c4b-9adc-4731-a2a8-4585179d7bf2.jpg",
+        "uploads/c9bad6b6-3069-4261-b62e-4be2146138ce.jpg",
+    ],
+    "Drainage": [
+        "uploads/067beb81-aa38-4875-8302-0f0f876a7588.jpg",
+    ],
+    "Vandalism": [
+        "uploads/606e2bef-dbe0-4071-b188-02f969ead250.webp",
+    ],
+    "Overgrown Vegetation": [
+        "uploads/01dcf303-5d18-4d04-901e-47710a911dad.jpg",
+        "uploads/5b6a4bbc-f168-4431-aff8-36445cafc524.jpg",
+        "uploads/97f1b732-d50a-49fc-a8e2-40fa86d4ae3c.jpg",
+    ],
+    "Broken Sidewalk": [
+        "uploads/d109eece-d094-48f8-9c39-1e925a936f26.png",
+    ],
+    # No genuinely matching photo available for these — left photo-less
+    # rather than mismatched.
+    "Waste": [],
+    "Fallen Tree": [],
+    "Illegal Dumping": [],
+    "Open Burning": [],
+    "Road Sign": [],
+}
 
 STATUS_WEIGHTS = [
     ("Pending", 15), ("In Review", 8), ("In Process", 8),
@@ -289,7 +305,9 @@ def build_row(*, category, lat, lng, address, timestamp, status,
     title = random.choice(TITLES[category])
     description = random.choice(DESCRIPTIONS[category])
     ai_pred = AI_PREDICTIONS[category]
-    image = image or random.choice(EXISTING_IMAGES)
+    if image is None:
+        options = CATEGORY_IMAGES.get(category) or []
+        image = random.choice(options) if options else None
     upvotes = upvotes if upvotes is not None else random.randint(0, 25)
 
     assigned_dept = None
