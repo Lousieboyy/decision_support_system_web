@@ -380,6 +380,8 @@ def main():
     try:
         print("Deleting all existing reports...")
         db.execute(text('DELETE FROM "report_upvotes"'))
+        db.execute(text('DELETE FROM "DatasetSample"'))
+        db.execute(text('DELETE FROM "TransferRequest"'))
         db.execute(text('DELETE FROM "Issue"'))
         db.execute(text('DELETE FROM "AuthorityAction"'))
         db.execute(text('DELETE FROM "Complaint"'))

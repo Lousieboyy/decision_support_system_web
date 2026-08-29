@@ -125,6 +125,8 @@ def main():
         "BEGIN;",
         "",
         'DELETE FROM "report_upvotes";',
+        'DELETE FROM "DatasetSample";',
+        'DELETE FROM "TransferRequest";',
         'DELETE FROM "Issue";',
         'DELETE FROM "AuthorityAction";',
         'DELETE FROM "Complaint";',
