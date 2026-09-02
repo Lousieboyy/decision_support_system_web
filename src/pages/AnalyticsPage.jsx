@@ -3102,6 +3102,13 @@ export function AnalyticsPage() {
               const ungraded = zoneScorecard.length - graded.length;
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
               const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
+              const UNRATED_COLOR = '#57534e';
+              const LEGEND = [
+                { color: '#15803d', label: '80%+ resolved' },
+                { color: '#b45309', label: '60–79% resolved' },
+                { color: '#b91c1c', label: 'Under 60% resolved' },
+                { color: UNRATED_COLOR, label: 'Not enough data' },
+              ];
 
               // A handful of reports (postcode strings that never resolved to
               // a real locality) belong to no surveyed centroid and so have
@@ -3126,6 +3133,18 @@ export function AnalyticsPage() {
                       <div className="text-center text-[#8a8477] py-8 text-sm">No zone data available</div>
                     ) : (
                       <>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {LEGEND.map((item) => (
+                            <span
+                              key={item.label}
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold"
+                              style={{ background: 'rgba(31,30,26,0.05)', color: item.color }}
+                            >
+                              <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, background: item.color }} />
+                              {item.label}
+                            </span>
+                          ))}
+                        </div>
                         <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '420px', width: '100%' }}>
                           <MapContainer center={[2.24, 102.24]} zoom={11} style={{ height: '100%', width: '100%' }}>
                             <TileLayer
@@ -3136,7 +3155,7 @@ export function AnalyticsPage() {
                               if (!t.positions) return null;
                               const z = zoneByName(t.name);
                               const graded = z && z.resolutionRate != null;
-                              const color = graded ? gradeColor(z.resolutionRate) : '#8a8477';
+                              const color = graded ? gradeColor(z.resolutionRate) : UNRATED_COLOR;
                               const validTotal = z ? z.total - z.rejected : 0;
                               return (
                                 <Polygon
@@ -3145,8 +3164,8 @@ export function AnalyticsPage() {
                                   pathOptions={{
                                     color,
                                     fillColor: color,
-                                    fillOpacity: graded ? 0.45 : 0.12,
-                                    weight: graded ? 2 : 1,
+                                    fillOpacity: graded ? 0.45 : 0.35,
+                                    weight: 2,
                                   }}
                                 >
                                   <Popup>
