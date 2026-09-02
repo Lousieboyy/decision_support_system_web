@@ -1,8 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
 import { X, AlertTriangle, FileDown } from 'lucide-react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
-} from 'recharts';
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { jsPDF } from 'jspdf';
@@ -56,26 +53,6 @@ function MapBoundsFitter({ points }) {
     }
   }, [map, points]);
   return null;
-}
-
-function ReliabilityTooltip({ active, payload }) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const grade = d.rate == null ? null : gradeFor(d.rate);
-  return (
-    <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
-      <div className="font-bold text-[#201f1b] mb-1">{d.name}</div>
-      <div className="text-[#4b473d] space-y-0.5">
-        <div>{d.resolvedCount ?? 0} resolved reports</div>
-        <div>
-          {d.reIncidence > 0 ? (
-            <span className="text-[#c1613f] font-bold">{d.reIncidence} repeat failure{d.reIncidence === 1 ? '' : 's'}</span>
-          ) : 'No repeat failures'}
-        </div>
-        {grade && <div>Grade <strong style={{ color: rateColor(d.rate) }}>{grade.grade}</strong></div>}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -247,49 +224,54 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
               <div className="text-center text-[#8a8477] py-8 text-sm">No department data available</div>
             ) : (
               <>
-                <div style={{ height: Math.max(120, contractorAudit.length * 44) }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={contractorAudit} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
-                      <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
-                      <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={170} />
-                      <Tooltip content={<ReliabilityTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
-                      <Bar
-                        dataKey="rate"
-                        isAnimationActive={false}
-                        radius={[0, 4, 4, 0]}
-                        maxBarSize={26}
-                        // A department at exactly 0% on-time is real data, not
-                        // absence of it — but a 0-length bar on a [0,100] axis
-                        // renders as literally nothing, indistinguishable from
-                        // the axes having no data at all. minPointSize keeps a
-                        // sliver visible so 0% still reads as a result.
-                        minPointSize={3}
-                        cursor="pointer"
-                        onClick={(d) => {
-                          const name = d?.payload?.name ?? d?.name;
-                          setSelectedAuthority((prev) => (prev === name ? null : name));
+                {/* Three departments doesn't need a full chart's worth of axis
+                    and gridline chrome — and a bar only ever showed on-time
+                    rate, while the thing this whole modal is about (did the
+                    fix hold) is repeat failures, which used to be buried in
+                    a hover tooltip. Cards put both numbers in view at once. */}
+                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(3, contractorAudit.length)}, minmax(0, 1fr))` }}>
+                  {contractorAudit.map((d) => {
+                    const grade = d.rate == null ? null : gradeFor(d.rate);
+                    const isSelected = selectedAuthority === d.name;
+                    const isDimmed = selectedAuthority && !isSelected;
+                    const color = rateColor(d.rate);
+                    return (
+                      <button
+                        key={d.name}
+                        onClick={() => setSelectedAuthority((prev) => (prev === d.name ? null : d.name))}
+                        className="text-left rounded-xl p-3 cursor-pointer transition-opacity hover:opacity-90"
+                        style={{
+                          background: '#fff',
+                          border: `2px solid ${isSelected ? color : 'rgba(31,30,26,0.1)'}`,
+                          opacity: isDimmed ? 0.5 : 1,
                         }}
                       >
-                        {contractorAudit.map((d) => (
-                          <Cell
-                            key={d.name}
-                            fill={rateColor(d.rate)}
-                            fillOpacity={!selectedAuthority || selectedAuthority === d.name ? 1 : 0.3}
-                          />
-                        ))}
-                        <LabelList
-                          dataKey="rate"
-                          position="right"
-                          formatter={(v) => (v == null ? 'no data' : `${v}%`)}
-                          style={{ fontSize: 10, fontWeight: 700, fill: '#4b473d' }}
-                        />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                        <div className="text-xs font-bold text-[#201f1b] mb-2 leading-tight min-h-[2rem]">{d.name}</div>
+                        <div className="flex items-end justify-between mb-2">
+                          <div>
+                            <div className="text-2xl font-black leading-none" style={{ color }}>
+                              {d.rate == null ? '—' : `${d.rate}%`}
+                            </div>
+                            <div className="text-[10px] text-[#8a8477] font-semibold mt-0.5">on time</div>
+                          </div>
+                          {grade && (
+                            <div className="px-2 py-0.5 rounded text-xs font-black text-white" style={{ background: color }}>
+                              {grade.grade}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] pt-2 border-t border-[#1f1e1a]/8">
+                          <span className="text-[#8a8477]">{d.resolvedCount} resolved</span>
+                          <span className="font-bold" style={{ color: d.reIncidence > 0 ? '#b91c1c' : '#8a8477' }}>
+                            {d.reIncidence} repeat{d.reIncidence === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-                <p className="text-[10px] text-[#8a8477] -mt-1 mb-2">
-                  Click a bar to see every resolved report behind that department's numbers.
+                <p className="text-[10px] text-[#8a8477] mt-2 mb-2">
+                  Click a card to see every resolved report behind that department's numbers.
                 </p>
               </>
             )}
@@ -326,7 +308,7 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
             <div className="mt-6 pt-5 border-t border-[#1f1e1a]/8">
               {!selectedAuthority ? (
                 <div className="text-center text-[#8a8477] py-8 text-xs leading-relaxed">
-                  Click a department bar above to see the evidence behind its numbers —<br />
+                  Click a department card above to see the evidence behind its numbers —<br />
                   every resolved report, which ones missed the SLA, and which ones came back.
                 </div>
               ) : (
