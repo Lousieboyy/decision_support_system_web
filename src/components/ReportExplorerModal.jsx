@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { deriveZone, reportDurationDays, fmtDuration } from '../utils/analyticsMetrics';
 import { getImageUrl } from '../api/reportsApi';
 
@@ -96,37 +97,65 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
       ].filter(Boolean).join(' · ');
 
   const handleExportPDF = () => {
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(16);
-    doc.text('Find Reports — Export', 14, 20);
+    doc.text('Find Reports — Export', 14, 17);
     doc.setFontSize(9);
     doc.setTextColor(120);
-    doc.text(`${results.length} matching report${results.length === 1 ? '' : 's'} · Generated ${new Date().toLocaleString()}`, 14, 27);
-    const summaryLines = doc.splitTextToSize(filterSummary, 180);
-    doc.text(summaryLines, 14, 33);
+    doc.text(`${results.length} matching report${results.length === 1 ? '' : 's'} · Generated ${new Date().toLocaleString()}`, 14, 23);
+    const summaryLines = doc.splitTextToSize(filterSummary, 260);
+    doc.text(summaryLines, 14, 29);
     doc.setTextColor(0);
 
-    let y = 33 + summaryLines.length * 5 + 8;
-    doc.setFontSize(10);
-    results.forEach((r) => {
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
+    // Truncated to fit ourselves, at the exact font/size the table uses,
+    // rather than relying on autoTable's own overflow handling — its
+    // wrap-then-ellipsize path was placing a cell's text a full row too
+    // high whenever the untruncated string would have wrapped to 2 lines,
+    // visually bleeding it into the row above.
+    const TABLE_FONT_SIZE = 8;
+    const fitText = (text, maxWidthMm) => {
+      const str = String(text ?? '');
+      doc.setFontSize(TABLE_FONT_SIZE);
+      if (doc.getTextWidth(str) <= maxWidthMm) return str;
+      let lo = 0, hi = str.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        if (doc.getTextWidth(str.slice(0, mid) + '…') <= maxWidthMm) lo = mid;
+        else hi = mid - 1;
       }
-      const days = reportDurationDays(r);
-      doc.setFont(undefined, 'bold');
-      doc.text(`#${r.id} — ${r.status || 'Pending'}`, 14, y);
-      doc.setFont(undefined, 'normal');
-      doc.text(`${deriveZone(r)} | ${r.categories || 'Other'} | ${r.assigned_department || 'Unassigned'}`, 70, y);
-      y += 6;
-      doc.text(`${r.address || r.location || 'Unknown location'}`, 14, y);
-      const dateLabel = fmtRowDate(r.timestamp);
-      if (dateLabel) doc.text(dateLabel, 160, y);
-      y += 6;
-      if (days != null) {
-        doc.text(r.status === 'Resolved' ? `Took ${fmtDuration(days)} to resolve` : `Open ${fmtDuration(days)}`, 14, y);
-      }
-      y += 9;
+      return str.slice(0, lo) + '…';
+    };
+    // cellWidth minus 2×cellPadding (2.5mm) from columnStyles below.
+    const COLUMN_TEXT_WIDTH = [9, 19, 19, 50, 23, 63, 17, 33];
+
+    autoTable(doc, {
+      startY: 29 + summaryLines.length * 5 + 4,
+      head: [['ID', 'Status', 'Category', 'Department', 'Zone', 'Location', 'Reported', 'Duration']],
+      body: results.map((r) => {
+        const days = reportDurationDays(r);
+        return [
+          `#${r.id}`,
+          r.status || 'Pending',
+          r.categories || 'Other',
+          r.assigned_department || 'Unassigned',
+          deriveZone(r),
+          r.address || r.location || 'Unknown location',
+          fmtRowDate(r.timestamp) || '—',
+          days == null ? '—' : (r.status === 'Resolved' ? `Took ${fmtDuration(days)}` : `Open ${fmtDuration(days)}`),
+        ].map((cell, i) => fitText(cell, COLUMN_TEXT_WIDTH[i]));
+      }),
+      styles: { fontSize: TABLE_FONT_SIZE, cellPadding: 2.5 },
+      columnStyles: {
+        0: { cellWidth: 14 },
+        1: { cellWidth: 24 },
+        2: { cellWidth: 24 },
+        3: { cellWidth: 55 },
+        4: { cellWidth: 28 },
+        5: { cellWidth: 68 },
+        6: { cellWidth: 22 },
+      },
+      headStyles: { fillColor: [74, 93, 63] },
+      alternateRowStyles: { fillColor: [245, 241, 230] },
     });
 
     doc.save(`find_reports_${new Date().toISOString().slice(0, 10)}.pdf`);
