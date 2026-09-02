@@ -724,8 +724,12 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
 
   return (
     <>
-      <div className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 w-full max-w-lg z-50 flex flex-col" style={{ background: '#ffffff', boxShadow: '0 32px 80px rgba(31,30,26,0.18)', borderLeft: '1px solid rgba(31,30,26,0.08)' }}>
+      <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        className="w-full max-w-3xl max-h-[94vh] flex flex-col rounded-2xl overflow-hidden modal-pop-in"
+        style={{ background: '#ffffff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
+      >
         {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 shrink-0" style={{ borderBottom: '1px solid rgba(31,30,26,0.07)', background: 'var(--cream-200)' }}>
           <div className="flex items-center gap-3">
@@ -1264,6 +1268,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
             </div>
           )}
         </div>
+      </div>
       </div>
 
       {/* Full Screen Image Viewer */}
