@@ -14,8 +14,10 @@ import { fmtDuration } from '../utils/analyticsMetrics';
 
 const HATCH = 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, transparent 6px 12px)';
 
-const scoreColor = (s) =>
-  s == null ? '#8a8477' : s >= 80 ? '#15803d' : s >= 60 ? '#b45309' : '#b91c1c';
+const scoreColor = (s) => {
+  const grade = gradeFor(s);
+  return grade ? GRADE_COLOR[grade.grade] : '#8a8477';
+};
 
 // Ascending order (Critical -> Optimal, left to right), each with its actual
 // score range — GRADE_SCALE itself is stored highest-first for lookup.
