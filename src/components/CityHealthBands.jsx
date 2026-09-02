@@ -368,7 +368,7 @@ function BandHeader({ title, subtitle, onMethodology }) {
  * defects accumulated. Band A now measures the council; Band B measures the
  * city.
  */
-export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount, activeBand, onBandChange, onZoneClick }) {
+export function CityHealthBands({ servicePerformance, urbanCondition, infrastructureFragility, backlogFlow, reportCount, activeBand, onBandChange, onZoneClick, onWeekClick }) {
   const [methodology, setMethodology] = useState(null);
 
   const spiDomains = Object.values(servicePerformance.domains);
@@ -413,11 +413,16 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
     );
   };
 
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
   const flowData = backlogFlow.map((p) => ({
     week: format(new Date(p.weekEnd), 'MMM dd'),
     Open: p.open,
     'New Reports': p.inflow,
     Resolved: p.outflow,
+    // The window this point covers is (weekEnd - 7d, weekEnd] — see
+    // buildBacklogFlow — so a click needs both ends to filter that exact week.
+    weekStart: p.weekEnd - 7 * MS_PER_DAY,
+    weekEnd: p.weekEnd,
   }));
 
   const BAND_TABS = [
@@ -494,7 +499,23 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
           <div className="p-5">
             <div style={{ height: 240 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={flowData} margin={{ top: 5, right: 10, left: -18, bottom: 0 }}>
+                <ComposedChart
+                  data={flowData}
+                  margin={{ top: 5, right: 10, left: -18, bottom: 0 }}
+                  onClick={(e) => {
+                    // ComposedChart's onClick doesn't reliably populate
+                    // activePayload the way a plain AreaChart/BarChart does —
+                    // activeIndex is the one field it always sets on click.
+                    const point = e?.activeIndex != null ? flowData[e.activeIndex] : null;
+                    if (point && onWeekClick) {
+                      onWeekClick(
+                        `${format(new Date(point.weekStart + MS_PER_DAY), 'yyyy-MM-dd')}T00:00`,
+                        `${format(new Date(point.weekEnd), 'yyyy-MM-dd')}T23:59`
+                      );
+                    }
+                  }}
+                  style={{ cursor: onWeekClick ? 'pointer' : 'default' }}
+                >
                   <defs>
                     <linearGradient id="openGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#d97757" stopOpacity={0.3} />
@@ -520,6 +541,7 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
               The number of open reports each week is calculated from the dates reports were
               submitted and resolved. The rejection date is estimated from the review date,
               which is accurate because a rejected report is never later approved.
+              {onWeekClick && ' Click a point to see the reports submitted that week.'}
             </p>
           </div>
         </div>

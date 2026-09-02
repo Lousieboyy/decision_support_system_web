@@ -4,12 +4,13 @@ import { fetchStats, fetchTimeline, fetchAllReports, fetchTeamWorkload, fetchTra
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  BarChart, Bar, LabelList,
 } from 'recharts';
 import { RefreshCw, MapPin, CheckCircle2, Clock, AlertTriangle, TrendingUp, Building2, Activity, Download, AlertCircle, Users, HardHat, Inbox } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
+import { ReportExplorerModal } from '../components/ReportExplorerModal';
+import { deriveZone, reportDurationDays, deriveDepartmentOptions } from '../utils/analyticsMetrics';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
 
@@ -215,23 +216,50 @@ export function DashboardPage() {
     }));
   }, [timeline]);
 
-  // Department performance chart data
-  const deptPerformanceData = useMemo(() => {
-    if (!recentReports.length) return [];
-    const map = {};
-    AUTHORITIES.forEach(a => { map[a.id] = { name: a.abbr, assigned: 0, resolved: 0 }; });
-    recentReports.forEach(r => {
-      const dept = AUTHORITIES.find(a =>
-        (r.assigned_department || '').toLowerCase().includes(a.abbr.toLowerCase()) ||
-        (r.assigned_department || '').toLowerCase().includes(a.id.toLowerCase())
-      );
-      if (dept) {
-        map[dept.id].assigned++;
-        if (r.status === 'Resolved') map[dept.id].resolved++;
-      }
-    });
-    return Object.values(map).filter(d => d.assigned > 0).sort((a, b) => b.assigned - a.assigned).slice(0, 7);
-  }, [recentReports]);
+  // "Find Reports" drill-down for the category donut and department bars —
+  // same tool AnalyticsPage uses, so a number on this page isn't a dead end.
+  const [exploreFilters, setExploreFilters] = useState(null); // null = modal closed
+  const EMPTY_EXPLORE_FILTERS = { dateFrom: '', dateTo: '', category: 'all', department: 'all', status: 'all', zone: 'all', durationMin: '', durationMax: '' };
+  const openExplore = (partial) => setExploreFilters({ ...EMPTY_EXPLORE_FILTERS, ...partial });
+
+  const exploreCategories = useMemo(
+    () => [...new Set(allReports.map((r) => r.categories || 'Other'))].sort(),
+    [allReports]
+  );
+  const exploreStatuses = useMemo(
+    () => [...new Set(allReports.map((r) => r.status).filter(Boolean))].sort(),
+    [allReports]
+  );
+  const exploreZones = useMemo(() => [...new Set(allReports.map((r) => deriveZone(r)))].sort(), [allReports]);
+  const departmentOptions = useMemo(() => deriveDepartmentOptions(allReports), [allReports]);
+
+  const exploreResults = useMemo(() => {
+    if (!exploreFilters) return [];
+    return allReports
+      .filter((r) => {
+        if (exploreFilters.department !== 'all') {
+          const needle = exploreFilters.department.toLowerCase();
+          if (!(r.assigned_department || '').toLowerCase().includes(needle)) return false;
+        }
+        if (exploreFilters.category !== 'all' && (r.categories || 'Unknown') !== exploreFilters.category) return false;
+        if (exploreFilters.status !== 'all' && r.status !== exploreFilters.status) return false;
+        if (exploreFilters.zone !== 'all' && deriveZone(r) !== exploreFilters.zone) return false;
+        if (exploreFilters.dateFrom || exploreFilters.dateTo) {
+          if (!r.timestamp) return false;
+          const reportDate = r.timestamp.split('T')[0];
+          if (exploreFilters.dateFrom && reportDate < exploreFilters.dateFrom.split('T')[0]) return false;
+          if (exploreFilters.dateTo && reportDate > exploreFilters.dateTo.split('T')[0]) return false;
+        }
+        if (exploreFilters.durationMin !== '' || exploreFilters.durationMax !== '') {
+          const days = reportDurationDays(r);
+          if (days == null) return false;
+          if (exploreFilters.durationMin !== '' && days < Number(exploreFilters.durationMin)) return false;
+          if (exploreFilters.durationMax !== '' && days > Number(exploreFilters.durationMax)) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  }, [exploreFilters, allReports]);
 
   const resolutionRate = stats ? Math.round((stats.resolved / (stats.total || 1)) * 100) : 0;
   const myReports = useMemo(() => {
@@ -281,6 +309,7 @@ export function DashboardPage() {
   }
 
   return (
+    <>
     <div className="p-8 pb-20">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
@@ -529,7 +558,15 @@ export function DashboardPage() {
                   {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
-                        <Pie data={chartData} cx="50%" cy="45%" innerRadius={55} outerRadius={88} paddingAngle={4} dataKey="value">
+                        <Pie
+                          data={chartData}
+                          cx="50%" cy="45%" innerRadius={55} outerRadius={88} paddingAngle={4} dataKey="value"
+                          cursor="pointer"
+                          onClick={(d) => {
+                            const name = d?.name ?? d?.payload?.name;
+                            if (name) openExplore({ category: name });
+                          }}
+                        >
                           {chartData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
                         <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(31,30,26,0.10)', background: '#ffffff', color: '#201f1b', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
@@ -540,6 +577,9 @@ export function DashboardPage() {
                     <div className="flex h-full items-center justify-center text-[#8a8477] text-sm">No category data.</div>
                   )}
                 </div>
+                {chartData.length > 0 && (
+                  <p className="text-[10px] text-[#8a8477] mt-1.5 text-center">Click a slice to see those reports.</p>
+                )}
               </div>
             </div>
           </div>
@@ -574,38 +614,6 @@ export function DashboardPage() {
             </div>
           </div>
           </>
-          )}
-
-          {/* Department Performance Chart — Admin only */}
-          {role === 'admin' && deptPerformanceData.length > 0 && (
-            <div className="content-card mb-5">
-              <div className="content-card-header">
-                <div className="content-card-title">Department Performance</div>
-                <span className="text-xs text-[#8a8477] font-medium">Based on recent 20 reports</span>
-              </div>
-              <div className="p-5">
-                <div className="h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={deptPerformanceData} layout="vertical" margin={{ top: 0, right: 50, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
-                      <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#8a8477' }} allowDecimals={false} />
-                      <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#201f1b', fontWeight: 600 }} width={45} />
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid rgba(31,30,26,0.10)', background: '#ffffff', color: '#201f1b', backdropFilter: 'blur(16px)' }} itemStyle={{ color: '#201f1b' }} labelStyle={{ color: '#8a8477' }} />
-                      <Bar dataKey="assigned" name="Assigned" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={12}>
-                        <LabelList dataKey="assigned" position="right" style={{ fontSize: 11, fill: '#4338ca', fontWeight: 700 }} />
-                      </Bar>
-                      <Bar dataKey="resolved" name="Resolved" fill="#4a5d3f" radius={[0, 4, 4, 0]} barSize={12}>
-                        <LabelList dataKey="resolved" position="right" style={{ fontSize: 11, fill: '#3d4d34', fontWeight: 700 }} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex items-center gap-4 mt-3 text-xs text-[#8a8477]">
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#6366f1' }} /> Assigned</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#4a5d3f' }} /> Resolved</span>
-                </div>
-              </div>
-            </div>
           )}
 
           {/* My Jobs (worker) / Recent Reports (admin, authority) */}
@@ -663,5 +671,18 @@ export function DashboardPage() {
       ) : null}
       </div>
     </div>
+    {exploreFilters && (
+      <ReportExplorerModal
+        filters={exploreFilters}
+        onFiltersChange={setExploreFilters}
+        categories={exploreCategories}
+        departments={departmentOptions}
+        statuses={exploreStatuses}
+        zones={exploreZones}
+        results={exploreResults}
+        onClose={() => setExploreFilters(null)}
+      />
+    )}
+    </>
   );
 }

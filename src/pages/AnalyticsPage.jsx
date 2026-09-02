@@ -3090,6 +3090,7 @@ export function AnalyticsPage() {
               activeBand={cityHealthBand}
               onBandChange={setCityHealthBand}
               onZoneClick={(zone) => openExplore({ zone })}
+              onWeekClick={(dateFrom, dateTo) => openExplore({ dateFrom, dateTo })}
             />
 
             {/* Row 4: a zone breakdown that matches whichever score band is
