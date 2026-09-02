@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, FileDown } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import jsPDF from 'jspdf';
 import { deriveZone, reportDurationDays, fmtDuration } from '../utils/analyticsMetrics';
 import { getImageUrl } from '../api/reportsApi';
 
@@ -78,6 +79,59 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
   const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
   const pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // A human-readable line describing whatever filters produced this list, so
+  // the PDF still makes sense once it's been saved, printed, or forwarded
+  // and separated from the modal that made it.
+  const filterSummary = isEmpty
+    ? 'No filters applied — every report.'
+    : [
+        filters.dateFrom && `From ${fmtRowDate(filters.dateFrom)}`,
+        filters.dateTo && `To ${fmtRowDate(filters.dateTo)}`,
+        filters.category !== 'all' && `Category: ${filters.category}`,
+        filters.department !== 'all' && `Department: ${filters.department}`,
+        filters.zone !== 'all' && `Zone: ${filters.zone}`,
+        filters.status !== 'all' && `Status: ${filters.status}`,
+        filters.durationMin !== '' && `Min ${filters.durationMin}d open/to-resolve`,
+        filters.durationMax !== '' && `Max ${filters.durationMax}d open/to-resolve`,
+      ].filter(Boolean).join(' · ');
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text('Find Reports — Export', 14, 20);
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text(`${results.length} matching report${results.length === 1 ? '' : 's'} · Generated ${new Date().toLocaleString()}`, 14, 27);
+    const summaryLines = doc.splitTextToSize(filterSummary, 180);
+    doc.text(summaryLines, 14, 33);
+    doc.setTextColor(0);
+
+    let y = 33 + summaryLines.length * 5 + 8;
+    doc.setFontSize(10);
+    results.forEach((r) => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      const days = reportDurationDays(r);
+      doc.setFont(undefined, 'bold');
+      doc.text(`#${r.id} — ${r.status || 'Pending'}`, 14, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(`${deriveZone(r)} | ${r.categories || 'Other'} | ${r.assigned_department || 'Unassigned'}`, 70, y);
+      y += 6;
+      doc.text(`${r.address || r.location || 'Unknown location'}`, 14, y);
+      const dateLabel = fmtRowDate(r.timestamp);
+      if (dateLabel) doc.text(dateLabel, 160, y);
+      y += 6;
+      if (days != null) {
+        doc.text(r.status === 'Resolved' ? `Took ${fmtDuration(days)} to resolve` : `Open ${fmtDuration(days)}`, 14, y);
+      }
+      y += 9;
+    });
+
+    doc.save(`find_reports_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-40 overlay-fade-in" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={onClose} />
@@ -93,9 +147,19 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
                 {results.length} matching report{results.length === 1 ? '' : 's'}
               </div>
             </div>
-            <button onClick={onClose} className="p-2 rounded-full transition-colors" style={{ color: '#8a8477' }}>
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportPDF}
+                disabled={results.length === 0}
+                className="export-btn disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Export the matching reports as a PDF"
+              >
+                <FileDown size={14} /> PDF
+              </button>
+              <button onClick={onClose} className="p-2 rounded-full transition-colors" style={{ color: '#8a8477' }}>
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           <div className="px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
