@@ -47,7 +47,8 @@ const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 // zone — but left unclipped, or clipped to an arbitrary rectangle, that
 // tessellation floats over the coastline and looks nothing like Melaka.
 // Every zone is already mapped to a real district (ZONE_DISTRICT), and
-// district outlines ARE real (geoBoundaries, CC BY 4.0), so each zone's
+// district outlines ARE real (OpenStreetMap admin boundary relations,
+// assembled via polygons.openstreetmap.fr, ODbL), so each zone's
 // raw Voronoi cell is intersected with its own district's polygon: the
 // cell boundaries between neighbouring zones are still the same "nearest
 // centroid" lines as before, but the outer edge now follows the real
@@ -3196,7 +3197,7 @@ export function AnalyticsPage() {
                           cell edge — exactly the area closer to one zone's surveyed centroid than to any other's, the same "nearest
                           centroid wins" rule used to assign a report to a zone in the first place. The outer edge of each territory,
                           however, is real: it's clipped to the actual district border and coastline (Alor Gajah, Melaka Tengah or
-                          Jasin — geoBoundaries, CC BY 4.0), not an arbitrary box. Color tracks the resolution rate, same grading as
+                          Jasin — © OpenStreetMap contributors, ODbL), not an arbitrary box. Color tracks the resolution rate, same grading as
                           before; grey territories have no rateable reports yet. Resolution rate is the number resolved, divided by
                           the total minus rejected reports.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
