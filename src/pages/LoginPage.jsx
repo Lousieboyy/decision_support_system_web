@@ -170,11 +170,6 @@ export function LoginPage() {
                 <button type="submit" className="submit-btn">
                   <LogIn size={17} /> Sign In to Portal
                 </button>
-
-                <p className="login-hint">
-                  Demo — <strong>admin</strong> / <strong>mbmb</strong> / <strong>worker1</strong> (password: <strong>password</strong>)<br />
-                  <em>Or log in with your newly created account.</em>
-                </p>
               </form>
             ) : (
               <form onSubmit={handleRequest} className="auth-form">
