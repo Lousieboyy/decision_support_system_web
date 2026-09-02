@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from '
 import L from 'leaflet';
 import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
-import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor } from '../utils/analyticsConstants';
+import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, GRADE_SCALE, GRADE_COLOR } from '../utils/analyticsConstants';
 import { calculateDistance } from '../utils/analyticsMetrics';
 
 const fmtDate = (v) => {
@@ -13,7 +13,13 @@ const fmtDate = (v) => {
   return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy');
 };
 
-const rateColor = (rate) => (rate == null ? '#8a8477' : rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
+// Was its own 3-bucket green/amber/red before — that disagreed with the
+// letter badge next to it, which already used the real 5-tier A-F scale
+// (a "C" and a "D" both showed the same amber). One scale, one color.
+const rateColor = (rate) => {
+  const grade = gradeFor(rate);
+  return grade ? GRADE_COLOR[grade.grade] : '#8a8477';
+};
 
 const isValidPoint = (lat, lng) => Number.isFinite(Number(lat)) && Number.isFinite(Number(lng));
 
@@ -224,6 +230,23 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
               <div className="text-center text-[#8a8477] py-8 text-sm">No department data available</div>
             ) : (
               <>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {GRADE_SCALE.map((g) => (
+                    <span
+                      key={g.grade}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold"
+                      style={{ background: 'rgba(31,30,26,0.05)', color: GRADE_COLOR[g.grade] }}
+                    >
+                      <span
+                        className="inline-flex items-center justify-center rounded-full shrink-0 text-white font-black"
+                        style={{ width: 14, height: 14, background: GRADE_COLOR[g.grade], fontSize: 8 }}
+                      >
+                        {g.grade}
+                      </span>
+                      {g.label} ({g.min}{g.grade === 'A' ? '+' : `–${GRADE_SCALE[GRADE_SCALE.indexOf(g) - 1]?.min - 1}`})
+                    </span>
+                  ))}
+                </div>
                 {/* Three departments doesn't need a full chart's worth of axis
                     and gridline chrome — and a bar only ever showed on-time
                     rate, while the thing this whole modal is about (did the

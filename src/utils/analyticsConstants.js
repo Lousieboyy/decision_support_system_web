@@ -39,6 +39,10 @@ export const GRADE_SCALE = [
   { min: 0, grade: 'F', label: 'Critical' },
 ];
 
+// Shared so a grade means the same color everywhere it appears, not just
+// within one component's own local copy.
+export const GRADE_COLOR = { A: '#15803d', B: '#0f766e', C: '#c1613f', D: '#c2410c', F: '#b91c1c' };
+
 /** Returns the GRADE_SCALE entry for a score, or null when unmeasured. */
 export const gradeFor = (score) =>
   score == null || Number.isNaN(score)

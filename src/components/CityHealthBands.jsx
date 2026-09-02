@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, SLA_TARGET_DAYS,
   AGE_WEIGHT_DAYS, MIN_N_FOR_STAGE, MIN_N_FOR_SCORE, MIN_N_FOR_INDEX,
-  IFI_WEIGHTS, REINCIDENCE, gradeFor, GRADE_SCALE,
+  IFI_WEIGHTS, REINCIDENCE, gradeFor, GRADE_SCALE, GRADE_COLOR,
 } from '../utils/analyticsConstants';
 import { fmtDuration } from '../utils/analyticsMetrics';
 
@@ -16,10 +16,6 @@ const HATCH = 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, trans
 
 const scoreColor = (s) =>
   s == null ? '#8a8477' : s >= 80 ? '#15803d' : s >= 60 ? '#b45309' : '#b91c1c';
-
-// Matches .cwi-grade-{letter} in index.css so a grade means the same color
-// everywhere it appears.
-const GRADE_COLOR = { A: '#15803d', B: '#0f766e', C: '#c1613f', D: '#c2410c', F: '#b91c1c' };
 
 // Ascending order (Critical -> Optimal, left to right), each with its actual
 // score range — GRADE_SCALE itself is stored highest-first for lookup.
