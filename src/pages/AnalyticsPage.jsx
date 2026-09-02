@@ -3147,7 +3147,6 @@ export function AnalyticsPage() {
                                     fillOpacity: graded ? 0.45 : 0.12,
                                     weight: graded ? 2 : 1,
                                   }}
-                                  eventHandlers={{ click: () => openExplore({ zone: t.name }) }}
                                 >
                                   <Popup>
                                     <div className="text-xs">
@@ -3172,7 +3171,18 @@ export function AnalyticsPage() {
                                         ) : (
                                           <div>No reports in this zone in the current filter</div>
                                         )}
-                                        <div className="text-[#8a8477] mt-1">Click this territory to see these reports</div>
+                                        {/* A tap has no hover to preview with first — the click
+                                            used to jump straight to the report list, so the stats
+                                            above never actually got seen on a touch screen. The
+                                            popup now needs its own explicit action instead of
+                                            piggybacking on the shape's click. */}
+                                        <button
+                                          onClick={() => openExplore({ zone: t.name })}
+                                          className="mt-2 w-full text-center rounded-lg px-2 py-1.5 text-[11px] font-bold text-white cursor-pointer"
+                                          style={{ background: '#4a5d3f' }}
+                                        >
+                                          See these reports →
+                                        </button>
                                       </div>
                                     </div>
                                   </Popup>
@@ -3191,7 +3201,7 @@ export function AnalyticsPage() {
                           the total minus rejected reports.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
                           {unplottable > 0 && ` ${unplottable} graded zone${unplottable === 1 ? '' : 's'} couldn't be placed on the map (no surveyed centroid).`}
-                          {' '}Click a territory to see the reports behind it.
+                          {' '}Tap a territory for its numbers, then "See these reports" to open them.
                         </p>
                         {/* The ranking alone doesn't say what to do about it —
                             name the worst zone and why it's worth a look. */}
