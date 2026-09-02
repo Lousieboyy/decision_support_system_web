@@ -7,9 +7,10 @@ import {
   BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar, LabelList,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup, Polyline, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
+import { Delaunay } from 'd3-delaunay';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, Download, Info, MapPin, RefreshCw,
@@ -35,6 +36,24 @@ import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
+
+// Zone territory shapes — the 18 surveyed localities only ever had a
+// centroid, never a real administrative boundary. Rather than draw a
+// boundary that doesn't exist, a Voronoi tessellation across those same
+// centroids is used: it divides the map by exactly the "nearest centroid
+// wins" rule deriveZone() already uses to assign a report to a zone, just
+// drawn as a shape instead of implied by a dot. Computed once at module
+// load since MELAKA_ZONES is static.
+const ZONE_VORONOI_BOUNDS = [101.98, 2.08, 102.50, 2.46]; // [xmin, ymin, xmax, ymax] in [lng, lat]
+const ZONE_TERRITORY = (() => {
+  const delaunay = Delaunay.from(MELAKA_ZONES, (z) => z.lng, (z) => z.lat);
+  const voronoi = delaunay.voronoi(ZONE_VORONOI_BOUNDS);
+  return MELAKA_ZONES.map((z, i) => {
+    const cell = voronoi.cellPolygon(i);
+    // Leaflet positions are [lat, lng]; the cell comes out as [lng, lat].
+    return { name: z.name, positions: cell ? cell.map(([lng, lat]) => [lat, lng]) : null };
+  });
+})();
 
 // Heatmap Layer for Leaflet Map
 function HeatmapLayer({ points, ready }) {
@@ -3048,12 +3067,11 @@ export function AnalyticsPage() {
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
               const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
 
-              // Zones only have a centroid, never a real boundary polygon, so
-              // "on the map" means a marker at that point, not a shaded
-              // territory. A handful of reports (postcode strings that never
-              // resolved to a real locality) have nowhere to be placed.
-              const zoneCoord = (name) => MELAKA_ZONES.find((z) => z.name === name);
-              const mapped = chartData.filter((z) => z.name !== ZONE_UNMAPPED && zoneCoord(z.name));
+              // A handful of reports (postcode strings that never resolved to
+              // a real locality) belong to no surveyed centroid and so have
+              // no territory cell to sit in.
+              const zoneByName = (name) => zoneScorecard.find((z) => z.name === name);
+              const mapped = chartData.filter((z) => z.name !== ZONE_UNMAPPED && ZONE_TERRITORY.some((t) => t.name === z.name));
               const unplottable = chartData.length - mapped.length;
 
               return (
@@ -3078,55 +3096,65 @@ export function AnalyticsPage() {
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
-                            {mapped.map((z) => {
-                              const coord = zoneCoord(z.name);
-                              const validTotal = z.total - z.rejected;
-                              // Radius reflects report volume, not just the rate — a
-                              // zone with 3 reports and one with 80 can share a grade
-                              // but shouldn't look the same size on the map.
-                              const radius = 10 + Math.min(18, Math.round(Math.sqrt(validTotal) * 3));
+                            {ZONE_TERRITORY.map((t) => {
+                              if (!t.positions) return null;
+                              const z = zoneByName(t.name);
+                              const graded = z && z.resolutionRate != null;
+                              const color = graded ? gradeColor(z.resolutionRate) : '#8a8477';
+                              const validTotal = z ? z.total - z.rejected : 0;
                               return (
-                                <CircleMarker
-                                  key={z.name}
-                                  center={[coord.lat, coord.lng]}
-                                  radius={radius}
+                                <Polygon
+                                  key={t.name}
+                                  positions={t.positions}
                                   pathOptions={{
-                                    color: gradeColor(z.resolutionRate),
-                                    fillColor: gradeColor(z.resolutionRate),
-                                    fillOpacity: 0.55,
-                                    weight: 2,
+                                    color,
+                                    fillColor: color,
+                                    fillOpacity: graded ? 0.45 : 0.12,
+                                    weight: graded ? 2 : 1,
                                   }}
-                                  eventHandlers={{ click: () => openExplore({ zone: z.name }) }}
+                                  eventHandlers={{ click: () => openExplore({ zone: t.name }) }}
                                 >
                                   <Popup>
                                     <div className="text-xs">
-                                      <div className="font-bold text-[#201f1b] mb-1">{z.name}</div>
+                                      <div className="font-bold text-[#201f1b] mb-1">{t.name}</div>
                                       <div className="text-[#4b473d] space-y-0.5">
-                                        <div>{z.resolutionRate}% resolved ({z.resolved}/{validTotal})</div>
-                                        <div>{z.total} total · {z.active} active · {z.resolved} resolved</div>
-                                        <div>
-                                          Average {z.avgDays ?? '—'} days
-                                          {z.avgDays != null && z.avgDays > SLA_END_TO_END_DAYS && (
-                                            <span className="text-red-700 font-bold"> (over target)</span>
-                                          )}
-                                        </div>
-                                        {z.grade && <div>Grade <strong style={{ color: gradeColor(z.resolutionRate) }}>{z.grade}</strong></div>}
-                                        <div className="text-[#8a8477] mt-1">Click the marker to see these reports</div>
+                                        {z ? (
+                                          <>
+                                            {graded ? (
+                                              <div>{z.resolutionRate}% resolved ({z.resolved}/{validTotal})</div>
+                                            ) : (
+                                              <div>Not enough resolved reports to rate yet</div>
+                                            )}
+                                            <div>{z.total} total · {z.active} active · {z.resolved} resolved</div>
+                                            <div>
+                                              Average {z.avgDays ?? '—'} days
+                                              {z.avgDays != null && z.avgDays > SLA_END_TO_END_DAYS && (
+                                                <span className="text-red-700 font-bold"> (over target)</span>
+                                              )}
+                                            </div>
+                                            {z.grade && <div>Grade <strong style={{ color }}>{z.grade}</strong></div>}
+                                          </>
+                                        ) : (
+                                          <div>No reports in this zone in the current filter</div>
+                                        )}
+                                        <div className="text-[#8a8477] mt-1">Click this territory to see these reports</div>
                                       </div>
                                     </div>
                                   </Popup>
-                                </CircleMarker>
+                                </Polygon>
                               );
                             })}
                           </MapContainer>
                         </div>
                         <p className="text-[10px] text-[#8a8477] mt-2">
-                          Each marker sits at the zone's surveyed centroid, not a real territory boundary — none exist yet for these localities.
-                          Marker size tracks report volume; color tracks the resolution rate, same grading as before.
+                          These are not real administrative boundaries — none exist yet for these localities. Each shape is a Voronoi
+                          cell around the zone's surveyed centroid, so the territory shown is exactly the area closer to that centroid
+                          than to any other, the same "nearest centroid wins" rule used to assign a report to a zone in the first place.
+                          Color tracks the resolution rate, same grading as before; grey territories have no rateable reports yet.
                           Resolution rate is the number resolved, divided by the total minus rejected reports.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
                           {unplottable > 0 && ` ${unplottable} graded zone${unplottable === 1 ? '' : 's'} couldn't be placed on the map (no surveyed centroid).`}
-                          {' '}Click a marker to see the reports behind it.
+                          {' '}Click a territory to see the reports behind it.
                         </p>
                         {/* The ranking alone doesn't say what to do about it —
                             name the worst zone and why it's worth a look. */}
