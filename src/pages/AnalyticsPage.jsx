@@ -21,8 +21,11 @@ import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
-  MELAKA_ZONES, ZONE_UNMAPPED,
+  MELAKA_ZONES, ZONE_UNMAPPED, ZONE_DISTRICT,
 } from '../utils/analyticsConstants';
+import melakaDistricts from '../assets/melaka_districts.json';
+import { intersect } from '@turf/intersect';
+import { polygon as turfPolygon, featureCollection } from '@turf/helpers';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
   buildServicePerformance, buildUrbanCondition, buildBacklogFlow, buildFunnel,
@@ -38,20 +41,52 @@ import { getReportPriority as getPriority } from '../utils/reportPriority';
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 
 // Zone territory shapes — the 18 surveyed localities only ever had a
-// centroid, never a real administrative boundary. Rather than draw a
-// boundary that doesn't exist, a Voronoi tessellation across those same
-// centroids is used: it divides the map by exactly the "nearest centroid
-// wins" rule deriveZone() already uses to assign a report to a zone, just
-// drawn as a shape instead of implied by a dot. Computed once at module
-// load since MELAKA_ZONES is static.
-const ZONE_VORONOI_BOUNDS = [101.98, 2.08, 102.50, 2.46]; // [xmin, ymin, xmax, ymax] in [lng, lat]
+// centroid, never a real administrative boundary. A Voronoi tessellation
+// across those same centroids divides the map by exactly the "nearest
+// centroid wins" rule deriveZone() already uses to assign a report to a
+// zone — but left unclipped, or clipped to an arbitrary rectangle, that
+// tessellation floats over the coastline and looks nothing like Melaka.
+// Every zone is already mapped to a real district (ZONE_DISTRICT), and
+// district outlines ARE real (geoBoundaries, CC BY 4.0), so each zone's
+// raw Voronoi cell is intersected with its own district's polygon: the
+// cell boundaries between neighbouring zones are still the same "nearest
+// centroid" lines as before, but the outer edge now follows the real
+// district border and coastline instead of a straight cut. Computed once
+// at module load since none of these inputs change at runtime.
+const DISTRICT_BY_NAME = Object.fromEntries(
+  melakaDistricts.features.map((f) => [f.properties.shapeName, f.geometry])
+);
+// Generous enough to contain the full district geometry so intersect()
+// isn't clipping the cell before the district does.
+const ZONE_VORONOI_BOUNDS = [101.7, 1.85, 102.7, 2.65];
 const ZONE_TERRITORY = (() => {
   const delaunay = Delaunay.from(MELAKA_ZONES, (z) => z.lng, (z) => z.lat);
   const voronoi = delaunay.voronoi(ZONE_VORONOI_BOUNDS);
   return MELAKA_ZONES.map((z, i) => {
     const cell = voronoi.cellPolygon(i);
-    // Leaflet positions are [lat, lng]; the cell comes out as [lng, lat].
-    return { name: z.name, positions: cell ? cell.map(([lng, lat]) => [lat, lng]) : null };
+    if (!cell) return { name: z.name, positions: null };
+    const districtGeom = DISTRICT_BY_NAME[ZONE_DISTRICT[z.name]];
+    let clipped = cell;
+    if (districtGeom) {
+      try {
+        const cellFeature = turfPolygon([cell]);
+        const districtFeature = { type: 'Feature', properties: {}, geometry: districtGeom };
+        const result = intersect(featureCollection([cellFeature, districtFeature]));
+        // A district can be a MultiPolygon (islands, exclaves); take the
+        // largest ring so a stray sliver doesn't become "the" territory.
+        if (result?.geometry?.type === 'Polygon') {
+          clipped = result.geometry.coordinates[0];
+        } else if (result?.geometry?.type === 'MultiPolygon') {
+          clipped = result.geometry.coordinates.reduce((a, b) => (a[0].length >= b[0].length ? a : b))[0];
+        }
+      } catch {
+        // Real-world polygons occasionally self-intersect just enough to
+        // trip a boolean op — falling back to the unclipped cell beats
+        // losing the zone's territory entirely.
+      }
+    }
+    // Leaflet positions are [lat, lng]; turf/d3-delaunay both give [lng, lat].
+    return { name: z.name, positions: clipped.map(([lng, lat]) => [lat, lng]) };
   });
 })();
 
@@ -3147,11 +3182,13 @@ export function AnalyticsPage() {
                           </MapContainer>
                         </div>
                         <p className="text-[10px] text-[#8a8477] mt-2">
-                          These are not real administrative boundaries — none exist yet for these localities. Each shape is a Voronoi
-                          cell around the zone's surveyed centroid, so the territory shown is exactly the area closer to that centroid
-                          than to any other, the same "nearest centroid wins" rule used to assign a report to a zone in the first place.
-                          Color tracks the resolution rate, same grading as before; grey territories have no rateable reports yet.
-                          Resolution rate is the number resolved, divided by the total minus rejected reports.
+                          These localities have no real neighborhood boundaries of their own, so the line between two zones is a Voronoi
+                          cell edge — exactly the area closer to one zone's surveyed centroid than to any other's, the same "nearest
+                          centroid wins" rule used to assign a report to a zone in the first place. The outer edge of each territory,
+                          however, is real: it's clipped to the actual district border and coastline (Alor Gajah, Melaka Tengah or
+                          Jasin — geoBoundaries, CC BY 4.0), not an arbitrary box. Color tracks the resolution rate, same grading as
+                          before; grey territories have no rateable reports yet. Resolution rate is the number resolved, divided by
+                          the total minus rejected reports.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
                           {unplottable > 0 && ` ${unplottable} graded zone${unplottable === 1 ? '' : 's'} couldn't be placed on the map (no surveyed centroid).`}
                           {' '}Click a territory to see the reports behind it.
