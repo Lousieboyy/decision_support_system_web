@@ -20,6 +20,7 @@ import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
+  MELAKA_ZONES, ZONE_UNMAPPED,
 } from '../utils/analyticsConstants';
 import {
   calculateDistance, canonicalizeCategory, deriveZone, deriveDepartmentOptions,
@@ -3047,40 +3048,13 @@ export function AnalyticsPage() {
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
               const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
 
-              const ZoneTooltip = ({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const z = payload[0].payload;
-                return (
-                  <div className="bg-white border border-[#1f1e1a]/10 rounded-lg p-3 text-xs shadow-lg">
-                    <div className="font-bold text-[#201f1b] mb-1">{z.name}</div>
-                    <div className="text-[#4b473d] space-y-0.5">
-                      <div>{z.total} total · {z.active} active · {z.resolved} resolved</div>
-                      <div>
-                        Average {z.avgDays ?? '—'} days
-                        {z.avgDays != null && z.avgDays > SLA_END_TO_END_DAYS && (
-                          <span className="text-red-700 font-bold"> (over target)</span>
-                        )}
-                      </div>
-                      {z.grade && <div>Grade <strong style={{ color: gradeColor(z.resolutionRate) }}>{z.grade}</strong></div>}
-                    </div>
-                  </div>
-                );
-              };
-
-              // Percentage alone hides the actual counts behind it — "10%"
-              // reads very differently as 1 of 10 vs 5 of 50. Put the counts
-              // right on the label instead of leaving them only in the hover
-              // tooltip.
-              const ZoneRateLabel = (props) => {
-                const { x, y, width, height, index } = props;
-                const z = chartData[index];
-                if (!z) return null;
-                return (
-                  <text x={x + width + 6} y={y + height / 2} dy={3.5} fontSize={10} fontWeight={700} fill="#4b473d">
-                    {z.resolutionRate}% ({z.resolved}/{z.total - z.rejected})
-                  </text>
-                );
-              };
+              // Zones only have a centroid, never a real boundary polygon, so
+              // "on the map" means a marker at that point, not a shaded
+              // territory. A handful of reports (postcode strings that never
+              // resolved to a real locality) have nowhere to be placed.
+              const zoneCoord = (name) => MELAKA_ZONES.find((z) => z.name === name);
+              const mapped = chartData.filter((z) => z.name !== ZONE_UNMAPPED && zoneCoord(z.name));
+              const unplottable = chartData.length - mapped.length;
 
               return (
                 <div className="content-card">
@@ -3098,37 +3072,61 @@ export function AnalyticsPage() {
                       <div className="text-center text-[#8a8477] py-8 text-sm">No zone data available</div>
                     ) : (
                       <>
-                        <div style={{ height: Math.max(220, chartData.length * 34) }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 75, left: 10, bottom: 5 }}>
-                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(31,30,26,0.08)" />
-                              <XAxis type="number" domain={[0, 100]} stroke="#8a8477" fontSize={10} tickLine={false} unit="%" />
-                              <YAxis type="category" dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} width={140} />
-                              <Tooltip content={<ZoneTooltip />} cursor={{ fill: 'rgba(74,93,63,0.05)' }} />
-                              <ReferenceLine x={80} stroke="#15803d" strokeDasharray="4 4" />
-                              <Bar
-                                dataKey="resolutionRate"
-                                isAnimationActive={false}
-                                radius={[0, 4, 4, 0]}
-                                maxBarSize={18}
-                                cursor="pointer"
-                                onClick={(d) => {
-                                  const name = d?.payload?.name ?? d?.name;
-                                  if (name) openExplore({ zone: name });
-                                }}
-                              >
-                                {chartData.map((z) => (
-                                  <Cell key={z.name} fill={gradeColor(z.resolutionRate)} />
-                                ))}
-                                <LabelList dataKey="resolutionRate" content={ZoneRateLabel} />
-                              </Bar>
-                            </BarChart>
-                          </ResponsiveContainer>
+                        <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '420px', width: '100%' }}>
+                          <MapContainer center={[2.24, 102.24]} zoom={11} style={{ height: '100%', width: '100%' }}>
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            {mapped.map((z) => {
+                              const coord = zoneCoord(z.name);
+                              const validTotal = z.total - z.rejected;
+                              // Radius reflects report volume, not just the rate — a
+                              // zone with 3 reports and one with 80 can share a grade
+                              // but shouldn't look the same size on the map.
+                              const radius = 10 + Math.min(18, Math.round(Math.sqrt(validTotal) * 3));
+                              return (
+                                <CircleMarker
+                                  key={z.name}
+                                  center={[coord.lat, coord.lng]}
+                                  radius={radius}
+                                  pathOptions={{
+                                    color: gradeColor(z.resolutionRate),
+                                    fillColor: gradeColor(z.resolutionRate),
+                                    fillOpacity: 0.55,
+                                    weight: 2,
+                                  }}
+                                  eventHandlers={{ click: () => openExplore({ zone: z.name }) }}
+                                >
+                                  <Popup>
+                                    <div className="text-xs">
+                                      <div className="font-bold text-[#201f1b] mb-1">{z.name}</div>
+                                      <div className="text-[#4b473d] space-y-0.5">
+                                        <div>{z.resolutionRate}% resolved ({z.resolved}/{validTotal})</div>
+                                        <div>{z.total} total · {z.active} active · {z.resolved} resolved</div>
+                                        <div>
+                                          Average {z.avgDays ?? '—'} days
+                                          {z.avgDays != null && z.avgDays > SLA_END_TO_END_DAYS && (
+                                            <span className="text-red-700 font-bold"> (over target)</span>
+                                          )}
+                                        </div>
+                                        {z.grade && <div>Grade <strong style={{ color: gradeColor(z.resolutionRate) }}>{z.grade}</strong></div>}
+                                        <div className="text-[#8a8477] mt-1">Click the marker to see these reports</div>
+                                      </div>
+                                    </div>
+                                  </Popup>
+                                </CircleMarker>
+                              );
+                            })}
+                          </MapContainer>
                         </div>
                         <p className="text-[10px] text-[#8a8477] mt-2">
-                          Resolution rate is the number resolved, divided by the total minus rejected reports. The dashed line at 80% marks where a passing grade starts.
+                          Each marker sits at the zone's surveyed centroid, not a real territory boundary — none exist yet for these localities.
+                          Marker size tracks report volume; color tracks the resolution rate, same grading as before.
+                          Resolution rate is the number resolved, divided by the total minus rejected reports.
                           {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
-                          {' '}Click a bar to see the reports behind it.
+                          {unplottable > 0 && ` ${unplottable} graded zone${unplottable === 1 ? '' : 's'} couldn't be placed on the map (no surveyed centroid).`}
+                          {' '}Click a marker to see the reports behind it.
                         </p>
                         {/* The ranking alone doesn't say what to do about it —
                             name the worst zone and why it's worth a look. */}
