@@ -21,7 +21,7 @@ import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
-  MELAKA_ZONES, ZONE_DISTRICT,
+  MELAKA_ZONES, ZONE_DISTRICT, ZONE_UNMAPPED,
 } from '../utils/analyticsConstants';
 import melakaDistricts from '../assets/melaka_districts.json';
 import { intersect } from '@turf/intersect';
@@ -3099,7 +3099,16 @@ export function AnalyticsPage() {
                 Fragility already has its own zone chart, so nothing repeats
                 here. */}
             {cityHealthBand === 'spi' && (() => {
-              const graded = zoneScorecard.filter(z => z.resolutionRate != null);
+              // "Unmapped area" is a data-quality catch-all (deriveZone's
+              // fallback for a report too far from every known centroid),
+              // not a real place — it can never have a territory on this
+              // map, so it shouldn't be counted as one of the zones tracked
+              // or graded here even though the shared zoneScorecard includes
+              // it (other consumers, like the Executive Brief, want to know
+              // about it).
+              const unmappedCount = zoneScorecard.find((z) => z.name === ZONE_UNMAPPED)?.total ?? 0;
+              const mappableZones = zoneScorecard.filter((z) => z.name !== ZONE_UNMAPPED);
+              const graded = mappableZones.filter(z => z.resolutionRate != null);
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
               const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
               const UNRATED_COLOR = '#57534e';
@@ -3109,7 +3118,7 @@ export function AnalyticsPage() {
                 { color: '#b91c1c', label: 'Under 60% resolved' },
                 { color: UNRATED_COLOR, label: 'Not enough data' },
               ];
-              const zoneByName = (name) => zoneScorecard.find((z) => z.name === name);
+              const zoneByName = (name) => mappableZones.find((z) => z.name === name);
 
               return (
                 <div className="content-card">
@@ -3119,7 +3128,7 @@ export function AnalyticsPage() {
                       Zone Response Rate
                     </div>
                     <div className="text-[10px] font-semibold text-[#8a8477]">
-                      {zoneScorecard.length} zones tracked — worst shown first
+                      {mappableZones.length} zones tracked — worst shown first
                     </div>
                   </div>
                   <div className="p-5">
@@ -3206,6 +3215,11 @@ export function AnalyticsPage() {
                           <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(21,128,61,0.06)', color: '#15803d' }}>
                             No zone is seriously behind — even the lowest, {chartData[0].name}, is still at {chartData[0].resolutionRate}%.
                           </div>
+                        )}
+                        {unmappedCount > 0 && (
+                          <p className="mt-2 text-[10px] text-[#8a8477]">
+                            {unmappedCount} report{unmappedCount === 1 ? '' : 's'} too far from any known zone to place on this map — not counted above.
+                          </p>
                         )}
                       </>
                     )}
