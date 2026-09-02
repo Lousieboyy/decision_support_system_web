@@ -7,7 +7,7 @@ import {
   BarChart, Bar, Cell, ReferenceLine, PieChart, Pie, ErrorBar, LabelList,
   RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup, Polyline, Polygon } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, CircleMarker, Popup, Polyline, Polygon, Tooltip as LeafletTooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.heat';
 import { Delaunay } from 'd3-delaunay';
@@ -21,7 +21,7 @@ import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
-  MELAKA_ZONES, ZONE_UNMAPPED, ZONE_DISTRICT,
+  MELAKA_ZONES, ZONE_DISTRICT,
 } from '../utils/analyticsConstants';
 import melakaDistricts from '../assets/melaka_districts.json';
 import { intersect } from '@turf/intersect';
@@ -3099,7 +3099,6 @@ export function AnalyticsPage() {
                 here. */}
             {cityHealthBand === 'spi' && (() => {
               const graded = zoneScorecard.filter(z => z.resolutionRate != null);
-              const ungraded = zoneScorecard.length - graded.length;
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
               const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
               const UNRATED_COLOR = '#57534e';
@@ -3109,13 +3108,7 @@ export function AnalyticsPage() {
                 { color: '#b91c1c', label: 'Under 60% resolved' },
                 { color: UNRATED_COLOR, label: 'Not enough data' },
               ];
-
-              // A handful of reports (postcode strings that never resolved to
-              // a real locality) belong to no surveyed centroid and so have
-              // no territory cell to sit in.
               const zoneByName = (name) => zoneScorecard.find((z) => z.name === name);
-              const mapped = chartData.filter((z) => z.name !== ZONE_UNMAPPED && ZONE_TERRITORY.some((t) => t.name === z.name));
-              const unplottable = chartData.length - mapped.length;
 
               return (
                 <div className="content-card">
@@ -3167,8 +3160,9 @@ export function AnalyticsPage() {
                                     fillOpacity: graded ? 0.45 : 0.35,
                                     weight: 2,
                                   }}
+                                  eventHandlers={{ click: () => openExplore({ zone: t.name }) }}
                                 >
-                                  <Popup>
+                                  <LeafletTooltip sticky>
                                     <div className="text-xs">
                                       <div className="font-bold text-[#201f1b] mb-1">{t.name}</div>
                                       <div className="text-[#4b473d] space-y-0.5">
@@ -3191,38 +3185,15 @@ export function AnalyticsPage() {
                                         ) : (
                                           <div>No reports in this zone in the current filter</div>
                                         )}
-                                        {/* A tap has no hover to preview with first — the click
-                                            used to jump straight to the report list, so the stats
-                                            above never actually got seen on a touch screen. The
-                                            popup now needs its own explicit action instead of
-                                            piggybacking on the shape's click. */}
-                                        <button
-                                          onClick={() => openExplore({ zone: t.name })}
-                                          className="mt-2 w-full text-center rounded-lg px-2 py-1.5 text-[11px] font-bold text-white cursor-pointer"
-                                          style={{ background: '#4a5d3f' }}
-                                        >
-                                          See these reports →
-                                        </button>
+                                        <div className="text-[#8a8477] mt-1">Click to see these reports</div>
                                       </div>
                                     </div>
-                                  </Popup>
+                                  </LeafletTooltip>
                                 </Polygon>
                               );
                             })}
                           </MapContainer>
                         </div>
-                        <p className="text-[10px] text-[#8a8477] mt-2">
-                          These localities have no real neighborhood boundaries of their own, so the line between two zones is a Voronoi
-                          cell edge — exactly the area closer to one zone's surveyed centroid than to any other's, the same "nearest
-                          centroid wins" rule used to assign a report to a zone in the first place. The outer edge of each territory,
-                          however, is real: it's clipped to the actual district border and coastline (Alor Gajah, Melaka Tengah or
-                          Jasin — © OpenStreetMap contributors, ODbL), not an arbitrary box. Color tracks the resolution rate, same grading as
-                          before; grey territories have no rateable reports yet. Resolution rate is the number resolved, divided by
-                          the total minus rejected reports.
-                          {ungraded > 0 && ` ${ungraded} zone${ungraded === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_SCORE} reports, so they can't be graded yet.`}
-                          {unplottable > 0 && ` ${unplottable} graded zone${unplottable === 1 ? '' : 's'} couldn't be placed on the map (no surveyed centroid).`}
-                          {' '}Tap a territory for its numbers, then "See these reports" to open them.
-                        </p>
                         {/* The ranking alone doesn't say what to do about it —
                             name the worst zone and why it's worth a look. */}
                         {chartData[0].resolutionRate < 60 ? (
