@@ -259,6 +259,12 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                         isAnimationActive={false}
                         radius={[0, 4, 4, 0]}
                         maxBarSize={26}
+                        // A department at exactly 0% on-time is real data, not
+                        // absence of it — but a 0-length bar on a [0,100] axis
+                        // renders as literally nothing, indistinguishable from
+                        // the axes having no data at all. minPointSize keeps a
+                        // sliver visible so 0% still reads as a result.
+                        minPointSize={3}
                         cursor="pointer"
                         onClick={(d) => {
                           const name = d?.payload?.name ?? d?.name;
