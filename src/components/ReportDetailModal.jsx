@@ -937,8 +937,16 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                     />
                   )}
 
-                  <p className="text-sm p-3 rounded-lg" style={{ color: '#4b473d', background: '#ffffff', border: '1px solid rgba(31,30,26,0.07)' }}>{report.completion_notes}</p>
-                  <p className="text-xs mt-2 text-right" style={{ color: '#8a8477' }}>Submitted: {fmtDate(report.completion_submitted_at)}</p>
+                  {report.completion_notes?.trim() ? (
+                    <p className="text-sm p-3 rounded-lg" style={{ color: '#4b473d', background: '#ffffff', border: '1px solid rgba(31,30,26,0.07)' }}>{report.completion_notes}</p>
+                  ) : !report.completion_image_path ? (
+                    <p className="text-sm p-3 rounded-lg italic" style={{ color: '#8a8477', background: '#ffffff', border: '1px solid rgba(31,30,26,0.07)' }}>
+                      No photo or notes provided by the worker.
+                    </p>
+                  ) : null}
+                  {report.completion_submitted_at && (
+                    <p className="text-xs mt-2 text-right" style={{ color: '#8a8477' }}>Submitted: {fmtDate(report.completion_submitted_at)}</p>
+                  )}
                 </div>
               </div>
             )}
@@ -1204,7 +1212,6 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                     <p className="font-bold flex items-center gap-1">Action Required</p>
                     <p>Review the completion proof notes and image above. You can either approve the resolution or reject the proof if it is blurry or ambiguous.</p>
                   </div>
-                  <p className="text-sm mb-3" style={{ color: '#4b473d' }}>Please review the notes and photo above to verify the fix or reject it.</p>
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Verification Notes / Rejection Reason</label>
                     <textarea value={authorityNote} onChange={e => setAuthorityNote(e.target.value)} placeholder="Looks good... / Please retake, image is blurry." rows={2} className="w-full px-3 py-2 rounded-xl text-sm resize-none" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }} />
