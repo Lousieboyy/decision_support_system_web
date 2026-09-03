@@ -21,7 +21,7 @@ import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
-  MELAKA_ZONES, ZONE_DISTRICT, ZONE_UNMAPPED,
+  MELAKA_ZONES, ZONE_UNMAPPED,
 } from '../utils/analyticsConstants';
 import melakaDistricts from '../assets/melaka_districts.json';
 import { intersect } from '@turf/intersect';
@@ -46,19 +46,32 @@ const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
 // centroid wins" rule deriveZone() already uses to assign a report to a
 // zone — but left unclipped, or clipped to an arbitrary rectangle, that
 // tessellation floats over the coastline and looks nothing like Melaka.
-// Every zone is already mapped to a real district (ZONE_DISTRICT), and
-// district outlines ARE real (OpenStreetMap admin boundary relations,
-// assembled via polygons.openstreetmap.fr, ODbL), so each zone's
-// raw Voronoi cell is intersected with its own district's polygon: the
-// cell boundaries between neighbouring zones are still the same "nearest
-// centroid" lines as before, but the outer edge now follows the real
-// district border and coastline instead of a straight cut. Computed once
-// at module load since none of these inputs change at runtime.
-const DISTRICT_BY_NAME = Object.fromEntries(
-  melakaDistricts.features.map((f) => [f.properties.shapeName, f.geometry])
-);
-// Generous enough to contain the full district geometry so intersect()
-// isn't clipping the cell before the district does.
+// District outlines ARE real (OpenStreetMap admin boundary relations,
+// assembled via polygons.openstreetmap.fr, ODbL), so every zone's raw
+// Voronoi cell is intersected with the three districts COMBINED, not just
+// its own. Clipping each zone to only its own district (the original
+// approach here) left real gaps on the map: wherever a zone's
+// nearest-centroid cell straddled a district border that doesn't line up
+// with the Voronoi bisector between it and its neighbour (e.g. Ayer Keroh,
+// in Melaka Tengah, bordering Jasin zone/district), the sliver on the
+// far side of that border was cut from the first zone's shape but was
+// never part of the neighbour's own cell either — so nobody's territory
+// covered it. Clipping against the combined outline instead leaves every
+// internal "nearest centroid" line between neighbouring zones untouched;
+// only the outer edge is trimmed, to the real coastline and state border.
+// Computed once at module load since none of these inputs change at runtime.
+const MELAKA_BOUNDARY = {
+  type: 'Feature',
+  properties: {},
+  geometry: {
+    type: 'MultiPolygon',
+    coordinates: melakaDistricts.features.flatMap((f) =>
+      f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : [f.geometry.coordinates]
+    ),
+  },
+};
+// Generous enough to contain the full boundary geometry so intersect()
+// isn't clipping the cell before the boundary does.
 const ZONE_VORONOI_BOUNDS = [101.7, 1.85, 102.7, 2.65];
 const ZONE_TERRITORY = (() => {
   const delaunay = Delaunay.from(MELAKA_ZONES, (z) => z.lng, (z) => z.lat);
@@ -66,25 +79,21 @@ const ZONE_TERRITORY = (() => {
   return MELAKA_ZONES.map((z, i) => {
     const cell = voronoi.cellPolygon(i);
     if (!cell) return { name: z.name, positions: null };
-    const districtGeom = DISTRICT_BY_NAME[ZONE_DISTRICT[z.name]];
     let clipped = cell;
-    if (districtGeom) {
-      try {
-        const cellFeature = turfPolygon([cell]);
-        const districtFeature = { type: 'Feature', properties: {}, geometry: districtGeom };
-        const result = intersect(featureCollection([cellFeature, districtFeature]));
-        // A district can be a MultiPolygon (islands, exclaves); take the
-        // largest ring so a stray sliver doesn't become "the" territory.
-        if (result?.geometry?.type === 'Polygon') {
-          clipped = result.geometry.coordinates[0];
-        } else if (result?.geometry?.type === 'MultiPolygon') {
-          clipped = result.geometry.coordinates.reduce((a, b) => (a[0].length >= b[0].length ? a : b))[0];
-        }
-      } catch {
-        // Real-world polygons occasionally self-intersect just enough to
-        // trip a boolean op — falling back to the unclipped cell beats
-        // losing the zone's territory entirely.
+    try {
+      const cellFeature = turfPolygon([cell]);
+      const result = intersect(featureCollection([cellFeature, MELAKA_BOUNDARY]));
+      // The boundary is a MultiPolygon (three districts); take the largest
+      // ring so a stray sliver doesn't become "the" territory.
+      if (result?.geometry?.type === 'Polygon') {
+        clipped = result.geometry.coordinates[0];
+      } else if (result?.geometry?.type === 'MultiPolygon') {
+        clipped = result.geometry.coordinates.reduce((a, b) => (a[0].length >= b[0].length ? a : b))[0];
       }
+    } catch {
+      // Real-world polygons occasionally self-intersect just enough to
+      // trip a boolean op — falling back to the unclipped cell beats
+      // losing the zone's territory entirely.
     }
     // Leaflet positions are [lat, lng]; turf/d3-delaunay both give [lng, lat].
     return { name: z.name, positions: clipped.map(([lng, lat]) => [lat, lng]) };
