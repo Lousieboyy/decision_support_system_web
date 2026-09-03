@@ -36,9 +36,9 @@ const deptForReport = (r) =>
   CATEGORY_TEAM_HINT[canonicalizeCategory(r.categories || r.ai_prediction)] || 'Other';
 
 /**
- * Turns a Today's Priorities / hotspot recommendation into an actual
- * dispatch, instead of leaving "send this to JKR/MBMB" as something the
- * reader has to go do manually in the Reports table.
+ * Turns an Active Hotspots recommendation into an actual dispatch, instead
+ * of leaving "send this to JKR/MBMB" as something the reader has to go do
+ * manually in the Reports table.
  *
  * Deliberately not one-click-no-confirmation: a cluster is an algorithmic
  * grouping (proximity + category), not a verified judgment call, so a crew
