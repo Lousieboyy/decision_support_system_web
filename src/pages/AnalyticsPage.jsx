@@ -2199,7 +2199,7 @@ export function AnalyticsPage() {
                           onClick={() => openExplore({ category })}
                           className="flex items-center justify-between gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer text-left transition-opacity hover:opacity-70"
                           style={{ background: 'rgba(193,97,63,0.08)', color: '#c1613f' }}
-                          title={`${count} hotspot zone${count === 1 ? '' : 's'} in ${category} — click to see those reports`}
+                          title={`${count} hotspot zone${count === 1 ? '' : 's'} in ${category} — click to see every ${category} report, not just these zones`}
                         >
                           <span className="truncate">{category}</span>
                           <span className="shrink-0">{count}</span>
