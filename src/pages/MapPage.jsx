@@ -7,6 +7,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { format } from 'date-fns';
 import { MapPin, Image as ImageIcon, Filter, ChevronLeft, ChevronRight, Layers, CheckCircle2, Sparkles } from 'lucide-react';
+import { canonicalizeCategory } from '../utils/analyticsMetrics';
 
 function HeatmapLayer({ points }) {
   const map = useMap();
@@ -56,7 +57,12 @@ function getDeptId(role, username) {
   return null;
 }
 
-const CATEGORIES = ["All", "Road", "Lighting", "Waste", "Drainage", "Noise"];
+// Matches canonicalizeCategory's real 6-bucket taxonomy (the same one every
+// other category breakdown in the app uses) instead of a hand-picked list —
+// the old list included "Noise" (no category has ever matched it) and had
+// no chip at all for Overgrown Vegetation, Fallen Tree, Broken Sidewalk,
+// Illegal Dumping, or Vandalism reports.
+const CATEGORIES = ["All", "Road Damage", "Street Lighting", "Waste Management", "Drainage System", "Vandalism", "Other Infrastructure"];
 const STATUSES = ["All", "Pending", "In Review", "In Process", "In Maintenance", "Resolved", "Rejected"];
 
 const getPriority = (status, categories) => {
@@ -376,9 +382,7 @@ export function MapPage() {
   const filteredReports = useMemo(() => {
     let result = reports;
     if (selectedCategory !== "All") {
-      result = result.filter(r =>
-        (r.categories || '').toLowerCase().includes(selectedCategory.toLowerCase())
-      );
+      result = result.filter(r => canonicalizeCategory(r.categories || r.ai_prediction) === selectedCategory);
     }
     if (selectedStatus !== "All") {
       result = result.filter(r => (r.status || 'Pending') === selectedStatus);
@@ -499,7 +503,7 @@ export function MapPage() {
              }`}
            >
              <CheckCircle2 size={16} />
-             {selectedStatus === 'Resolved' ? 'Resolved Only' : 'Resolved Only'}
+             {selectedStatus === 'Resolved' ? 'Showing Resolved' : 'Resolved Only'}
            </button>
 
            <select
