@@ -3235,6 +3235,32 @@ export function AnalyticsPage() {
                 .sort((a, b) => b.active - a.active);
               const shareOf = (n) => (totalOpenCityWide > 0 ? Math.round((n / totalOpenCityWide) * 100) : 0);
 
+              // Same "Unmapped area" caveat as the Zone Response Rate map above —
+              // it's deriveZone()'s fallback for a report too far from every known
+              // centroid, not a real place, so it has no territory to draw.
+              const unmappedOpen = zoneScorecard.find((z) => z.name === ZONE_UNMAPPED)?.active ?? 0;
+              const mappableZones = zoneScorecard.filter((z) => z.name !== ZONE_UNMAPPED);
+              // Relative to the most-burdened zone right now, not a fixed target —
+              // this chart has none (see the caption below), so the color only ever
+              // ranks zones against each other, the same "worst shown first" idea
+              // as the bars, not a pass/fail grade.
+              const maxActiveZone = Math.max(1, ...mappableZones.map((z) => z.active));
+              const BURDEN_UNRATED = '#57534e';
+              const burdenColor = (active) => {
+                if (!active) return BURDEN_UNRATED;
+                const ratio = active / maxActiveZone;
+                if (ratio >= 0.66) return '#b91c1c';
+                if (ratio >= 0.33) return '#b45309';
+                return '#c1613f';
+              };
+              const BURDEN_LEGEND = [
+                { color: '#b91c1c', label: 'Most burdened' },
+                { color: '#b45309', label: 'Moderately burdened' },
+                { color: '#c1613f', label: 'Lightly burdened' },
+                { color: BURDEN_UNRATED, label: 'No open issues' },
+              ];
+              const zoneByName = (name) => mappableZones.find((z) => z.name === name);
+
               const OpenZoneTooltip = ({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const z = payload[0].payload;
@@ -3279,6 +3305,64 @@ export function AnalyticsPage() {
                       <div className="text-center text-[#8a8477] py-8 text-sm">No open issues right now.</div>
                     ) : (
                       <>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {BURDEN_LEGEND.map((item) => (
+                            <span
+                              key={item.label}
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold"
+                              style={{ background: 'rgba(31,30,26,0.05)', color: item.color }}
+                            >
+                              <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, background: item.color }} />
+                              {item.label}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10 mb-4" style={{ height: '380px', width: '100%' }}>
+                          <MapContainer center={[2.24, 102.24]} zoom={11} style={{ height: '100%', width: '100%' }}>
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                            />
+                            {ZONE_TERRITORY.map((t) => {
+                              if (!t.positions) return null;
+                              const z = zoneByName(t.name);
+                              const active = z?.active ?? 0;
+                              const color = burdenColor(active);
+                              return (
+                                <Polygon
+                                  key={t.name}
+                                  positions={t.positions}
+                                  pathOptions={{ color, fillColor: color, fillOpacity: active ? 0.5 : 0.25, weight: 2 }}
+                                  eventHandlers={{ click: () => openExplore({ zone: t.name, status: 'all' }) }}
+                                >
+                                  <LeafletTooltip sticky>
+                                    <div className="text-xs">
+                                      <div className="font-bold text-[#201f1b] mb-1">{t.name}</div>
+                                      <div className="text-[#4b473d] space-y-0.5">
+                                        {z ? (
+                                          <>
+                                            <div>{z.active} open of {z.total} total reports</div>
+                                            <div>{shareOf(z.active)}% of all open issues city-wide</div>
+                                            {z.avgDays != null && <div>Average {z.avgDays} days to resolve, when resolved</div>}
+                                          </>
+                                        ) : (
+                                          <div>No reports in this zone in the current filter</div>
+                                        )}
+                                        <div className="text-[#8a8477] mt-1">Click to see these reports</div>
+                                      </div>
+                                    </div>
+                                  </LeafletTooltip>
+                                </Polygon>
+                              );
+                            })}
+                          </MapContainer>
+                        </div>
+                        {unmappedOpen > 0 && (
+                          <p className="text-[10px] text-[#8a8477] -mt-2 mb-3">
+                            {unmappedOpen} open report{unmappedOpen === 1 ? '' : 's'} too far from any known zone to place on
+                            this map — still counted in the total and the bars below.
+                          </p>
+                        )}
                         <div style={{ height: Math.max(220, chartData.length * 34) }}>
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 70, left: 10, bottom: 5 }}>
