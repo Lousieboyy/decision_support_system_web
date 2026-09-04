@@ -141,6 +141,11 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
     }
     return true;
   });
+  // The summary paragraph above the map quotes selectedRow's totals (every
+  // resolved report for this department), but the map/list below it is
+  // filteredMappable — a real mismatch once any filter narrows that down,
+  // where "every report below" would be false.
+  const hasActiveFilter = statusFilter !== 'all' || categoryFilter !== 'all' || !!dateFrom || !!dateTo;
   const boundsPoints = filteredMappable.flatMap((t) => {
     const pts = [[t.latitude, t.longitude]];
     for (const rep of t.reappearances) {
@@ -397,7 +402,9 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       <span className="text-[#c1613f] font-bold">{flaggedTicketCount} place{flaggedTicketCount === 1 ? '' : 's'} keep{flaggedTicketCount === 1 ? 's' : ''} breaking again</span>
                     ) : 'nothing has broken again'}
                     {selectedGrade && <> · Grade <strong style={{ color: rateColor(selectedRow.rate) }}>{selectedGrade.grade}</strong></>}
-                    {' — every report below, most recently resolved first.'}
+                    {hasActiveFilter
+                      ? <> — <strong>{filteredMappable.length}</strong> shown below after filters, most recently resolved first.</>
+                      : ' — every report below, most recently resolved first.'}
                   </p>
                   {selectedRow?.reIncidence > 0 && (
                     <p className="text-[11px] text-[#8a8477] mb-3 leading-relaxed">
