@@ -100,6 +100,67 @@ const ZONE_TERRITORY = (() => {
   });
 })();
 
+// Padded bounding box of the real combined district boundary — used to stop
+// the zone territory maps from zooming or panning out far enough to lose
+// Melaka against the rest of the peninsula.
+const MELAKA_BOUNDS = (() => {
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  MELAKA_BOUNDARY.geometry.coordinates.forEach((polygon) => {
+    polygon.forEach((ring) => {
+      ring.forEach(([lng, lat]) => {
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lng < minLng) minLng = lng;
+        if (lng > maxLng) maxLng = lng;
+      });
+    });
+  });
+  const padLat = (maxLat - minLat) * 0.12;
+  const padLng = (maxLng - minLng) * 0.12;
+  return [[minLat - padLat, minLng - padLng], [maxLat + padLat, maxLng + padLng]];
+})();
+
+// Caps how far a zone territory map can zoom/pan out, computed from the
+// map's actual pixel size rather than a guessed zoom number — so "as far
+// out as Melaka itself" stays correct regardless of the container's
+// width/height. maxBounds alone only stops panning; the min-zoom half of
+// that (the point past which Melaka no longer fills the view at all) has
+// to be derived from bounds + real container size, which only the map
+// instance itself knows once mounted.
+function MapExtentLimiter({ bounds }) {
+  const map = useMap();
+  useEffect(() => {
+    const b = L.latLngBounds(bounds);
+    map.setMaxBounds(b);
+    let cancelled = false;
+    // A container that's just been inserted (or is mid a StrictMode
+    // double-invoke of this very effect) can still report a 0x0 size, which
+    // would make getBoundsZoom() return 0 and silently remove the limit
+    // entirely rather than set it correctly. Retry instead of trusting the
+    // first read, and never apply a non-positive result.
+    const tryApply = (attempt = 0) => {
+      if (cancelled) return;
+      try {
+        map.invalidateSize();
+        const size = map.getSize();
+        if ((size.x < 50 || size.y < 50) && attempt < 20) {
+          setTimeout(() => tryApply(attempt + 1), 100);
+          return;
+        }
+        const fitZoom = map.getBoundsZoom(b);
+        if (Number.isFinite(fitZoom) && fitZoom > 0) {
+          map.setMinZoom(fitZoom);
+        }
+      } catch (e) {
+        // ignore sizing glitches
+      }
+    };
+    const timer = setTimeout(() => tryApply(), 150);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [map, bounds]);
+  return null;
+}
+
 // Heatmap Layer for Leaflet Map
 function HeatmapLayer({ points, ready }) {
   const map = useMap();
@@ -3175,13 +3236,15 @@ export function AnalyticsPage() {
                           <MapContainer
                             center={[2.24, 102.24]}
                             zoom={11}
-                            minZoom={10}
+                            maxBounds={MELAKA_BOUNDS}
+                            maxBoundsViscosity={1.0}
                             style={{ height: '100%', width: '100%' }}
                           >
                             <TileLayer
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
+                            <MapExtentLimiter bounds={MELAKA_BOUNDS} />
                             {ZONE_TERRITORY.map((t) => {
                               if (!t.positions) return null;
                               const z = zoneByName(t.name);
@@ -3357,13 +3420,15 @@ export function AnalyticsPage() {
                           <MapContainer
                             center={[2.24, 102.24]}
                             zoom={11}
-                            minZoom={10}
+                            maxBounds={MELAKA_BOUNDS}
+                            maxBoundsViscosity={1.0}
                             style={{ height: '100%', width: '100%' }}
                           >
                             <TileLayer
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
+                            <MapExtentLimiter bounds={MELAKA_BOUNDS} />
                             {ZONE_TERRITORY.map((t) => {
                               if (!t.positions) return null;
                               const z = zoneByName(t.name);

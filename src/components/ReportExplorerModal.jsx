@@ -170,10 +170,14 @@ export function ReportExplorerModal({ filters, onFiltersChange, categories, depa
           style={{ background: '#fff', boxShadow: '0 32px 80px rgba(31,30,26,0.25)' }}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#1f1e1a]/8 shrink-0">
-            <div>
+            <div className="min-w-0">
               <div className="text-sm font-black text-[#201f1b]">Find Reports</div>
-              <div className="text-[11px] text-[#8a8477]">
+              {/* Filters are all live-editable right here, so this modal is no
+                  longer just "the result of the one thing you clicked" — the
+                  count alone didn't say what it was currently scoped to. */}
+              <div className="text-[11px] text-[#8a8477] truncate" title={isEmpty ? undefined : filterSummary}>
                 {results.length} matching report{results.length === 1 ? '' : 's'}
+                {!isEmpty && <> · {filterSummary}</>}
               </div>
             </div>
             <div className="flex items-center gap-2">
