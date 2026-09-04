@@ -3088,6 +3088,16 @@ export function AnalyticsPage() {
         {/* ==================== CITY HEALTH & WELLNESS TAB ==================== */}
         {activeViewTab === 'cityhealth' && (
           <div className="space-y-6 animate-fade-in">
+            {/* Leaflet sets fill-opacity/opacity/stroke-width as plain SVG
+                attributes when pathOptions changes on hover — these are still
+                real CSS properties, so a transition here is enough to animate
+                the dim/undim on both zone territory maps below instead of it
+                snapping instantly. */}
+            <style>{`
+              .zone-territory-poly {
+                transition: fill-opacity 0.2s ease, opacity 0.2s ease, stroke-width 0.2s ease;
+              }
+            `}</style>
 
             {filterBar}
 
@@ -3187,9 +3197,10 @@ export function AnalyticsPage() {
                                   pathOptions={{
                                     color,
                                     fillColor: color,
-                                    fillOpacity: isDimmed ? (graded ? 0.45 : 0.35) * 0.25 : graded ? 0.45 : 0.35,
-                                    opacity: isDimmed ? 0.25 : 1,
+                                    fillOpacity: isDimmed ? (graded ? 0.45 : 0.35) * 0.5 : graded ? 0.45 : 0.35,
+                                    opacity: isDimmed ? 0.55 : 1,
                                     weight: isHovered ? 3 : 2,
+                                    className: 'zone-territory-poly',
                                   }}
                                   eventHandlers={{
                                     click: () => openExplore({ zone: t.name }),
@@ -3367,9 +3378,10 @@ export function AnalyticsPage() {
                                   pathOptions={{
                                     color,
                                     fillColor: color,
-                                    fillOpacity: isDimmed ? (active ? 0.5 : 0.25) * 0.25 : active ? 0.5 : 0.25,
-                                    opacity: isDimmed ? 0.25 : 1,
+                                    fillOpacity: isDimmed ? (active ? 0.5 : 0.25) * 0.5 : active ? 0.5 : 0.25,
+                                    opacity: isDimmed ? 0.55 : 1,
                                     weight: isHovered ? 3 : 2,
+                                    className: 'zone-territory-poly',
                                   }}
                                   eventHandlers={{
                                     click: () => openExplore({ zone: t.name, status: 'all' }),
