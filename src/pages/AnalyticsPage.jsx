@@ -21,7 +21,7 @@ import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
   MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
-  MELAKA_ZONES, ZONE_UNMAPPED,
+  MELAKA_ZONES, ZONE_UNMAPPED, MELAKA_BOUNDS,
 } from '../utils/analyticsConstants';
 import melakaDistricts from '../assets/melaka_districts.json';
 import { intersect } from '@turf/intersect';
@@ -100,27 +100,7 @@ const ZONE_TERRITORY = (() => {
   });
 })();
 
-// Padded bounding box of the real combined district boundary — used to stop
-// the zone territory maps from zooming or panning out far enough to lose
-// Melaka against the rest of the peninsula.
-const MELAKA_BOUNDS = (() => {
-  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-  MELAKA_BOUNDARY.geometry.coordinates.forEach((polygon) => {
-    polygon.forEach((ring) => {
-      ring.forEach(([lng, lat]) => {
-        if (lat < minLat) minLat = lat;
-        if (lat > maxLat) maxLat = lat;
-        if (lng < minLng) minLng = lng;
-        if (lng > maxLng) maxLng = lng;
-      });
-    });
-  });
-  const padLat = (maxLat - minLat) * 0.12;
-  const padLng = (maxLng - minLng) * 0.12;
-  return [[minLat - padLat, minLng - padLng], [maxLat + padLat, maxLng + padLng]];
-})();
-
-// Caps how far a zone territory map can zoom/pan out, computed from the
+// Caps how far a city-wide Leaflet map can zoom/pan out, computed from the
 // map's actual pixel size rather than a guessed zoom number — so "as far
 // out as Melaka itself" stays correct regardless of the container's
 // width/height. maxBounds alone only stops panning; the min-zoom half of
@@ -2647,6 +2627,8 @@ export function AnalyticsPage() {
                   <MapContainer
                     center={[2.1896, 102.2501]}
                     zoom={12.5}
+                    maxBounds={MELAKA_BOUNDS}
+                    maxBoundsViscosity={1.0}
                     style={{ height: '100%', width: '100%' }}
                     zoomControl={false}
                   >
@@ -2654,6 +2636,7 @@ export function AnalyticsPage() {
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
+                    <MapExtentLimiter bounds={MELAKA_BOUNDS} />
                     <HeatmapLayer points={displayedHeatmapPoints} ready={mapReady} />
                     {/* Hovering a card below sets this — the only way the
                         admin can actually see a card "sync" to this map,
@@ -3571,11 +3554,18 @@ export function AnalyticsPage() {
               </div>
               <div className="overflow-y-auto">
                 <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 mx-5 mt-5" style={{ height: 260 }}>
-                  <MapContainer center={[2.1896, 102.2501]} zoom={12} style={{ height: '100%', width: '100%' }}>
+                  <MapContainer
+                    center={[2.1896, 102.2501]}
+                    zoom={12}
+                    maxBounds={MELAKA_BOUNDS}
+                    maxBoundsViscosity={1.0}
+                    style={{ height: '100%', width: '100%' }}
+                  >
                     <TileLayer
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
+                    <MapExtentLimiter bounds={MELAKA_BOUNDS} />
                     {hotspots.map((h) => (
                       <CircleMarker
                         key={h.id}

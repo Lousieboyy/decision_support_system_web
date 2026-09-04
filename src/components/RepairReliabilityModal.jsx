@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, CircleMarker, Popup, Polyline, useMap } from '
 import L from 'leaflet';
 import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
-import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, GRADE_SCALE, GRADE_COLOR } from '../utils/analyticsConstants';
+import { REINCIDENCE, SLA_END_TO_END_DAYS, gradeFor, GRADE_SCALE, GRADE_COLOR, MELAKA_BOUNDS } from '../utils/analyticsConstants';
 import { calculateDistance } from '../utils/analyticsMetrics';
 
 const fmtDate = (v) => {
@@ -46,6 +46,40 @@ function MapResizer() {
     }, 150);
     return () => clearTimeout(timer);
   }, [map]);
+  return null;
+}
+
+// Caps how far this map can zoom/pan out to roughly Melaka's own extent,
+// computed from the map's actual pixel size rather than a guessed zoom
+// number. A container that's just been inserted can still report a 0x0
+// size, which would make getBoundsZoom() return 0 and silently remove the
+// limit instead of setting it — retry instead of trusting the first read.
+function MapExtentLimiter({ bounds }) {
+  const map = useMap();
+  useEffect(() => {
+    const b = L.latLngBounds(bounds);
+    map.setMaxBounds(b);
+    let cancelled = false;
+    const tryApply = (attempt = 0) => {
+      if (cancelled) return;
+      try {
+        map.invalidateSize();
+        const size = map.getSize();
+        if ((size.x < 50 || size.y < 50) && attempt < 20) {
+          setTimeout(() => tryApply(attempt + 1), 100);
+          return;
+        }
+        const fitZoom = map.getBoundsZoom(b);
+        if (Number.isFinite(fitZoom) && fitZoom > 0) {
+          map.setMinZoom(fitZoom);
+        }
+      } catch (e) {
+        // ignore sizing glitches
+      }
+    };
+    const timer = setTimeout(() => tryApply(), 150);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [map, bounds]);
   return null;
 }
 
@@ -444,11 +478,18 @@ export function RepairReliabilityModal({ contractorAudit, auditActions, onClose 
                       ) : (
                       <>
                       <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 420 }}>
-                        <MapContainer center={[2.1896, 102.2501]} zoom={12.5} style={{ height: '100%', width: '100%' }}>
+                        <MapContainer
+                          center={[2.1896, 102.2501]}
+                          zoom={12.5}
+                          maxBounds={MELAKA_BOUNDS}
+                          maxBoundsViscosity={1.0}
+                          style={{ height: '100%', width: '100%' }}
+                        >
                           <TileLayer
                             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                           />
+                          <MapExtentLimiter bounds={MELAKA_BOUNDS} />
                           {areaConnections.map((c) => (
                             <Polyline
                               key={c.id}

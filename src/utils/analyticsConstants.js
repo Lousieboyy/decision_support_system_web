@@ -8,6 +8,8 @@
  * from the data.
  */
 
+import melakaDistricts from '../assets/melaka_districts.json';
+
 // ── Service-level targets ────────────────────────────────────────────────────
 // POLICY INPUT. The backend also exposes an operational dispatch SLA
 // (`sla_hours`, default 48, env DISPATCH_SLA_HOURS) via GET /teams/workload;
@@ -161,6 +163,32 @@ export const MAX_ZONE_SNAP_KM = 5;
 
 export const ZONE_UNMAPPED = 'Unmapped area';
 export const ZONE_UNASSIGNED = 'Unassigned';
+
+// Padded bounding box of the real Melaka district boundaries (OpenStreetMap
+// admin relations, assembled via polygons.openstreetmap.fr, ODbL) — shared
+// by every city-wide Leaflet map so none of them can be zoomed or panned out
+// far enough to lose Melaka against the rest of the peninsula. A single
+// source here means the "how far out is too far" answer can't drift between
+// maps the way three independently-guessed zoom numbers would.
+export const MELAKA_BOUNDS = (() => {
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  melakaDistricts.features.forEach((f) => {
+    const polygons = f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : [f.geometry.coordinates];
+    polygons.forEach((polygon) => {
+      polygon.forEach((ring) => {
+        ring.forEach(([lng, lat]) => {
+          if (lat < minLat) minLat = lat;
+          if (lat > maxLat) maxLat = lat;
+          if (lng < minLng) minLng = lng;
+          if (lng > maxLng) maxLng = lng;
+        });
+      });
+    });
+  });
+  const padLat = (maxLat - minLat) * 0.12;
+  const padLng = (maxLng - minLng) * 0.12;
+  return [[minLat - padLat, minLng - padLng], [maxLat + padLat, maxLng + padLng]];
+})();
 
 // ── Infrastructure Fragility Index (IFI) ────────────────────────────────────
 // SPI asks "is the council fast?" and UCI asks "how much is broken right

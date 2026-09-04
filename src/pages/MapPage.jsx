@@ -8,6 +8,7 @@ import MarkerClusterGroup from 'react-leaflet-cluster';
 import { format } from 'date-fns';
 import { MapPin, Image as ImageIcon, Filter, ChevronLeft, ChevronRight, Layers, CheckCircle2, Sparkles } from 'lucide-react';
 import { canonicalizeCategory } from '../utils/analyticsMetrics';
+import { MELAKA_BOUNDS } from '../utils/analyticsConstants';
 
 function HeatmapLayer({ points }) {
   const map = useMap();
@@ -36,6 +37,40 @@ function MapResizer() {
     }, 100);
     return () => clearTimeout(timer);
   }, [map]);
+  return null;
+}
+
+// Caps how far this map can zoom/pan out to roughly Melaka's own extent,
+// computed from the map's actual pixel size rather than a guessed zoom
+// number. A container that's just been inserted can still report a 0x0
+// size, which would make getBoundsZoom() return 0 and silently remove the
+// limit instead of setting it — retry instead of trusting the first read.
+function MapExtentLimiter({ bounds }) {
+  const map = useMap();
+  useEffect(() => {
+    const b = L.latLngBounds(bounds);
+    map.setMaxBounds(b);
+    let cancelled = false;
+    const tryApply = (attempt = 0) => {
+      if (cancelled) return;
+      try {
+        map.invalidateSize();
+        const size = map.getSize();
+        if ((size.x < 50 || size.y < 50) && attempt < 20) {
+          setTimeout(() => tryApply(attempt + 1), 100);
+          return;
+        }
+        const fitZoom = map.getBoundsZoom(b);
+        if (Number.isFinite(fitZoom) && fitZoom > 0) {
+          map.setMinZoom(fitZoom);
+        }
+      } catch (e) {
+        // ignore sizing glitches
+      }
+    };
+    const timer = setTimeout(() => tryApply(), 150);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [map, bounds]);
   return null;
 }
 
@@ -532,6 +567,8 @@ export function MapPage() {
         <MapContainer
           center={[2.1896, 102.2501]}
           zoom={13}
+          maxBounds={MELAKA_BOUNDS}
+          maxBoundsViscosity={1.0}
           style={{ height: '100%', width: '100%' }}
           whenReady={(map) => {
             setTimeout(() => {
@@ -542,6 +579,7 @@ export function MapPage() {
           }}
         >
           <MapResizer />
+          <MapExtentLimiter bounds={MELAKA_BOUNDS} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
