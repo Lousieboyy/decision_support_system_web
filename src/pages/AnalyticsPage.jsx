@@ -2297,8 +2297,17 @@ export function AnalyticsPage() {
                       department, not just whichever one is flagged, so
                       "Normal" has a visible baseline. Deliberately ignores
                       the page's Department Scope filter (see the memo above)
-                      since this is specifically a cross-department comparison. */}
-                  <div className="flex flex-col gap-1 mt-2">
+                      since this is specifically a cross-department comparison
+                      — said so on screen too, not just here: the KPI cards
+                      to the left DO respect that filter, so silently
+                      differing from them without any note would look like
+                      this card just forgot to apply it. */}
+                  {selectedDept !== 'all' && (
+                    <p className="text-[8px] font-semibold text-[#8a8477] mt-2 leading-relaxed">
+                      Every department shown here, not just {selectedDept} — this specifically compares departments against each other.
+                    </p>
+                  )}
+                  <div className={`flex flex-col gap-1 ${selectedDept !== 'all' ? 'mt-1' : 'mt-2'}`}>
                     {allDeptStatus.map((d) => {
                       const failBacklog = d.backlog > INSIGHT.backlogAlertTickets;
                       const failResolve = d.avgResolveDays != null && d.avgResolveDays > SLA_END_TO_END_DAYS;
