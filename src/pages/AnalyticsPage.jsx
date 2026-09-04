@@ -295,6 +295,10 @@ export function AnalyticsPage() {
   // dimension that matches whichever score band is currently selected,
   // instead of the same resolution-rate chart under every tab.
   const [cityHealthBand, setCityHealthBand] = useState('spi');
+  // Shared by both zone territory maps (spi/uci render one at a time, never
+  // both), so hovering a polygon on either one dims every other zone on that
+  // same map — the hovered shape is the only thing worth reading at a glance.
+  const [hoveredTerritoryZone, setHoveredTerritoryZone] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -3158,7 +3162,12 @@ export function AnalyticsPage() {
                           ))}
                         </div>
                         <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '420px', width: '100%' }}>
-                          <MapContainer center={[2.24, 102.24]} zoom={11} style={{ height: '100%', width: '100%' }}>
+                          <MapContainer
+                            center={[2.24, 102.24]}
+                            zoom={11}
+                            minZoom={10}
+                            style={{ height: '100%', width: '100%' }}
+                          >
                             <TileLayer
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -3169,6 +3178,8 @@ export function AnalyticsPage() {
                               const graded = z && z.resolutionRate != null;
                               const color = graded ? gradeColor(z.resolutionRate) : UNRATED_COLOR;
                               const validTotal = z ? z.total - z.rejected : 0;
+                              const isHovered = hoveredTerritoryZone === t.name;
+                              const isDimmed = hoveredTerritoryZone && !isHovered;
                               return (
                                 <Polygon
                                   key={t.name}
@@ -3176,10 +3187,15 @@ export function AnalyticsPage() {
                                   pathOptions={{
                                     color,
                                     fillColor: color,
-                                    fillOpacity: graded ? 0.45 : 0.35,
-                                    weight: 2,
+                                    fillOpacity: isDimmed ? (graded ? 0.45 : 0.35) * 0.25 : graded ? 0.45 : 0.35,
+                                    opacity: isDimmed ? 0.25 : 1,
+                                    weight: isHovered ? 3 : 2,
                                   }}
-                                  eventHandlers={{ click: () => openExplore({ zone: t.name }) }}
+                                  eventHandlers={{
+                                    click: () => openExplore({ zone: t.name }),
+                                    mouseover: () => setHoveredTerritoryZone(t.name),
+                                    mouseout: () => setHoveredTerritoryZone(null),
+                                  }}
                                 >
                                   <LeafletTooltip sticky>
                                     <div className="text-xs">
@@ -3327,7 +3343,12 @@ export function AnalyticsPage() {
                           ))}
                         </div>
                         <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10 mb-4" style={{ height: '380px', width: '100%' }}>
-                          <MapContainer center={[2.24, 102.24]} zoom={11} style={{ height: '100%', width: '100%' }}>
+                          <MapContainer
+                            center={[2.24, 102.24]}
+                            zoom={11}
+                            minZoom={10}
+                            style={{ height: '100%', width: '100%' }}
+                          >
                             <TileLayer
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -3337,12 +3358,24 @@ export function AnalyticsPage() {
                               const z = zoneByName(t.name);
                               const active = z?.active ?? 0;
                               const color = burdenColor(active);
+                              const isHovered = hoveredTerritoryZone === t.name;
+                              const isDimmed = hoveredTerritoryZone && !isHovered;
                               return (
                                 <Polygon
                                   key={t.name}
                                   positions={t.positions}
-                                  pathOptions={{ color, fillColor: color, fillOpacity: active ? 0.5 : 0.25, weight: 2 }}
-                                  eventHandlers={{ click: () => openExplore({ zone: t.name, status: 'all' }) }}
+                                  pathOptions={{
+                                    color,
+                                    fillColor: color,
+                                    fillOpacity: isDimmed ? (active ? 0.5 : 0.25) * 0.25 : active ? 0.5 : 0.25,
+                                    opacity: isDimmed ? 0.25 : 1,
+                                    weight: isHovered ? 3 : 2,
+                                  }}
+                                  eventHandlers={{
+                                    click: () => openExplore({ zone: t.name, status: 'all' }),
+                                    mouseover: () => setHoveredTerritoryZone(t.name),
+                                    mouseout: () => setHoveredTerritoryZone(null),
+                                  }}
                                 >
                                   <LeafletTooltip sticky>
                                     <div className="text-xs">
