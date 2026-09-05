@@ -20,7 +20,7 @@ import {
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
   SLA_END_TO_END_DAYS, SLA_TARGET_DAYS, CLUSTER, REINCIDENCE, INSIGHT,
-  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor,
+  MIN_N_FOR_SCORE, MIN_N_FOR_STAGE, CRITICALITY, gradeFor, GRADE_SCALE, GRADE_COLOR,
   MELAKA_ZONES, ZONE_UNMAPPED, MELAKA_BOUNDS,
 } from '../utils/analyticsConstants';
 import melakaDistricts from '../assets/melaka_districts.json';
@@ -3184,16 +3184,25 @@ export function AnalyticsPage() {
               // about it).
               const unmappedCount = zoneScorecard.find((z) => z.name === ZONE_UNMAPPED)?.total ?? 0;
               const mappableZones = zoneScorecard.filter((z) => z.name !== ZONE_UNMAPPED);
-              const graded = mappableZones.filter(z => z.resolutionRate != null);
+              // z.sufficient, not just "does a rate exist" — a zone with 1-4
+              // reports gets a resolutionRate number same as any other, but
+              // calling it "0% resolved, furthest behind" off that few
+              // reports is exactly the shaky-sample-size problem
+              // MIN_N_FOR_SCORE exists everywhere else in this app to avoid.
+              const graded = mappableZones.filter(z => z.sufficient);
               const chartData = [...graded].sort((a, b) => a.resolutionRate - b.resolutionRate);
-              const gradeColor = (rate) => (rate >= 80 ? '#15803d' : rate >= 60 ? '#b45309' : '#b91c1c');
+              // Was its own 2-cutoff green/amber/red before — that disagreed
+              // with the letter grade shown in each zone's own tooltip,
+              // which already used the real 5-tier A-F scale (a "C" and a
+              // "D" both landed in the same "60–79%" amber bucket here,
+              // same bug already fixed once for CityHealthBands and once
+              // for Repair Reliability). One scale, one color, everywhere
+              // a grade appears.
               const UNRATED_COLOR = '#57534e';
-              const LEGEND = [
-                { color: '#15803d', label: '80%+ resolved' },
-                { color: '#b45309', label: '60–79% resolved' },
-                { color: '#b91c1c', label: 'Under 60% resolved' },
-                { color: UNRATED_COLOR, label: 'Not enough data' },
-              ];
+              const gradeColor = (rate) => {
+                const grade = gradeFor(rate);
+                return grade ? GRADE_COLOR[grade.grade] : UNRATED_COLOR;
+              };
               const zoneByName = (name) => mappableZones.find((z) => z.name === name);
 
               return (
@@ -3213,16 +3222,28 @@ export function AnalyticsPage() {
                     ) : (
                       <>
                         <div className="flex flex-wrap gap-2 mb-3">
-                          {LEGEND.map((item) => (
+                          {GRADE_SCALE.map((g) => (
                             <span
-                              key={item.label}
+                              key={g.grade}
                               className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold"
-                              style={{ background: 'rgba(31,30,26,0.05)', color: item.color }}
+                              style={{ background: 'rgba(31,30,26,0.05)', color: GRADE_COLOR[g.grade] }}
                             >
-                              <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, background: item.color }} />
-                              {item.label}
+                              <span
+                                className="inline-flex items-center justify-center rounded-full shrink-0 text-white font-black"
+                                style={{ width: 14, height: 14, background: GRADE_COLOR[g.grade], fontSize: 8 }}
+                              >
+                                {g.grade}
+                              </span>
+                              {g.label} ({g.min}{g.grade === 'A' ? '+' : `–${GRADE_SCALE[GRADE_SCALE.indexOf(g) - 1]?.min - 1}`})
                             </span>
                           ))}
+                          <span
+                            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-bold"
+                            style={{ background: 'rgba(31,30,26,0.05)', color: UNRATED_COLOR }}
+                          >
+                            <span className="inline-block rounded-full shrink-0" style={{ width: 8, height: 8, background: UNRATED_COLOR }} />
+                            Not enough data
+                          </span>
                         </div>
                         <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '420px', width: '100%' }}>
                           <MapContainer
@@ -3240,7 +3261,7 @@ export function AnalyticsPage() {
                             {ZONE_TERRITORY.map((t) => {
                               if (!t.positions) return null;
                               const z = zoneByName(t.name);
-                              const graded = z && z.resolutionRate != null;
+                              const graded = z && z.sufficient;
                               const color = graded ? gradeColor(z.resolutionRate) : UNRATED_COLOR;
                               const validTotal = z ? z.total - z.rejected : 0;
                               const isHovered = hoveredTerritoryZone === t.name;
