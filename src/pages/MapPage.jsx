@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { MapPin, Image as ImageIcon, Filter, ChevronLeft, ChevronRight, Layers, CheckCircle2, Sparkles } from 'lucide-react';
 import { canonicalizeCategory } from '../utils/analyticsMetrics';
 import { MELAKA_BOUNDS } from '../utils/analyticsConstants';
+import { getReportPriority as getPriority } from '../utils/reportPriority';
 
 function HeatmapLayer({ points }) {
   const map = useMap();
@@ -99,15 +100,6 @@ function getDeptId(role, username) {
 // Illegal Dumping, or Vandalism reports.
 const CATEGORIES = ["All", "Road Damage", "Street Lighting", "Waste Management", "Drainage System", "Vandalism", "Other Infrastructure"];
 const STATUSES = ["All", "Pending", "In Review", "In Process", "In Maintenance", "Resolved", "Rejected"];
-
-const getPriority = (status, categories) => {
-  if (status === 'Resolved') return 'Resolved';
-  const cat = categories || '';
-  if (cat.includes('Damage') || cat.includes('Drainage') || cat.includes('Tree')) {
-    return 'High';
-  }
-  return 'Medium';
-};
 
 const getPriorityColor = (priority) => {
   switch (priority) {
