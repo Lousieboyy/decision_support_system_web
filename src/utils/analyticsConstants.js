@@ -185,8 +185,12 @@ export const MELAKA_BOUNDS = (() => {
       });
     });
   });
-  const padLat = (maxLat - minLat) * 0.12;
-  const padLng = (maxLng - minLng) * 0.12;
+  // Small enough that the min-zoom fit (see MapExtentLimiter) lands on
+  // essentially Melaka itself — a wider pad here was letting Port Dickson,
+  // Segamat and Muar (neighbouring states) fill a visible chunk of the
+  // view at max zoom-out, not just a thin margin around the real border.
+  const padLat = (maxLat - minLat) * 0.02;
+  const padLng = (maxLng - minLng) * 0.02;
   return [[minLat - padLat, minLng - padLng], [maxLat + padLat, maxLng + padLng]];
 })();
 

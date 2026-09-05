@@ -57,11 +57,24 @@ function MapExtentLimiter({ bounds }) {
       try {
         map.invalidateSize();
         const size = map.getSize();
-        if ((size.x < 50 || size.y < 50) && attempt < 20) {
+        // A slow initial layout (font/CSS still loading, cold dev-server
+        // compile) can leave this at 0x0 well past a couple hundred ms —
+        // 50 tries at 100ms gives a generous 5s before giving up rather
+        // than silently leaving the map unbounded.
+        if ((size.x < 50 || size.y < 50) && attempt < 50) {
           setTimeout(() => tryApply(attempt + 1), 100);
           return;
         }
-        const fitZoom = map.getBoundsZoom(b);
+        // getBoundsZoom(b) alone fits Melaka's bounds *inside* the view,
+        // which — since Melaka's box is wider than it is tall and this
+        // container is closer to square — zoomed out far enough to fit the
+        // wide axis while leaving the taller axis with room to spare,
+        // revealing real neighbouring towns in that margin (Port Dickson,
+        // Segamat, Muar). inside=true instead finds the zoom where the
+        // *view* fits inside the bounds — the view can never show anything
+        // past Melaka's edge on either axis, at the cost of not always
+        // showing literally all of Melaka in the more generous axis.
+        const fitZoom = map.getBoundsZoom(b, true);
         if (Number.isFinite(fitZoom) && fitZoom > 0) {
           map.setMinZoom(fitZoom);
         }
