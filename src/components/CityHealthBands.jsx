@@ -3,7 +3,7 @@ import {
   AreaChart, Area, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, BarChart, Bar, Cell, LabelList, ReferenceLine,
 } from 'recharts';
-import { Info, X, MapPin } from 'lucide-react';
+import { Info, X, MapPin, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, SLA_TARGET_DAYS,
@@ -13,6 +13,27 @@ import {
 import { fmtDuration } from '../utils/analyticsMetrics';
 
 const HATCH = 'repeating-linear-gradient(135deg, rgba(31,30,26,.06) 0 6px, transparent 6px 12px)';
+
+// Collapsed by default. Methodology/caveat text a reader needs to defend a
+// number under scrutiny (how it's calculated, what it excludes) shouldn't
+// have to compete with the actionable insight next to it for a first
+// glance — it's still one click away, just not always-on paragraph text.
+function MethodNote({ label = 'How this is calculated', children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#8a8477] hover:text-[#4b473d] cursor-pointer"
+      >
+        <Info size={10} />
+        {label}
+        <ChevronDown size={10} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+      </button>
+      {open && <p className="text-[10px] text-[#8a8477] leading-relaxed mt-1">{children}</p>}
+    </div>
+  );
+}
 
 const scoreColor = (s) => {
   const grade = gradeFor(s);
@@ -536,13 +557,14 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-[10px] text-[#8a8477] mt-2 leading-relaxed">
-              <Info size={10} className="inline mr-1 -mt-0.5" />
+            {onWeekClick && (
+              <p className="text-[10px] text-[#8a8477] mt-2">Click a point to see the reports submitted that week.</p>
+            )}
+            <MethodNote>
               The number of open reports each week is calculated from the dates reports were
               submitted and resolved. The rejection date is estimated from the review date,
               which is accurate because a rejected report is never later approved.
-              {onWeekClick && ' Click a point to see the reports submitted that week.'}
-            </p>
+            </MethodNote>
           </div>
         </div>
       </section>
@@ -707,11 +729,11 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-[10px] text-[#8a8477] mt-2">
+                <p className="text-[10px] text-[#8a8477] mt-2">Click a bar to see the reports behind it.</p>
+                <MethodNote>
                   A higher score means the zone holds up better. The dashed line at 80 marks where a passing grade starts.
                   {ifiUnscored > 0 && ` ${ifiUnscored} zone${ifiUnscored === 1 ? '' : 's'} left out — fewer than ${MIN_N_FOR_INDEX} reports, or the district isn't known.`}
-                  {' '}Click a bar to see the reports behind it.
-                </p>
+                </MethodNote>
                 {/* The ranking alone doesn't say what to do — name the worst
                     zone and which of the three signals is actually driving
                     it, since "slow but holds" and "fast but fails again"

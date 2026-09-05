@@ -14,7 +14,7 @@ import { Delaunay } from 'd3-delaunay';
 import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, Download, Info, MapPin, RefreshCw,
-  CheckCircle2, ChevronRight, ChevronLeft, Heart, Activity,
+  CheckCircle2, ChevronRight, ChevronLeft, ChevronDown, Heart, Activity,
   Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
@@ -198,6 +198,29 @@ const fmtRecurDate = (v) => {
   const d = new Date(v);
   return isNaN(d.getTime()) ? 'unknown date' : format(d, 'd MMM yyyy');
 };
+
+// Collapsed by default. The methodology/caveat text a reader needs to
+// defend a number under scrutiny (how it's calculated, what it excludes)
+// was previously always-on paragraph text competing for attention with
+// the "so what" insight next to it on every card and chart — this tab
+// accumulated a lot of that over time. The detail is still one click
+// away, just not fighting the actionable text for a first glance.
+function MethodNote({ label = 'How this is calculated', children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-1.5">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#8a8477] hover:text-[#4b473d] cursor-pointer"
+      >
+        <Info size={10} />
+        {label}
+        <ChevronDown size={10} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }} />
+      </button>
+      {open && <p className="text-[10px] text-[#8a8477] leading-relaxed mt-1">{children}</p>}
+    </div>
+  );
+}
 
 // Renders nothing when there's no photo, rather than a placeholder box —
 // most reports won't have one, and an empty frame on every card just adds
@@ -2795,19 +2818,17 @@ export function AnalyticsPage() {
                       </p>
                     )}
                     {activeTab === 'single' ? (
-                      <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
-                        <Info size={10} className="inline mr-1 -mt-0.5" />
-                        Built from resolved reports only — a repair that reappeared within {REINCIDENCE.radiusM}m and{' '}
-                        {REINCIDENCE.windowDays} days means the original fix likely didn't hold. Not currently-open
-                        work — there's nothing to dispatch here, it's a signal for wherever repairs get planned.
-                      </p>
+                      <MethodNote label="Read-only — built from resolved reports, nothing to dispatch here">
+                        A repair that reappeared within {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days
+                        means the original fix likely didn't hold. That's a signal for wherever repairs get
+                        planned, not currently-open work.
+                      </MethodNote>
                     ) : (
-                      <p className="text-[10px] text-[#8a8477] leading-relaxed -mt-2">
-                        <Info size={10} className="inline mr-1 -mt-0.5" />
-                        Built from resolved reports only — two or more different categories (e.g. drainage and road
-                        damage) that were both fixed near each other, suggesting one caused the other. Not
-                        currently-open work — there's nothing to dispatch here, it's a pattern worth investigating.
-                      </p>
+                      <MethodNote label="Read-only — built from resolved reports, nothing to dispatch here">
+                        Two or more different categories (e.g. drainage and road damage) that were both fixed near
+                        each other, suggesting one caused the other — a pattern worth investigating, not
+                        currently-open work.
+                      </MethodNote>
                     )}
                     <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
@@ -3532,12 +3553,12 @@ export function AnalyticsPage() {
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
-                        <p className="text-[10px] text-[#8a8477] mt-2">
+                        <p className="text-[10px] text-[#8a8477] mt-2">Click a bar to see those reports.</p>
+                        <MethodNote>
                           Open issues currently unresolved (not rejected) in each zone, right now — not weighted by
                           population or age (see Infrastructure Fragility for that). Bars aren't a pass/fail grade,
-                          since there's no per-zone target to compare against, only a city-wide one. Click a bar
-                          to see those reports.
-                        </p>
+                          since there's no per-zone target to compare against, only a city-wide one.
+                        </MethodNote>
                         <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(193,97,63,0.06)', color: '#c1613f' }}>
                           {chartData[0].name} carries {chartData[0].active} open issue{chartData[0].active === 1 ? '' : 's'} —
                           {' '}{shareOf(chartData[0].active)}% of everything open city-wide. Worth checking whether that's
