@@ -3308,7 +3308,7 @@ export function AnalyticsPage() {
                                     color,
                                     fillColor: color,
                                     fillOpacity: isDimmed ? (graded ? 0.45 : 0.35) * 0.5 : graded ? 0.45 : 0.35,
-                                    opacity: isDimmed ? 0.55 : 1,
+                                    opacity: isDimmed ? 0.55 : graded ? 1 : 0.45,
                                     weight: isHovered ? 3 : 2,
                                     className: 'zone-territory-poly',
                                   }}
@@ -3491,7 +3491,7 @@ export function AnalyticsPage() {
                                     color,
                                     fillColor: color,
                                     fillOpacity: isDimmed ? (active ? 0.5 : 0.25) * 0.5 : active ? 0.5 : 0.25,
-                                    opacity: isDimmed ? 0.55 : 1,
+                                    opacity: isDimmed ? 0.55 : active ? 1 : 0.45,
                                     weight: isHovered ? 3 : 2,
                                     className: 'zone-territory-poly',
                                   }}
