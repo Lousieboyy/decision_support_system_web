@@ -3655,49 +3655,56 @@ export function AnalyticsPage() {
                 </button>
               </div>
               <div className="overflow-y-auto">
-                <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 mx-5 mt-5" style={{ height: 260 }}>
-                  <MapContainer
-                    center={[2.1896, 102.2501]}
-                    zoom={12}
-                    maxBounds={MELAKA_BOUNDS}
-                    maxBoundsViscosity={1.0}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <MapExtentLimiter bounds={MELAKA_BOUNDS} />
-                    {hotspots.map((h) => (
-                      <CircleMarker
-                        key={h.id}
-                        ref={(instance) => { if (instance) activeHotspotMarkerRefs.current[h.id] = instance; }}
-                        center={[h.latitude, h.longitude]}
-                        radius={activeHotspotFocusId === h.id ? 12 : 7 + Math.min(h.size, 8)}
-                        pathOptions={{
-                          color: '#b45309',
-                          fillColor: '#b45309',
-                          fillOpacity: activeHotspotFocusId === h.id ? 1 : 0.55,
-                          weight: activeHotspotFocusId === h.id ? 3 : 2,
-                        }}
-                        eventHandlers={{ click: () => setActiveHotspotFocusId(h.id) }}
-                      >
-                        <Popup>
-                          <div style={{ fontSize: 12, minWidth: 160 }}>
-                            <div style={{ fontWeight: 700 }}>{h.category}</div>
-                            <div style={{ color: '#8a8477' }}>{h.size} active reports · {h.address}</div>
-                            {h.latestDate > 0 && (
-                              <div style={{ color: '#8a8477' }}>Latest {fmtRecurDate(h.latestDate)}</div>
-                            )}
-                          </div>
-                        </Popup>
-                      </CircleMarker>
-                    ))}
-                    <MapController focus={activeHotspotMapFocus} />
-                    <MapResizer />
-                  </MapContainer>
+                {/* Sticky, not just top-of-scroll: clicking a card further
+                    down the list is how this map updates (there's no hover
+                    here), so if scrolling the list also scrolled the map
+                    out of view, that click would have nothing visible to
+                    show for it. */}
+                <div className="sticky top-0 z-10 bg-white px-5 pt-5 pb-3 shadow-[0_4px_8px_-4px_rgba(31,30,26,0.12)]">
+                  <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 260 }}>
+                    <MapContainer
+                      center={[2.1896, 102.2501]}
+                      zoom={12}
+                      maxBounds={MELAKA_BOUNDS}
+                      maxBoundsViscosity={1.0}
+                      style={{ height: '100%', width: '100%' }}
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <MapExtentLimiter bounds={MELAKA_BOUNDS} />
+                      {hotspots.map((h) => (
+                        <CircleMarker
+                          key={h.id}
+                          ref={(instance) => { if (instance) activeHotspotMarkerRefs.current[h.id] = instance; }}
+                          center={[h.latitude, h.longitude]}
+                          radius={activeHotspotFocusId === h.id ? 12 : 7 + Math.min(h.size, 8)}
+                          pathOptions={{
+                            color: '#b45309',
+                            fillColor: '#b45309',
+                            fillOpacity: activeHotspotFocusId === h.id ? 1 : 0.55,
+                            weight: activeHotspotFocusId === h.id ? 3 : 2,
+                          }}
+                          eventHandlers={{ click: () => setActiveHotspotFocusId(h.id) }}
+                        >
+                          <Popup>
+                            <div style={{ fontSize: 12, minWidth: 160 }}>
+                              <div style={{ fontWeight: 700 }}>{h.category}</div>
+                              <div style={{ color: '#8a8477' }}>{h.size} active reports · {h.address}</div>
+                              {h.latestDate > 0 && (
+                                <div style={{ color: '#8a8477' }}>Latest {fmtRecurDate(h.latestDate)}</div>
+                              )}
+                            </div>
+                          </Popup>
+                        </CircleMarker>
+                      ))}
+                      <MapController focus={activeHotspotMapFocus} />
+                      <MapResizer />
+                    </MapContainer>
+                  </div>
                 </div>
-                <div className="p-5 space-y-3">
+                <div className="p-5 pt-2 space-y-3">
                   {hotspots.length === 0 ? (
                     <div className="py-8 text-center text-xs text-[#8a8477]">No active hotspots at the current clustering settings.</div>
                   ) : (
