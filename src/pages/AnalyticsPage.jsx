@@ -2123,10 +2123,10 @@ export function AnalyticsPage() {
       </div>
 
         {/* Sub-navigation Tabs */}
-        <div className="flex bg-[#f5f1e6] p-1.5 rounded-2xl border border-[#1f1e1a]/8 self-start overflow-x-auto scrollbar-none max-w-full gap-2">
+        <div className="flex bg-[#f5f1e6] p-1 rounded-2xl border border-[#1f1e1a]/8 self-start overflow-x-auto scrollbar-none max-w-full gap-1.5">
         <button
           onClick={() => setActiveViewTab('overview')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'overview'
               ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
               : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
@@ -2136,7 +2136,7 @@ export function AnalyticsPage() {
         </button>
         <button
           onClick={() => setActiveViewTab('cityhealth')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'cityhealth'
               ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
               : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
@@ -2147,7 +2147,7 @@ export function AnalyticsPage() {
         </button>
         <button
           onClick={() => setActiveViewTab('hotspots')}
-          className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
             activeViewTab === 'hotspots'
               ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
               : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
@@ -3429,19 +3429,24 @@ export function AnalyticsPage() {
               // ranks zones against each other, the same "worst shown first" idea
               // as the bars, not a pass/fail grade.
               const maxActiveZone = Math.max(1, ...mappableZones.map((z) => z.active));
-              const BURDEN_UNRATED = '#57534e';
+              // A genuine good-to-bad progression (green → amber → orange →
+              // red) instead of the old all-red/orange/salmon set, which put
+              // three near-identical warm tones next to each other and left
+              // most of the map looking like one uniform reddish wash since
+              // most zones land in the lowest non-zero bucket by definition.
+              const BURDEN_NONE = '#15803d';
               const burdenColor = (active) => {
-                if (!active) return BURDEN_UNRATED;
+                if (!active) return BURDEN_NONE;
                 const ratio = active / maxActiveZone;
                 if (ratio >= 0.66) return '#b91c1c';
-                if (ratio >= 0.33) return '#b45309';
-                return '#c1613f';
+                if (ratio >= 0.33) return '#c2410c';
+                return '#f59e0b';
               };
               const BURDEN_LEGEND = [
                 { color: '#b91c1c', label: 'Most burdened' },
-                { color: '#b45309', label: 'Moderately burdened' },
-                { color: '#c1613f', label: 'Lightly burdened' },
-                { color: BURDEN_UNRATED, label: 'No open issues' },
+                { color: '#c2410c', label: 'Moderately burdened' },
+                { color: '#f59e0b', label: 'Lightly burdened' },
+                { color: BURDEN_NONE, label: 'No open issues' },
               ];
               const zoneByName = (name) => mappableZones.find((z) => z.name === name);
 
@@ -3597,7 +3602,7 @@ export function AnalyticsPage() {
                           population or age (see Infrastructure Fragility for that). Bars aren't a pass/fail grade,
                           since there's no per-zone target to compare against, only a city-wide one.
                         </MethodNote>
-                        <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(193,97,63,0.06)', color: '#c1613f' }}>
+                        <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(185,28,28,0.06)', color: '#b91c1c' }}>
                           {chartData[0].name} carries {chartData[0].active} open issue{chartData[0].active === 1 ? '' : 's'} —
                           {' '}{shareOf(chartData[0].active)}% of everything open city-wide. Worth checking whether that's
                           a real backlog or just a recent spike still working through the queue.
