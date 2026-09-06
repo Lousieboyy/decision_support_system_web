@@ -2624,111 +2624,11 @@ export function AnalyticsPage() {
           <div className="space-y-6 animate-fade-in">
             {filterBar}
 
-            {/* Heatmap Card */}
-            <div className="content-card">
-              <div className="content-card-header">
-                <div className="content-card-title">
-                  <MapPin size={16} className="text-[#4a5d3f] mr-2" />
-                  Melaka Recurring-Failure Density Heatmap
-                </div>
-              </div>
-              <div className="p-5">
-                {/* Month walkthrough — heatmapPoints alone blends every
-                    reappearance into one static all-time picture, which
-                    can't show whether the pattern is spreading, shifting,
-                    or dying out. Stepping through months lets the admin
-                    watch that movement instead of inferring it. */}
-                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setHeatmapMonth('all')}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-opacity hover:opacity-80 ${
-                        heatmapMonth === 'all' ? '' : 'hover:bg-[#f5f1e6]'
-                      }`}
-                      style={heatmapMonth === 'all' ? { background: '#4a5d3f', color: '#fff' } : { color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
-                    >
-                      All time
-                    </button>
-                    {heatmapMonths.length > 0 && (
-                      <>
-                        <button
-                          onClick={() => {
-                            // Coming from "All time" starts at the most recent
-                            // month, not the oldest — an admin stepping through
-                            // wants to see what's currently breaking first, then
-                            // dig backward into history, not wade through months
-                            // of the past to reach the present.
-                            const idx = heatmapMonth === 'all' ? heatmapMonths.length - 1 : Math.max(0, heatmapMonths.indexOf(heatmapMonth) - 1);
-                            setHeatmapMonth(heatmapMonths[idx]);
-                          }}
-                          disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) <= 0}
-                          className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
-                          style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
-                          title="Previous month"
-                        >
-                          <ChevronLeft size={13} />
-                        </button>
-                        <span className="text-[11px] font-bold text-[#201f1b] min-w-[100px] text-center">
-                          {heatmapMonth === 'all' ? 'Step through months' : `Through ${format(new Date(heatmapMonth + '-02'), 'MMMM yyyy')}`}
-                        </span>
-                        <button
-                          onClick={() => {
-                            const idx = heatmapMonth === 'all' ? heatmapMonths.length - 1 : Math.min(heatmapMonths.length - 1, heatmapMonths.indexOf(heatmapMonth) + 1);
-                            setHeatmapMonth(heatmapMonths[idx]);
-                          }}
-                          disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) >= heatmapMonths.length - 1}
-                          className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
-                          style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
-                          title="Next month"
-                        >
-                          <ChevronRight size={13} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  <span className="text-[10px] text-[#8a8477]">
-                    {displayedHeatmapPoints.length} point{displayedHeatmapPoints.length === 1 ? '' : 's'} shown
-                  </span>
-                </div>
-                <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10" style={{ height: '380px', width: '100%' }}>
-                  <MapContainer
-                    center={[2.1896, 102.2501]}
-                    zoom={12.5}
-                    maxBounds={MELAKA_BOUNDS}
-                    maxBoundsViscosity={1.0}
-                    style={{ height: '100%', width: '100%' }}
-                    zoomControl={false}
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <MapExtentLimiter bounds={MELAKA_BOUNDS} />
-                    <HeatmapLayer points={displayedHeatmapPoints} ready={mapReady} />
-                    {/* Hovering a card below sets this — the only way the
-                        admin can actually see a card "sync" to this map,
-                        since clicking opens a popup that covers it. */}
-                    {heatmapHighlight && (
-                      <CircleMarker
-                        center={[heatmapHighlight.lat, heatmapHighlight.lng]}
-                        radius={14}
-                        pathOptions={{ color: '#c1613f', fillColor: '#c1613f', fillOpacity: 0.2, weight: 3 }}
-                      >
-                        <Popup>{heatmapHighlight.label}</Popup>
-                      </CircleMarker>
-                    )}
-                    <MapResizer />
-                    <MapController focus={mapFocus} />
-                  </MapContainer>
-                </div>
-                <p className="text-[10px] text-[#8a8477] mt-2.5">Hover a card below to highlight it here. Click to open its full detail with the individual reports on a map.</p>
-              </div>
-            </div>
-
-            {/* Hotspots & Systemic list, with the clustering controls that
-                shape it right above — dragging the radius/density here
-                re-sorts and re-filters the exact list underneath it,
-                instead of a separate panel elsewhere on the page. */}
+            {/* Hotspots & Systemic — map and list share one card, side by
+                side on wide screens, so hovering a card and watching it
+                highlight on the map doesn't mean scrolling between two
+                separate full-width cards. The clustering controls sit above
+                both, shared, since they re-sort and re-filter the list. */}
             <div className="content-card flex flex-col">
             <div className="content-card-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#1f1e1a]/8 pb-4">
               <div className="content-card-title">
@@ -2806,7 +2706,106 @@ export function AnalyticsPage() {
                 </div>
               </div>
 
-              <div className="p-5 flex-1 flex flex-col space-y-4">
+              <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {/* Map column */}
+                <div className="flex flex-col min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <MapPin size={13} className="text-[#4a5d3f]" />
+                    <span className="text-xs font-bold text-[#201f1b]">Recurring-Failure Density Heatmap</span>
+                  </div>
+                {/* Month walkthrough — heatmapPoints alone blends every
+                    reappearance into one static all-time picture, which
+                    can't show whether the pattern is spreading, shifting,
+                    or dying out. Stepping through months lets the admin
+                    watch that movement instead of inferring it. */}
+                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setHeatmapMonth('all')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-opacity hover:opacity-80 ${
+                        heatmapMonth === 'all' ? '' : 'hover:bg-[#f5f1e6]'
+                      }`}
+                      style={heatmapMonth === 'all' ? { background: '#4a5d3f', color: '#fff' } : { color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+                    >
+                      All time
+                    </button>
+                    {heatmapMonths.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => {
+                            // Coming from "All time" starts at the most recent
+                            // month, not the oldest — an admin stepping through
+                            // wants to see what's currently breaking first, then
+                            // dig backward into history, not wade through months
+                            // of the past to reach the present.
+                            const idx = heatmapMonth === 'all' ? heatmapMonths.length - 1 : Math.max(0, heatmapMonths.indexOf(heatmapMonth) - 1);
+                            setHeatmapMonth(heatmapMonths[idx]);
+                          }}
+                          disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) <= 0}
+                          className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
+                          style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+                          title="Previous month"
+                        >
+                          <ChevronLeft size={13} />
+                        </button>
+                        <span className="text-[11px] font-bold text-[#201f1b] min-w-[100px] text-center">
+                          {heatmapMonth === 'all' ? 'Step through months' : `Through ${format(new Date(heatmapMonth + '-02'), 'MMMM yyyy')}`}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const idx = heatmapMonth === 'all' ? heatmapMonths.length - 1 : Math.min(heatmapMonths.length - 1, heatmapMonths.indexOf(heatmapMonth) + 1);
+                            setHeatmapMonth(heatmapMonths[idx]);
+                          }}
+                          disabled={heatmapMonth !== 'all' && heatmapMonths.indexOf(heatmapMonth) >= heatmapMonths.length - 1}
+                          className="p-1.5 rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f5f1e6]"
+                          style={{ color: '#4b473d', border: '1px solid rgba(31,30,26,0.12)' }}
+                          title="Next month"
+                        >
+                          <ChevronRight size={13} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-[#8a8477]">
+                    {displayedHeatmapPoints.length} point{displayedHeatmapPoints.length === 1 ? '' : 's'} shown
+                  </span>
+                </div>
+                <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8 relative z-10 flex-1" style={{ minHeight: '420px', width: '100%' }}>
+                  <MapContainer
+                    center={[2.1896, 102.2501]}
+                    zoom={12.5}
+                    maxBounds={MELAKA_BOUNDS}
+                    maxBoundsViscosity={1.0}
+                    style={{ height: '100%', width: '100%' }}
+                    zoomControl={false}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <MapExtentLimiter bounds={MELAKA_BOUNDS} />
+                    <HeatmapLayer points={displayedHeatmapPoints} ready={mapReady} />
+                    {/* Hovering a card sets this — the only way the
+                        admin can actually see a card "sync" to this map,
+                        since clicking opens a popup that covers it. */}
+                    {heatmapHighlight && (
+                      <CircleMarker
+                        center={[heatmapHighlight.lat, heatmapHighlight.lng]}
+                        radius={14}
+                        pathOptions={{ color: '#c1613f', fillColor: '#c1613f', fillOpacity: 0.2, weight: 3 }}
+                      >
+                        <Popup>{heatmapHighlight.label}</Popup>
+                      </CircleMarker>
+                    )}
+                    <MapResizer />
+                    <MapController focus={mapFocus} />
+                  </MapContainer>
+                </div>
+                <p className="text-[10px] text-[#8a8477] mt-2.5">Hover a card to highlight it here. Click to open its full detail with the individual reports on a map.</p>
+                </div>
+
+                {/* List column */}
+                <div className="flex flex-col min-w-0 space-y-4">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div className="relative flex-1 min-w-[200px]">
                         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8a8477] pointer-events-none" />
@@ -2852,7 +2851,7 @@ export function AnalyticsPage() {
                         currently-open work.
                       </MethodNote>
                     )}
-                    <div className="flex-1 overflow-y-auto max-h-[380px] pr-1 space-y-3 scrollbar-thin">
+                    <div className="flex-1 overflow-y-auto max-h-[420px] pr-1 space-y-3 scrollbar-thin">
                       {activeTab === 'single' ? (
                         displayRecurringHotspots.length > 0 ? (
                           displayRecurringHotspots.map((h) => renderRecurringHotspotCard(h))
@@ -2926,8 +2925,9 @@ export function AnalyticsPage() {
                         )
                       )}
                     </div>
-                  </div>
                 </div>
+              </div>
+            </div>
 
             {/* Detail & Edit popup — used to swap in for the Clustering
                 Controls panel above, which hid the panel and forced a "Back"
