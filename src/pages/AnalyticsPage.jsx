@@ -36,6 +36,7 @@ import { CityHealthBands } from '../components/CityHealthBands';
 import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
 import { ReportExplorerModal } from '../components/ReportExplorerModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
+import { NotifyTeamAction } from '../components/NotifyTeamAction';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
@@ -1936,7 +1937,28 @@ export function AnalyticsPage() {
   // No dispatch action and no priority badge on either Hotspots or Systemic:
   // every item here is a resolved report, so there's no unclaimed work to
   // send a crew to and no "act on this now" urgency to score — this is a
-  // historical co-occurrence/reappearance pattern, not an action queue.
+  // historical co-occurrence/reappearance pattern, not an action queue. The
+  // one action that does fit is NotifyTeamAction (in each detail popup),
+  // which flags the pattern for a team's attention without touching any
+  // report's status — the same team-per-category guess ClusterDispatchAction
+  // uses for live work, reused here to default the picker on the popup.
+  const HOTSPOT_TEAM_HINT = {
+    'Road Damage': 'MBMB',
+    'Street Lighting': 'MBMB',
+    Vandalism: 'MBMB',
+    'Other Infrastructure': 'MBMB',
+    'Drainage System': 'MBMB',
+    'Waste Management': 'SWCorp',
+  };
+  const dominantTeamFor = (items) => {
+    const counts = {};
+    items.forEach((r) => {
+      const dept = HOTSPOT_TEAM_HINT[canonicalizeCategory(r.categories || r.ai_prediction)] || 'MBMB';
+      counts[dept] = (counts[dept] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'MBMB';
+  };
+
   const renderHotspotCard = (item) => (
     <div
       key={item.id}
@@ -3033,6 +3055,14 @@ export function AnalyticsPage() {
                           rows={4}
                           className="bg-[#f5f1e6] border border-[#1f1e1a]/12 rounded-xl px-4 py-2 text-xs font-semibold text-[#201f1b] outline-none focus:border-[#4a5d3f]/50 transition-colors w-full resize-none leading-relaxed"
                         />
+                        <NotifyTeamAction
+                          title={`Systemic pattern: ${activeCluster.category}`}
+                          body={`${activeCluster.address} — ${activeCluster.recommendation}`}
+                          address={activeCluster.address}
+                          latitude={activeCluster.latitude}
+                          longitude={activeCluster.longitude}
+                          defaultTeamName={dominantTeamFor(activeCluster.items)}
+                        />
                       </div>
 
                       {/* Exclude / Include Reports List */}
@@ -3103,8 +3133,16 @@ export function AnalyticsPage() {
                         Each green marker is a repair the council marked Resolved. Each red marker is a later report of
                         the same category within {REINCIDENCE.radiusM}m and {REINCIDENCE.windowDays} days — evidence the
                         original fix didn't hold. This is historical only: nothing here is unclaimed work, so there's
-                        nothing to dispatch — worth a look from whoever plans repairs for this area.
+                        nothing to dispatch, but the team responsible can still be flagged to check it.
                       </p>
+                      <NotifyTeamAction
+                        title={`Recurring failure: ${activeRecurring.category}`}
+                        body={`${activeRecurring.address} — reappeared ${activeRecurring.totalReappearances} time${activeRecurring.totalReappearances === 1 ? '' : 's'}; the original fix likely didn't hold.`}
+                        address={activeRecurring.address}
+                        latitude={activeRecurring.latitude}
+                        longitude={activeRecurring.longitude}
+                        defaultTeamName={HOTSPOT_TEAM_HINT[activeRecurring.category] || 'MBMB'}
+                      />
                       <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 340 }}>
                         <MapContainer key={activeRecurring.id} center={[activeRecurring.latitude, activeRecurring.longitude]} zoom={15} style={{ height: '100%', width: '100%' }}>
                           <TileLayer

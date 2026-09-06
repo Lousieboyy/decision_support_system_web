@@ -1,8 +1,8 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat, AlertTriangle, Send } from "lucide-react";
+import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat, AlertTriangle, Send, Flag } from "lucide-react";
 import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications, pushNotification } from "../context/AuthContext";
 import { fetchDatasetStats } from "../api/datasetApi";
-import { fetchTransfers, fetchReports } from "../api/reportsApi";
+import { fetchTransfers, fetchReports, fetchTeamNotifications, markTeamNotificationRead } from "../api/reportsApi";
 import { AUTHORITIES } from '../utils/authorities';
 import { getReportPriority } from '../utils/reportPriority';
 import { useState, useEffect, useRef } from "react";
@@ -13,18 +13,22 @@ const NOTIF_STYLE = {
   account: { bg: 'rgba(217,119,87,0.14)', color: '#c1613f', icon: <CheckCircle2 size={14} /> },
   dispatch: { bg: 'rgba(59,130,246,0.12)', color: '#1d4ed8', icon: <Send size={14} /> },
   urgent:  { bg: 'rgba(185,28,28,0.12)',  color: '#b91c1c', icon: <AlertTriangle size={14} /> },
+  flag:    { bg: 'rgba(180,83,9,0.12)',   color: '#b45309', icon: <Flag size={14} /> },
 };
 
 export function Sidebar({ isOpen, setIsOpen }) {
   const { user, role, logout, getPendingRequests } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState([]);
+  const [teamNotifs, setTeamNotifs] = useState([]);
   const bellRef = useRef(null);
 
   const pendingCount = role === 'admin' ? getPendingRequests().length : 0;
   const [datasetPending, setDatasetPending] = useState(0);
   const [transferPending, setTransferPending] = useState(0);
   const [poolCount, setPoolCount] = useState(0);
+
+  const isTeamMember = role === 'worker' || role?.startsWith('worker_') || role === 'authority' || role?.startsWith('authority_');
 
   // Refresh notifs every 15s
   useEffect(() => {
@@ -33,6 +37,37 @@ export function Sidebar({ isOpen, setIsOpen }) {
     const id = setInterval(refresh, 15000);
     return () => clearInterval(id);
   }, []);
+
+  // A Predictive Hotspots "Notify Team" flag lives server-side (it has to
+  // reach a team member who never touched the admin's browser), unlike every
+  // other notification here which is purely local. Fetched unread-only, but
+  // merged into the existing list rather than replacing it — opening the
+  // bell marks a flag read on the backend right away, so a poll landing
+  // moments later would otherwise stop returning it and erase it from view
+  // before it had actually been read. It only leaves local state via Clear
+  // all, or the interval's own 50-item cap.
+  useEffect(() => {
+    if (!isTeamMember) {
+      setTeamNotifs([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const load = () => {
+      fetchTeamNotifications(true)
+        .then((rows) => {
+          if (cancelled) return;
+          setTeamNotifs((prev) => {
+            const known = new Set(prev.map((n) => n.id));
+            const fresh = rows.filter((r) => !known.has(r.id));
+            return fresh.length ? [...fresh, ...prev].slice(0, 50) : prev;
+          });
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [isTeamMember]);
 
   // Badge the AI Dataset link with how many samples are waiting on a decision.
   // Silently ignore failures: an unreachable backend should not break the nav.
@@ -130,19 +165,50 @@ export function Sidebar({ isOpen, setIsOpen }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [role]);
 
-  const unreadCount = notifs.filter(n => !n.read).length;
+  // A team flag is marked read on open (so the backend's unread_only poll
+  // naturally drops it next cycle) but stays in view, styled as read, until
+  // then — clearing it from local state immediately would yank it off the
+  // screen before the person opening the bell had a chance to read it.
+  const [readTeamIds, setReadTeamIds] = useState(new Set());
+
+  const combinedNotifs = [
+    ...notifs,
+    ...teamNotifs.map((n) => ({
+      id: `team-${n.id}`,
+      type: 'flag',
+      title: n.title,
+      body: [n.address, n.body].filter(Boolean).join(' — '),
+      timestamp: n.created_at,
+      read: readTeamIds.has(n.id),
+    })),
+  ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const unreadCount = notifs.filter(n => !n.read).length + teamNotifs.filter(n => !readTeamIds.has(n.id)).length;
+
+  const markTeamNotifsRead = () => {
+    const ids = teamNotifs.filter((n) => !readTeamIds.has(n.id)).map((n) => n.id);
+    if (ids.length === 0) return;
+    ids.forEach((id) => { markTeamNotificationRead(id).catch(() => {}); });
+    setReadTeamIds((prev) => new Set([...prev, ...ids]));
+  };
 
   const handleBellClick = () => {
     setNotifOpen(v => !v);
     if (!notifOpen) {
       markAllNotificationsRead();
+      markTeamNotifsRead();
       setTimeout(() => setNotifs(getNotifications()), 50);
     }
   };
 
   const handleClearAll = () => {
+    // Only reachable from inside the already-open dropdown, so whatever's
+    // showing has already been seen — safe to drop immediately, unlike the
+    // bell-open mark-as-read above which must leave it visible to read.
     clearNotifications();
     setNotifs([]);
+    markTeamNotifsRead();
+    setTeamNotifs([]);
   };
 
   // Admins and authorities land on analytics (see App.jsx's HomeRoute), so
@@ -272,17 +338,17 @@ export function Sidebar({ isOpen, setIsOpen }) {
           <div className="fixed inset-0 z-[190]" onClick={() => setNotifOpen(false)} />
           <div className="notif-dropdown">
             <div className="notif-header">
-              <span className="notif-title">Notifications {notifs.length > 0 && <span style={{ color: '#8a8477', fontWeight: 500 }}>({notifs.length})</span>}</span>
+              <span className="notif-title">Notifications {combinedNotifs.length > 0 && <span style={{ color: '#8a8477', fontWeight: 500 }}>({combinedNotifs.length})</span>}</span>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                {notifs.length > 0 && <button className="notif-clear" onClick={handleClearAll}>Clear all</button>}
+                {combinedNotifs.length > 0 && <button className="notif-clear" onClick={handleClearAll}>Clear all</button>}
                 <button onClick={() => setNotifOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8477', display: 'flex' }}><X size={16} /></button>
               </div>
             </div>
-            {notifs.length === 0 ? (
+            {combinedNotifs.length === 0 ? (
               <div className="notif-empty">No notifications yet.<br /><span style={{ fontSize: '0.75rem' }}>Status changes and approvals appear here.</span></div>
             ) : (
               <div style={{ maxHeight: 340, overflowY: 'auto' }}>
-                {notifs.map(n => {
+                {combinedNotifs.map(n => {
                   const style = NOTIF_STYLE[n.type] || NOTIF_STYLE.account;
                   return (
                   <div key={n.id} className={`notif-item${n.read ? '' : ' unread'}`}>

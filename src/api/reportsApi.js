@@ -280,6 +280,34 @@ export const fetchTransfers = async (status = 'pending') => {
   return response.json();
 };
 
+// Advisory-only heads-up to a team, not tied to any report's status — for
+// patterns (Predictive Hotspots) built entirely from reports that are
+// already Resolved, so there's nothing open left to dispatch.
+export const sendTeamNotification = async ({ agencyId, title, body = '', address = null, latitude = null, longitude = null }) => {
+  const response = await fetch(`${API_URL}/notifications/team`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ agency_id: agencyId, title, body, address, latitude, longitude }),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to send notification');
+  return response.json();
+};
+
+export const fetchTeamNotifications = async (unreadOnly = false) => {
+  const response = await fetch(`${API_URL}/notifications/team?unread_only=${unreadOnly}`, { headers: getAuthHeaders() });
+  if (!response.ok) throw await parseError(response, 'Failed to load team notifications');
+  return response.json();
+};
+
+export const markTeamNotificationRead = async (notificationId) => {
+  const response = await fetch(`${API_URL}/notifications/team/${notificationId}/read`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw await parseError(response, 'Failed to mark notification read');
+  return response.json();
+};
+
 /**
  * Workflow audit trail, if this backend serves it.
  *
