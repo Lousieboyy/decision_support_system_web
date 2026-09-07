@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSS Portal Guide</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📘</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+  :root {
+    --cream: #f5f1e6;
+    --cream-hi: #f7f4ec;
+    --card: #ffffff;
+    --ink: #201f1b;
+    --muted: #6b665a;
+    --muted-2: #8a8477;
+    --line: rgba(32,31,27,0.10);
+    --line-soft: rgba(32,31,27,0.06);
+    --green: #4a5d3f;
+    --green-dark: #3d4d34;
+    --green-wash: rgba(74,93,63,0.08);
+    --terracotta: #c1613f;
+    --amber: #b45309;
+    --red: #b91c1c;
+    --good: #15803d;
+    --blue: #1d4ed8;
+    --status-pending: #f59e0b;
+    --status-review: #3b82f6;
+    --status-process: #6366f1;
+    --status-maint: #a855f7;
+    --status-resolved: #10b981;
+    --status-rejected: #ef4444;
+    --grade-a: #15803d;
+    --grade-b: #0f766e;
+    --grade-c: #c1613f;
+    --grade-d: #c2410c;
+    --grade-f: #b91c1c;
+    --shadow: 0 8px 32px rgba(32,31,27,0.06);
+    --shadow-lg: 0 20px 60px rgba(32,31,27,0.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --cream: #1c1b17;
+      --cream-hi: #232019;
+      --card: #262319;
+      --ink: #f2ede1;
+      --muted: #b8b0a0;
+      --muted-2: #948c7c;
+      --line: rgba(242,237,225,0.12);
+      --line-soft: rgba(242,237,225,0.07);
+      --green: #8ba876;
+      --green-dark: #a6c48f;
+      --green-wash: rgba(139,168,118,0.14);
+      --shadow: 0 8px 32px rgba(0,0,0,0.35);
+      --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --cream: #1c1b17;
+    --cream-hi: #232019;
+    --card: #262319;
+    --ink: #f2ede1;
+    --muted: #b8b0a0;
+    --muted-2: #948c7c;
+    --line: rgba(242,237,225,0.12);
+    --line-soft: rgba(242,237,225,0.07);
+    --green: #8ba876;
+    --green-dark: #a6c48f;
+    --green-wash: rgba(139,168,118,0.14);
+    --shadow: 0 8px 32px rgba(0,0,0,0.35);
+    --shadow-lg: 0 20px 60px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--cream); }
+  body {
+    margin: 0;
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { font-family: 'Source Serif 4', Georgia, serif; text-wrap: balance; color: var(--ink); margin: 0; }
+  code, .mono { font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, monospace; }
+  a { color: var(--green-dark); }
+  p { margin: 0 0 0.9em; max-width: 62ch; }
+  img { max-width: 100%; }
+  ::selection { background: var(--green); color: #fff; }
+
+  .shell { display: flex; min-height: 100vh; }
+
+  /* ---------- Sidebar / TOC ---------- */
+  .toc {
+    width: 264px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 20px 40px;
+    border-right: 1px solid var(--line);
+    background: var(--cream-hi);
+  }
+  .toc-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .toc-brand .mark {
+    width: 32px; height: 32px;
+    border-radius: 9px;
+    background: var(--green);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Source Serif 4', serif;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .toc-brand .name { font-weight: 800; font-size: 14px; letter-spacing: 0.01em; }
+  .toc-brand .sub { font-size: 10px; color: var(--muted-2); text-transform: uppercase; letter-spacing: 0.06em; }
+  .toc-updated { font-size: 11px; color: var(--muted-2); margin: 4px 0 22px; padding-left: 42px; }
+
+  .toc nav { display: flex; flex-direction: column; gap: 1px; }
+  .toc-group { margin-top: 16px; }
+  .toc-group:first-child { margin-top: 0; }
+  .toc-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted-2); padding: 4px 10px; margin-bottom: 2px;
+  }
+  .toc a.link {
+    display: block;
+    padding: 6px 10px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    text-decoration: none;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .toc a.link:hover { background: var(--green-wash); color: var(--ink); }
+  .toc a.link.active { background: var(--green); color: #fff; font-weight: 600; }
+
+  .toc-toggle { display: none; }
+
+  /* ---------- Main content ---------- */
+  main { flex: 1; min-width: 0; }
+  .page {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 56px 40px 100px;
+  }
+
+  .cover {
+    padding-bottom: 40px;
+    margin-bottom: 44px;
+    border-bottom: 1px solid var(--line);
+  }
+  .cover .eyebrow {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--green-dark); background: var(--green-wash);
+    padding: 5px 11px; border-radius: 100px; margin-bottom: 18px;
+  }
+  .cover h1 { font-size: clamp(32px, 5vw, 44px); font-weight: 700; line-height: 1.08; margin-bottom: 14px; }
+  .cover .lede { font-size: 17px; color: var(--muted); max-width: 56ch; }
+  .cover .roles-strip { display: flex; gap: 10px; margin-top: 26px; flex-wrap: wrap; }
+  .role-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px 8px 10px; border-radius: 100px;
+    background: var(--card); border: 1px solid var(--line);
+    font-size: 12.5px; font-weight: 600; box-shadow: var(--shadow);
+  }
+  .role-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  section.chapter { margin-bottom: 52px; scroll-margin-top: 24px; }
+  .chapter-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .chapter-head .num {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 600;
+    color: var(--muted-2); letter-spacing: 0.04em;
+  }
+  .chapter-head h2 { font-size: 25px; font-weight: 600; }
+  .chapter-dek { color: var(--muted); font-size: 14px; margin-bottom: 22px; max-width: 60ch; }
+
+  h3.sub { font-size: 16px; font-weight: 700; margin: 26px 0 8px; font-family: 'Inter', sans-serif; color: var(--ink); }
+  h3.sub .icon { margin-right: 7px; }
+
+  /* ---------- Reusable content blocks ---------- */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+    margin: 16px 0;
+  }
+  .card-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+  .card p:last-child { margin-bottom: 0; }
+
+  .note {
+    display: flex; gap: 12px;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin: 18px 0;
+    font-size: 13.5px;
+    border: 1px solid;
+  }
+  .note svg { flex-shrink: 0; margin-top: 1px; }
+  .note p { margin: 0; max-width: none; }
+  .note.tip { background: var(--green-wash); border-color: rgba(74,93,63,0.22); color: var(--green-dark); }
+  .note.warn { background: rgba(180,83,9,0.08); border-color: rgba(180,83,9,0.25); color: var(--amber); }
+  .note.info { background: rgba(29,78,216,0.06); border-color: rgba(29,78,216,0.20); color: var(--blue); }
+
+  /* role nav mock */
+  .nav-mock {
+    display: inline-flex; flex-direction: column; gap: 3px;
+    background: #2c2a24; border-radius: 12px; padding: 8px;
+    margin: 14px 0; min-width: 190px;
+  }
+  .nav-mock .item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.55);
+  }
+  .nav-mock .item.on { background: rgba(255,255,255,0.12); color: #fff; }
+  .nav-mock .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .nav-mock .badge {
+    margin-left: auto; background: var(--terracotta); color: #fff;
+    font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 100px;
+  }
+
+  /* status chips — colors match the live app exactly */
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 100px;
+    font-size: 11.5px; font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+
+  /* lifecycle timeline */
+  .lifecycle {
+    display: flex; align-items: stretch; gap: 0;
+    overflow-x: auto;
+    margin: 20px 0 8px;
+    padding-bottom: 6px;
+  }
+  .lc-step { flex: 1 0 128px; position: relative; padding: 0 6px 0 0; }
+  .lc-step:not(:last-child)::after {
+    content: ""; position: absolute; top: 15px; right: -2px; width: 100%; height: 2px;
+    background: var(--line);
+  }
+  .lc-step .lc-dot {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 12px; color: #fff;
+    position: relative; z-index: 1; margin-bottom: 10px;
+  }
+  .lc-step .lc-label { font-weight: 700; font-size: 12.5px; margin-bottom: 3px; }
+  .lc-step .lc-who { font-size: 11px; color: var(--muted-2); }
+  .lc-branch {
+    margin-top: 10px; padding: 12px 14px; border-radius: 12px;
+    background: rgba(185,28,28,0.05); border: 1px dashed rgba(185,28,28,0.28);
+    font-size: 12.5px; color: var(--red); max-width: 60ch;
+  }
+
+  /* grade scale strip */
+  .grade-strip { display: flex; border-radius: 10px; overflow: hidden; height: 34px; margin: 14px 0 6px; }
+  .grade-seg { flex: 1; display: flex; align-items: center; justify-content: center; color: #fff; font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 12px; }
+  .grade-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--muted); }
+  .grade-legend span b { color: var(--ink); }
+
+  table.simple { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  table.simple th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted-2); padding: 0 12px 8px 0; border-bottom: 1px solid var(--line); }
+  table.simple td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  table.simple tr:last-child td { border-bottom: none; }
+
+  ul.plain, ol.plain { margin: 10px 0 16px; padding-left: 20px; }
+  ul.plain li, ol.plain li { margin-bottom: 7px; max-width: 60ch; }
+  ol.steps { list-style: none; margin: 14px 0; padding: 0; counter-reset: step; }
+  ol.steps li {
+    counter-increment: step;
+    display: flex; gap: 14px; margin-bottom: 14px; max-width: 62ch;
+  }
+  ol.steps li::before {
+    content: counter(step);
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--green); color: #fff;
+    font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .faq-item { border-bottom: 1px solid var(--line); padding: 16px 0; }
+  .faq-item:first-child { padding-top: 0; }
+  .faq-item .q { font-weight: 700; font-size: 14px; margin-bottom: 6px; display: flex; gap: 8px; }
+  .faq-item .q .qmark { color: var(--terracotta); font-family: 'Source Serif 4', serif; }
+  .faq-item .a { color: var(--muted); font-size: 13.5px; max-width: 60ch; }
+
+  footer.end {
+    margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted-2);
+  }
+
+  @media (max-width: 880px) {
+    .toc {
+      position: fixed; z-index: 40; left: 0; top: 0; bottom: 0;
+      transform: translateX(-100%); transition: transform 0.2s ease;
+      box-shadow: var(--shadow-lg);
+    }
+    .toc.open { transform: translateX(0); }
+    .toc-toggle {
+      display: flex; align-items: center; gap: 8px;
+      position: fixed; top: 16px; left: 16px; z-index: 41;
+      background: var(--green); color: #fff; border: none;
+      padding: 9px 14px; border-radius: 100px; font-weight: 700; font-size: 12.5px;
+      box-shadow: var(--shadow-lg); cursor: pointer;
+      font-family: 'Inter', sans-serif;
+    }
+    .page { padding: 90px 22px 80px; }
+    .lifecycle { flex-wrap: nowrap; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <button class="toc-toggle" onclick="document.querySelector('.toc').classList.toggle('open')" aria-label="Toggle contents">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    Contents
+  </button>
+
+  <aside class="toc">
+    <div class="toc-brand">
+      <div class="mark">D</div>
+      <div>
+        <div class="name">DSS Portal</div>
+        <div class="sub">User Guide</div>
+      </div>
+    </div>
+    <div class="toc-updated">Melaka Infrastructure Reports</div>
+    <nav id="tocnav">
+      <div class="toc-group">
+        <div class="toc-label">Start here</div>
+        <a class="link" href="#welcome">Welcome</a>
+        <a class="link" href="#signing-in">Signing in</a>
+        <a class="link" href="#lifecycle">A report's journey</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-label">Admin</div>
+        <a class="link" href="#admin-reports">Verifying new reports</a>
+        <a class="link" href="#admin-insights">Insights &amp; grades</a>
+        <a class="link" href="#admin-users">Users &amp; AI Dataset</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-label">Authority</div>
+        <a class="link" href="#authority-dispatch">Dispatching to a team</a>
+        <a class="link" href="#authority-teams">Managing teams &amp; crews</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-label">Field worker</div>
+        <a class="link" href="#worker-jobs">Claiming &amp; finishing jobs</a>
+      </div>
+      <div class="toc-group">
+        <div class="toc-label">Everyone</div>
+        <a class="link" href="#map">Map View</a>
+        <a class="link" href="#notifications">Notifications</a>
+        <a class="link" href="#faq">Questions &amp; answers</a>
+      </div>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="page">
+
+      <div class="cover">
+        <span class="eyebrow">Quick reference</span>
+        <h1>Finding your way around the DSS Portal</h1>
+        <p class="lede">
+          One system, three jobs. This guide covers what each role actually does day to day —
+          not every button, just the ones you'll use.
+        </p>
+        <div class="roles-strip">
+          <span class="role-pill"><span class="role-dot" style="background:#3d4d34"></span>Admin — verifies &amp; oversees</span>
+          <span class="role-pill"><span class="role-dot" style="background:#4a5d3f"></span>Authority — dispatches work</span>
+          <span class="role-pill"><span class="role-dot" style="background:#c1613f"></span>Field Worker — fixes it</span>
+        </div>
+      </div>
+
+      <section class="chapter" id="welcome">
+        <div class="chapter-head"><span class="num">01</span><h2>Welcome</h2></div>
+        <p class="chapter-dek">What the Portal is for, in one paragraph.</p>
+        <p>
+          The DSS Portal is where a citizen's complaint — a pothole, a broken streetlight, an overflowing
+          drain — turns into a job someone actually does, and a record of whether the fix held. Residents
+          report issues from a separate mobile app; everything after that happens here.
+        </p>
+        <div class="card">
+          <div class="card-title">The short version of how it flows</div>
+          <p>A resident reports an issue → an <b>Admin</b> checks it's real and routes it to the right
+          department → an <b>Authority</b> officer at that department sends it to a team → a <b>Field
+          Worker</b> on that team does the repair and submits proof → it gets verified and marked
+          Resolved.</p>
+        </div>
+        <p>You'll only ever see the parts of this that are yours to act on — the Portal shows a different
+        home screen and menu depending on which of the three roles you're signed in as.</p>
+      </section>
+
+      <section class="chapter" id="signing-in">
+        <div class="chapter-head"><span class="num">02</span><h2>Signing in</h2></div>
+        <p class="chapter-dek">Getting an account, and what to do if you don't have one yet.</p>
+        <ol class="steps">
+          <li>Open the Portal and enter the username and password your admin gave you, then select
+          <b>Sign In to Portal</b>.</li>
+          <li>No account yet? Switch to the <b>Request Access</b> tab, fill in your name, choose
+          Authority or Worker, pick your department, and submit. An admin has to approve it before you
+          can sign in.</li>
+          <li>Once approved, sign in normally. If your request is still pending or was turned down,
+          the sign-in screen will tell you.</li>
+        </ol>
+        <div class="note info">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <p>Forgot your password, or need a new department added? That's an admin task — ask whoever
+          manages your Portal accounts, from the <b>Users</b> page.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="lifecycle">
+        <div class="chapter-head"><span class="num">03</span><h2>A report's journey</h2></div>
+        <p class="chapter-dek">Six statuses, in order, and who owns each one. Worth knowing before anything
+        else — everything in the Portal is organized around this.</p>
+
+        <div class="lifecycle">
+          <div class="lc-step">
+            <div class="lc-dot" style="background:var(--status-pending)">1</div>
+            <div class="lc-label">Pending</div>
+            <div class="lc-who">Admin checks it's real</div>
+          </div>
+          <div class="lc-step">
+            <div class="lc-dot" style="background:var(--status-review)">2</div>
+            <div class="lc-label">In Review</div>
+            <div class="lc-who">Approved, routed to a department</div>
+          </div>
+          <div class="lc-step">
+            <div class="lc-dot" style="background:var(--status-process)">3</div>
+            <div class="lc-label">In Process</div>
+            <div class="lc-who">Sent to a team, waiting to be claimed</div>
+          </div>
+          <div class="lc-step">
+            <div class="lc-dot" style="background:var(--status-maint)">4</div>
+            <div class="lc-label">In Maintenance</div>
+            <div class="lc-who">A worker is on site</div>
+          </div>
+          <div class="lc-step">
+            <div class="lc-dot" style="background:var(--status-resolved)">5</div>
+            <div class="lc-label">Resolved</div>
+            <div class="lc-who">Fixed and verified</div>
+          </div>
+        </div>
+        <div class="lc-branch">
+          <b>Rejected</b> can happen at Pending (not a real or duplicate report) or after a worker's
+          proof photo is turned down for being unclear — the job goes back to <b>In Maintenance</b>
+          rather than closing.
+        </div>
+
+        <div class="chip-row" style="margin-top:22px">
+          <span class="chip" style="background:rgba(245,158,11,0.10); border-color:rgba(245,158,11,0.35); color:#92400e"><span class="dot" style="background:var(--status-pending)"></span>Pending</span>
+          <span class="chip" style="background:rgba(59,130,246,0.10); border-color:rgba(59,130,246,0.35); color:#1d4ed8"><span class="dot" style="background:var(--status-review)"></span>In Review</span>
+          <span class="chip" style="background:rgba(99,102,241,0.10); border-color:rgba(99,102,241,0.35); color:#4338ca"><span class="dot" style="background:var(--status-process)"></span>In Process</span>
+          <span class="chip" style="background:rgba(168,85,247,0.10); border-color:rgba(168,85,247,0.35); color:#7e22ce"><span class="dot" style="background:var(--status-maint)"></span>In Maintenance</span>
+          <span class="chip" style="background:rgba(16,185,129,0.10); border-color:rgba(16,185,129,0.35); color:#047857"><span class="dot" style="background:var(--status-resolved)"></span>Resolved</span>
+          <span class="chip" style="background:rgba(239,68,68,0.08); border-color:rgba(239,68,68,0.30); color:#b91c1c; text-decoration:line-through"><span class="dot" style="background:var(--status-rejected)"></span>Rejected</span>
+        </div>
+        <p style="font-size:12.5px;color:var(--muted-2);margin-top:2px">These are the exact colors and labels you'll see on every status badge in the Portal.</p>
+      </section>
+
+      <!-- ============ ADMIN ============ -->
+      <section class="chapter" id="admin-reports">
+        <div class="chapter-head"><span class="num">04</span><h2>Admin — verifying new reports</h2></div>
+        <p class="chapter-dek">Your side menu, and what each item is for.</p>
+        <div class="nav-mock">
+          <div class="item on"><span class="dot"></span>Insights</div>
+          <div class="item"><span class="dot"></span>Map View</div>
+          <div class="item"><span class="dot"></span>Reports</div>
+          <div class="item"><span class="dot"></span>Teams</div>
+          <div class="item"><span class="dot"></span>Users</div>
+          <div class="item"><span class="dot"></span>AI Dataset</div>
+        </div>
+        <p>Every report starts in your queue as <b>Pending</b>. Open <b>Reports</b>, click a row, and
+        you'll see the photo, the AI's guess at the category, and its confidence.</p>
+        <ol class="steps">
+          <li>Check the photo actually shows a real infrastructure problem, and isn't a duplicate of
+          something already reported nearby — the Portal flags likely duplicates for you automatically.</li>
+          <li>Pick the correct authority from the dropdown (it's already pre-filled with a best guess),
+          add a note if useful, and select <b>Approve &amp; Send</b>. The report moves to <b>In
+          Review</b> and that authority now owns it.</li>
+          <li>If it's fake, spam, or not a real infrastructure issue, select <b>Reject</b> instead. It
+          closes immediately as <b>Rejected</b>.</li>
+        </ol>
+        <div class="note tip">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>
+          <p>Once a worker submits repair proof, the report comes back to you one more time (as
+          <b>In Maintenance</b>, worker-completed) for a final check — confirm the fix, or reject the
+          photo and it returns to the worker.</p>
+        </div>
+        <h3 class="sub">Manual override</h3>
+        <p>At the bottom of any report's detail view, you can force its status directly — for the rare
+        case a report is stuck or was set wrong by mistake. Use it sparingly; it skips the normal
+        checks the workflow buttons enforce.</p>
+      </section>
+
+      <section class="chapter" id="admin-insights">
+        <div class="chapter-head"><span class="num">05</span><h2>Insights — reading the grades</h2></div>
+        <p class="chapter-dek">The Insights page (also what Authority accounts see) turns raw reports
+        into three scores, each answering a different question.</p>
+        <table class="simple">
+          <tr><th>Score</th><th>Question it answers</th><th>Looks at</th></tr>
+          <tr><td><b>Service Performance</b></td><td>Is the council responding fast enough?</td><td>How long each step takes, against its own target</td></tr>
+          <tr><td><b>Urban Condition</b></td><td>How much is broken right now?</td><td>Open issues per category, weighted by how long they've sat</td></tr>
+          <tr><td><b>Infrastructure Fragility</b></td><td>Which areas keep breaking?</td><td>Report rate, repeat-failure rate, and time between problems, per zone</td></tr>
+        </table>
+        <p>All three use one letter-grade scale, so a grade always means the same thing no matter where
+        you see it:</p>
+        <div class="grade-strip">
+          <div class="grade-seg" style="background:var(--grade-a)">A</div>
+          <div class="grade-seg" style="background:var(--grade-b)">B</div>
+          <div class="grade-seg" style="background:var(--grade-c)">C</div>
+          <div class="grade-seg" style="background:var(--grade-d)">D</div>
+          <div class="grade-seg" style="background:var(--grade-f)">F</div>
+        </div>
+        <div class="grade-legend">
+          <span><b>A</b> Optimal 90+</span><span><b>B</b> Good 80–89</span><span><b>C</b> Satisfactory 70–79</span>
+          <span><b>D</b> At Risk 60–69</span><span><b>F</b> Critical 0–59</span>
+        </div>
+        <h3 class="sub">Predictive Hotspots</h3>
+        <p>A read-only tab built entirely from <i>already-resolved</i> reports — it's not a work queue.
+        <b>Recurring Failures</b> flags a spot where the same kind of problem came back after being
+        fixed; <b>Systemic</b> flags two different problem types showing up together (like drainage and
+        road damage), which usually means one is causing the other. Found a pattern worth a team
+        checking on their next round? Use <b>Notify Team</b> inside either card — it doesn't reopen any
+        report, it just puts a flag in that team's notification bell.</p>
+        <div class="note info">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          <p>Any number on this page you can click — a bar, a slice, a zone — opens <b>Find Reports</b>
+          with that exact filter already applied, so you can see the reports behind the figure.</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="admin-users">
+        <div class="chapter-head"><span class="num">06</span><h2>Users &amp; AI Dataset</h2></div>
+        <p class="chapter-dek">Two admin-only pages most staff never need to open.</p>
+        <h3 class="sub">Users</h3>
+        <ul class="plain">
+          <li><b>Pending Requests</b> — approve or reject self-registered Authority/Worker accounts.</li>
+          <li><b>All Accounts</b> — every account, active or not; delete an account you no longer need.</li>
+          <li><b>Create Account</b> — add someone directly, already active, no approval step.</li>
+          <li><b>Audit Log</b> — a record of logins, approvals and deletions from this browser.</li>
+        </ul>
+        <h3 class="sub">AI Dataset</h3>
+        <p>The photo-recognition model behind category suggestions learns from real submitted photos.
+        This page is where a batch of newly-collected images gets reviewed before joining that training
+        set — approve a correctly-labeled photo, reject a bad one, or fix its label first. Most staff
+        will never need this tab; it exists for whoever maintains the model.</p>
+      </section>
+
+      <!-- ============ AUTHORITY ============ -->
+      <section class="chapter" id="authority-dispatch">
+        <div class="chapter-head"><span class="num">07</span><h2>Authority — dispatching a report</h2></div>
+        <p class="chapter-dek">Once Admin routes a report to your department, it's in your queue as
+        <b>In Review</b>.</p>
+        <ol class="steps">
+          <li>Open the report and pick a <b>Team</b> — you'll see each team's current load (open jobs,
+          unclaimed count, worker count) right in the dropdown, so you're not guessing who has room.</li>
+          <li>Optionally narrow it to one <b>Crew</b> within that team, if the team is split into
+          sub-groups. Leave it blank to drop the job in the whole team's shared pool.</li>
+          <li>Add a note if the crew needs context, then <b>Send to Crew</b>. The report becomes
+          <b>In Process</b> and sits unclaimed until a worker accepts it.</li>
+        </ol>
+        <div class="note warn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <p>Once a job is claimed and in progress, you can still <b>Transfer</b> it to a different
+          team entirely, or <b>Move Crew</b> within your own team — both from the report's detail view,
+          under "Team Status".</p>
+        </div>
+      </section>
+
+      <section class="chapter" id="authority-teams">
+        <div class="chapter-head"><span class="num">08</span><h2>Managing teams &amp; crews</h2></div>
+        <p class="chapter-dek">The Teams page — your team's health at a glance, worst-first.</p>
+        <p>Each team card shows open work, load per worker, how long the oldest unclaimed job has been
+        waiting, and the last 7 days' flow (jobs finished vs. arrived). A colored label — Healthy,
+        Strained, or Bottleneck — is decided by the backend, not guessed, so it means the same thing on
+        every card.</p>
+        <ul class="plain">
+          <li><b>Release requests</b> at the top of the page are teams asking to hand a job to someone
+          else — approve (optionally picking who receives it) or deny.</li>
+          <li>Expand a team's card to see its roster, grouped by crew. Create a new crew, add or
+          remove members, mark someone on leave, or disable a whole crew (e.g. everyone's off at once)
+          without deleting it.</li>
+        </ul>
+      </section>
+
+      <!-- ============ WORKER ============ -->
+      <section class="chapter" id="worker-jobs">
+        <div class="chapter-head"><span class="num">09</span><h2>Field Worker — your jobs</h2></div>
+        <p class="chapter-dek">Your home screen is called <b>My Workflow</b> — everything on it is
+        already scoped to you.</p>
+        <div class="nav-mock">
+          <div class="item on"><span class="dot"></span>Overview<span class="badge">1</span></div>
+          <div class="item"><span class="dot"></span>Map View</div>
+          <div class="item"><span class="dot"></span>Reports</div>
+        </div>
+        <p>Four numbers greet you every time: active jobs, jobs waiting in your team's pool for anyone
+        to take, how many you've resolved, and your all-time total.</p>
+        <ol class="steps">
+          <li>A new job lands in your team's shared pool as <b>In Process</b>, unclaimed. Open it from
+          <b>Reports</b> and select <b>Accept Task</b> — first to accept gets it.</li>
+          <li>Head to the location and select <b>Start Work</b>. The status becomes <b>In
+          Maintenance</b>.</li>
+          <li>Finished? Open the report, upload a photo of the completed fix, describe what you did,
+          and select <b>Submit Proof</b>. It now waits on Admin/Authority to verify.</li>
+        </ol>
+        <div class="note tip">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <p>Crew work is shared. If a teammate already claimed a job, you can still open it and select
+          <b>Start Work</b> to help — it's not locked to whoever accepted first.</p>
+        </div>
+        <div class="note warn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+          <p>Proof photo rejected? It's not a dead end — the job returns to <b>In Maintenance</b> so you
+          can retake it and resubmit, using the rejection note as the reason.</p>
+        </div>
+      </section>
+
+      <!-- ============ EVERYONE ============ -->
+      <section class="chapter" id="map">
+        <div class="chapter-head"><span class="num">10</span><h2>Map View</h2></div>
+        <p class="chapter-dek">Every role sees this, scoped to what they're allowed to act on.</p>
+        <p>Pins are colored by priority, and clustered when several sit close together — a cluster shows
+        its worst priority and how many reports it holds.</p>
+        <div class="chip-row">
+          <span class="chip" style="background:rgba(185,28,28,0.08); border-color:rgba(185,28,28,0.30); color:#b91c1c"><span class="dot" style="background:#b91c1c"></span>High priority</span>
+          <span class="chip" style="background:rgba(180,83,9,0.08); border-color:rgba(180,83,9,0.30); color:#b45309"><span class="dot" style="background:#b45309"></span>Medium priority</span>
+          <span class="chip" style="background:rgba(74,93,63,0.08); border-color:rgba(74,93,63,0.30); color:#3d4d34"><span class="dot" style="background:#4a5d3f"></span>Resolved</span>
+        </div>
+        <p>Click a pin to page through every report at that spot — see the photo, and for a resolved one,
+        toggle Before/After to check the fix. From there, select <b>Open in Google Maps</b> for
+        turn-by-turn directions from wherever you are.</p>
+      </section>
+
+      <section class="chapter" id="notifications">
+        <div class="chapter-head"><span class="num">11</span><h2>Notifications</h2></div>
+        <p class="chapter-dek">The bell icon, top-left, next to the Portal logo.</p>
+        <table class="simple">
+          <tr><th>Type</th><th>When it fires</th></tr>
+          <tr><td>Status change</td><td>A report you're tied to moves to a new status</td></tr>
+          <tr><td>New job assigned</td><td>A worker's team pool gets a new unclaimed job</td></tr>
+          <tr><td>Urgent job assigned</td><td>Same, but the job is high-priority</td></tr>
+          <tr><td>Account approved</td><td>An admin approves your (or someone's) access request</td></tr>
+          <tr><td>Team flag</td><td>An admin used <b>Notify Team</b> on a hotspot pattern that concerns your team</td></tr>
+        </table>
+        <p>Opening the bell marks everything read. <b>Clear all</b> empties the list entirely.</p>
+      </section>
+
+      <section class="chapter" id="faq">
+        <div class="chapter-head"><span class="num">12</span><h2>Questions &amp; answers</h2></div>
+        <div class="faq-item">
+          <div class="q"><span class="qmark">Q.</span> I can only see my own department's reports — is that a bug?</div>
+          <div class="a">No — Authority and Worker accounts are scoped to their own department by design.
+          Admin is the only role that sees everything, and can toggle "All Departments" on Insights.</div>
+        </div>
+        <div class="faq-item">
+          <div class="q"><span class="qmark">Q.</span> What does "My Dept Only" on the Reports page do?</div>
+          <div class="a">It's on by default for Authority/Worker accounts, hiding every other
+          department's reports from the table. Switch it off to browse city-wide (read-only — you still
+          can't act on a report outside your own department).</div>
+        </div>
+        <div class="faq-item">
+          <div class="q"><span class="qmark">Q.</span> A hotspot or grade shows "Not enough data" — why?</div>
+          <div class="a">Every score in the Portal needs a minimum number of reports before it's shown as
+          a real figure, rather than one or two reports masquerading as a trend. Below that threshold,
+          it's reported honestly as insufficient data instead of a misleading number.</div>
+        </div>
+        <div class="faq-item">
+          <div class="q"><span class="qmark">Q.</span> Where do I go to see every report matching a specific filter?</div>
+          <div class="a"><b>Find Reports</b> — reachable by clicking almost any chart, bar, or number on
+          Insights. Every filter in it (date, category, department, zone, status) stays live and
+          combinable, and the results export straight to PDF.</div>
+        </div>
+      </section>
+
+      <footer class="end">
+        DSS Portal User Guide — covers the Overview, Reports, Map View, Insights, Teams, Users and AI
+        Dataset areas as they work today. Screens may look slightly different if your Portal has been
+        updated since.
+      </footer>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  // Close the mobile drawer after choosing a section, and lightly track
+  // which section is in view for the active-link highlight.
+  const links = Array.from(document.querySelectorAll('.toc a.link'));
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+
+  links.forEach(a => a.addEventListener('click', () => {
+    document.querySelector('.toc').classList.remove('open');
+  }));
+
+  const setActive = (id) => {
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + id));
+  };
+
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+      if (visible[0]) setActive(visible[0].target.id);
+    }, { rootMargin: '-15% 0px -70% 0px', threshold: [0, 0.25, 0.5, 1] });
+    sections.forEach(s => io.observe(s));
+  }
+  setActive('welcome');
+</script>
+</body>
+</html>

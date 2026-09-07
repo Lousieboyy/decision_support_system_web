@@ -9,10 +9,9 @@ import { getDeptId } from '../utils/deptId';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
-// Published separately from this app (an Artifact, not a route), so it
-// stays up to date without a redeploy — link out to it rather than
-// bundling a copy that would drift from the real thing.
-const USER_GUIDE_URL = 'https://claude.ai/code/artifact/9c1c72b1-9095-40cc-a9af-c524e11e1730';
+// Self-hosted in public/, served as a static file alongside the app —
+// updating it means editing guide.html and redeploying, same as any other page.
+const USER_GUIDE_URL = '/guide.html';
 
 const NOTIF_STYLE = {
   status:  { bg: 'rgba(74,93,63,0.10)',   color: '#3d4d34', icon: <RefreshCw size={14} /> },
