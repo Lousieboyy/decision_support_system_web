@@ -522,7 +522,7 @@ export function MapPage() {
            <select
              value={selectedStatus}
              onChange={(e) => setSelectedStatus(e.target.value)}
-             className="px-4 py-2 rounded-full text-sm font-semibold outline-none cursor-pointer" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
+             className="px-4 py-2 pr-8 rounded-full text-sm font-semibold outline-none cursor-pointer custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
            >
              {STATUSES.map(s => (
                <option key={s} value={s}>{s}</option>

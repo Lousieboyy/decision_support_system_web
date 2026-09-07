@@ -367,7 +367,7 @@ export function UserManagementPage() {
                   <select
                     value={newDept}
                     onChange={e => setNewDept(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none appearance-none cursor-pointer" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
+                    className="w-full pl-4 pr-8 py-2.5 rounded-xl text-sm outline-none cursor-pointer custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                   >
                     {AUTHORITIES.filter(a => ['mbmb', 'jkr', 'swcorp'].includes(a.id)).map(a => (
                       <option key={a.id} value={a.id}>{a.abbr} — {a.name}</option>

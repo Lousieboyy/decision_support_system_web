@@ -100,8 +100,8 @@ export function NotifyTeamAction({ title, body = '', address, latitude, longitud
             <select
               value={agencyId}
               onChange={(e) => setAgencyId(e.target.value)}
-              className="w-full rounded-lg px-2 py-1.5 text-xs"
-              style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
+              className="w-full rounded-lg pl-2 pr-6 py-1.5 text-xs custom-select"
+              style={{ backgroundColor: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
             >
               <option value="">Select team…</option>
               {teams.map((t) => (

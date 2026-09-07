@@ -955,7 +955,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                 <div className="p-5 space-y-4">
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Select Authority</label>
-                    <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                    <select value={selectedDept} onChange={e => setSelectedDept(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                       {AUTHORITIES.filter(a => ['mbmb', 'jkr', 'swcorp'].includes(a.id)).map(a => <option key={a.id} value={a.id}>[{a.abbr}] {a.name}</option>)}
                     </select>
                   </div>
@@ -985,7 +985,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                 <div className="p-5 space-y-4">
                   <div>
                     <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Team</label>
-                    <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setSelectedCrew(''); }} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                    <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setSelectedCrew(''); }} className="w-full px-3 py-2 rounded-xl text-sm custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                       {teams.length === 0 && <option value="">Loading teams...</option>}
                       {teams.map(t => (
                         <option key={t.id} value={t.id}>
@@ -997,7 +997,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                   {crews.length > 0 && (
                     <div>
                       <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Crew</label>
-                      <select value={selectedCrew} onChange={e => setSelectedCrew(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                      <select value={selectedCrew} onChange={e => setSelectedCrew(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                         <option value="">Whole team — shared by every worker</option>
                         {crews.map(c => {
                           // Load figures let the dispatcher balance burden rather
@@ -1079,7 +1079,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                     <div className="space-y-3 pt-2">
                       <div>
                         <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Move to crew</label>
-                        <select value={reassignCrewTarget} onChange={e => setReassignCrewTarget(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                        <select value={reassignCrewTarget} onChange={e => setReassignCrewTarget(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                           <option value="">General pool — whole team</option>
                           {ownCrews.filter(c => c.id !== report.assigned_crew_id).map(c => (
                             <option key={c.id} value={c.id} disabled={c.status === 'disabled'}>
@@ -1105,7 +1105,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
                     <div className="space-y-3 pt-2">
                       <div>
                         <label className="block text-xs font-semibold mb-2" style={{ color: '#201f1b' }}>Hand over to</label>
-                        <select value={transferTeam} onChange={e => setTransferTeam(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                        <select value={transferTeam} onChange={e => setTransferTeam(e.target.value)} className="w-full px-3 py-2 rounded-xl text-sm custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                           <option value="">Select a team...</option>
                           {teams.filter(t => t.id !== report.assigned_agency_id).map(t => (
                             <option key={t.id} value={t.id}>
@@ -1238,7 +1238,7 @@ export function ReportDetailModal({ report, onClose, onUpdate, currentRole = 'ad
               <RotateCcw size={13} className="text-[#8a8477] shrink-0" />
               <p className="text-xs text-[#8a8477] font-medium mr-auto">Manual override</p>
               <div className="relative">
-                <select value={manualStatus} onChange={e => setManualStatus(e.target.value)} className="appearance-none text-xs rounded-lg px-3 py-2 pr-7 font-medium" style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
+                <select value={manualStatus} onChange={e => setManualStatus(e.target.value)} className="custom-select text-xs rounded-lg px-3 py-2 pr-7 font-medium" style={{ backgroundColor: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}>
                   <option value="Pending">Pending</option>
                   <option value="In Review">In Review</option>
                   <option value="In Process">In Process</option>

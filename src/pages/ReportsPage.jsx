@@ -855,7 +855,7 @@ export function ReportsPage() {
               <select
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                className="ml-2 rounded-lg px-2 py-1 text-xs font-medium focus:ring-2 focus:ring-[#4a5d3f]/20 cursor-pointer" style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
+                className="ml-2 rounded-lg pl-2 pr-6 py-1 text-xs font-medium focus:ring-2 focus:ring-[#4a5d3f]/20 cursor-pointer custom-select" style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
               >
                 {PAGE_SIZE_OPTIONS.map(s => (
                   <option key={s} value={s}>{s} / page</option>

@@ -423,8 +423,8 @@ python retrain_model.py --pull
                               <select
                                 value={relabel[sample.id] || ''}
                                 onChange={(e) => setRelabel(r => ({ ...r, [sample.id]: e.target.value }))}
-                                className="px-2 py-1.5 rounded-lg text-xs"
-                                style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
+                                className="pl-2 pr-6 py-1.5 rounded-lg text-xs custom-select"
+                                style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                               >
                                 <option value="">Keep proposed label</option>
                                 {TRAINABLE_CLASSES.map(c => (

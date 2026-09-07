@@ -196,8 +196,8 @@ function CrewManager({ teamId, roster, onChanged }) {
                 <select
                   value={addTarget[crew.id] || ''}
                   onChange={e => setAddTarget(prev => ({ ...prev, [crew.id]: e.target.value }))}
-                  className="flex-1 px-2 py-1.5 rounded-lg text-xs"
-                  style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
+                  className="flex-1 pl-2 pr-6 py-1.5 rounded-lg text-xs custom-select"
+                  style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                 >
                   <option value="">Add worker...</option>
                   {roster.filter(w => w.crew_id !== crew.id).map(w => (
@@ -431,8 +431,8 @@ export function TeamsPage() {
                       <select
                         value={decisionTeam[t.id] || ''}
                         onChange={e => setDecisionTeam(prev => ({ ...prev, [t.id]: e.target.value }))}
-                        className="px-3 py-2 rounded-xl text-sm"
-                        style={{ background: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
+                        className="pl-3 pr-7 py-2 rounded-xl text-sm custom-select"
+                        style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
                       >
                         <option value="">Send to...</option>
                         {teams.filter(x => x.id !== t.from_agency_id).map(x => (

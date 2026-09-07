@@ -248,8 +248,8 @@ export function ClusterDispatchAction({ item, onDispatched }) {
                   <select
                     value={teamByGroup[g.dept] || ''}
                     onChange={(e) => setTeamForGroup(g.dept, e.target.value)}
-                    className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-xs"
-                    style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
+                    className="flex-1 min-w-[120px] rounded-lg pl-2 pr-6 py-1.5 text-xs custom-select"
+                    style={{ backgroundColor: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
                   >
                     <option value="">Select team…</option>
                     {teams.map((t) => (
@@ -260,8 +260,8 @@ export function ClusterDispatchAction({ item, onDispatched }) {
                     value={crewByGroup[g.dept] || ''}
                     onChange={(e) => setCrewByGroup((prev) => ({ ...prev, [g.dept]: e.target.value }))}
                     disabled={!teamByGroup[g.dept] || (crewsByGroup[g.dept] || []).length === 0}
-                    className="flex-1 min-w-[120px] rounded-lg px-2 py-1.5 text-xs disabled:opacity-50"
-                    style={{ background: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
+                    className="flex-1 min-w-[120px] rounded-lg pl-2 pr-6 py-1.5 text-xs disabled:opacity-50 custom-select"
+                    style={{ backgroundColor: 'var(--cream-100)', border: '1px solid rgba(31,30,26,0.12)' }}
                   >
                     <option value="">Whole team pool</option>
                     {(crewsByGroup[g.dept] || []).map((c) => (
