@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import { MapPin, Image as ImageIcon, Filter, ChevronLeft, ChevronRight, Layers, CheckCircle2, Sparkles } from 'lucide-react';
 import { canonicalizeCategory } from '../utils/analyticsMetrics';
 import { MELAKA_BOUNDS } from '../utils/analyticsConstants';
-import { getReportPriority as getPriority } from '../utils/reportPriority';
+import { getReportPriority as getPriority, PRIORITY_TONE } from '../utils/reportPriority';
 
 function HeatmapLayer({ points }) {
   const map = useMap();
@@ -114,14 +114,11 @@ function getDeptId(role, username) {
 const CATEGORIES = ["All", "Road Damage", "Street Lighting", "Waste Management", "Drainage System", "Vandalism", "Other Infrastructure"];
 const STATUSES = ["All", "Pending", "In Review", "In Process", "In Maintenance", "Resolved", "Rejected"];
 
-const getPriorityColor = (priority) => {
-  switch (priority) {
-    case 'High':     return '#ef4444'; // Red
-    case 'Medium':   return '#f97316'; // Orange
-    case 'Resolved': return '#10b981'; // Green
-    default:         return '#f97316';
-  }
-};
+// Was its own red/orange/green scale before — disagreed with PRIORITY_TONE,
+// the shared source ReportsPage and the worker notification badge already
+// use, so the same report showed one shade of red here and a different one
+// in the Reports table.
+const getPriorityColor = (priority) => (PRIORITY_TONE[priority] || PRIORITY_TONE.Medium).color;
 
 // Custom Marker Pin Creator
 const createCustomMarkerIcon = (priority, color, count) => {
@@ -627,15 +624,15 @@ export function MapPage() {
             <h4 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: '#8a8477' }}>Map Legend</h4>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500 shadow-sm"></div>
+              <div className="w-3 h-3 rounded-full shadow-sm" style={{ background: PRIORITY_TONE.High.color }}></div>
               <span className="text-sm font-medium" style={{ color: '#201f1b' }}>High Priority</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-orange-500 shadow-sm"></div>
+              <div className="w-3 h-3 rounded-full shadow-sm" style={{ background: PRIORITY_TONE.Medium.color }}></div>
               <span className="text-sm font-medium" style={{ color: '#201f1b' }}>Medium Priority</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-green-500 shadow-sm"></div>
+              <div className="w-3 h-3 rounded-full shadow-sm" style={{ background: PRIORITY_TONE.Resolved.color }}></div>
               <span className="text-sm font-medium" style={{ color: '#201f1b' }}>Resolved</span>
             </div>
           </div>
