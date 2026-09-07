@@ -16,6 +16,30 @@ const NOTIF_STYLE = {
   flag:    { bg: 'rgba(180,83,9,0.12)',   color: '#b45309', icon: <Flag size={14} /> },
 };
 
+// The real backend returns a plain role ("worker", "authority") with the
+// department in a separate field /login doesn't send back, so there's no
+// clean way to know it here. Same username-guessing fallback Dashboard/
+// Reports/MapPage already use — without it, this card fell back to generic
+// "Field Operator"/"Local Authority" for every real (non-demo) account while
+// the rest of the page correctly showed their department.
+function getDeptId(role, username) {
+  if (!role) return null;
+  if (role.includes('_')) {
+    return role.split('_').slice(1).join('_');
+  }
+  if (role === 'authority' && username) {
+    return username.toLowerCase();
+  }
+  if (role === 'worker' && username) {
+    const name = username.toLowerCase();
+    if (name.includes('mbmb') || name === 'worker1' || name === 'worker') return 'mbmb';
+    if (name.includes('jkr') || name === 'worker2') return 'jkr';
+    if (name.includes('swcorp')) return 'swcorp';
+    if (name.includes('mphtj')) return 'mphtj';
+  }
+  return null;
+}
+
 export function Sidebar({ isOpen, setIsOpen }) {
   const { user, role, logout, getPendingRequests } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -235,10 +259,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
     
     // Handle both formats: "authority_mbmb" (demo) and "authority" (backend)
     if (role === 'authority' || role?.startsWith('authority_')) {
-      let deptId = null;
-      if (role?.startsWith('authority_')) {
-        deptId = role.split('_').slice(1).join('_');
-      }
+      const deptId = getDeptId(role, user?.username);
       const dept = deptId ? AUTHORITIES.find(a => a.id === deptId) : null;
       return { 
         title: user?.displayName || `${dept?.abbr || 'Local'} Authority`, 
@@ -250,10 +271,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
 
     // Handle both formats: "worker_mbmb" (demo) and "worker" (backend)
     if (role === 'worker' || role?.startsWith('worker_')) {
-      let deptId = null;
-      if (role?.startsWith('worker_')) {
-        deptId = role.split('_').slice(1).join('_');
-      }
+      const deptId = getDeptId(role, user?.username);
       const dept = deptId ? AUTHORITIES.find(a => a.id === deptId) : null;
       return { 
         title: user?.displayName || `Worker${dept ? ` (${dept.abbr})` : ''}`, 
