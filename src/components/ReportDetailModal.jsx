@@ -339,20 +339,6 @@ function suggestDepartment(report) {
   return 'mbmb';
 }
 
-function buildNotificationText(report, authorityName, note) {
-  const lines = [
-    `[SMART CITY REPORT #${report.id}]`,
-    `Category   : ${report.categories || 'N/A'}`,
-    `Location   : ${report.address || report.location || 'Unknown'}`,
-    `Description: ${report.description || 'No description.'}`,
-    `Authority  : ${authorityName}`,
-    note ? `Admin Note : ${note}` : null,
-    ``,
-    `Please review this issue and assign a worker.`,
-  ].filter(l => l !== null);
-  return lines.join('\n');
-}
-
 // --- Status helpers ---
 function getStatusStyle(status) {
   switch (status) {
