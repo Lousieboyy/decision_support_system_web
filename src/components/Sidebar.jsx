@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat, AlertTriangle, Send, Flag } from "lucide-react";
+import { LayoutDashboard, Map as MapIcon, ClipboardList, LogOut, Users, Bell, X, CheckCircle2, RefreshCw, BarChart3, Brain, HardHat, AlertTriangle, Send, Flag, HelpCircle, ExternalLink } from "lucide-react";
 import { useAuth, getNotifications, markAllNotificationsRead, clearNotifications, pushNotification } from "../context/AuthContext";
 import { fetchDatasetStats } from "../api/datasetApi";
 import { fetchTransfers, fetchReports, fetchTeamNotifications, markTeamNotificationRead } from "../api/reportsApi";
@@ -8,6 +8,11 @@ import { getReportPriority } from '../utils/reportPriority';
 import { getDeptId } from '../utils/deptId';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
+
+// Published separately from this app (an Artifact, not a route), so it
+// stays up to date without a redeploy — link out to it rather than
+// bundling a copy that would drift from the real thing.
+const USER_GUIDE_URL = 'https://claude.ai/code/artifact/9c1c72b1-9095-40cc-a9af-c524e11e1730';
 
 const NOTIF_STYLE = {
   status:  { bg: 'rgba(74,93,63,0.10)',   color: '#3d4d34', icon: <RefreshCw size={14} /> },
@@ -310,6 +315,16 @@ export function Sidebar({ isOpen, setIsOpen }) {
               {item.badge > 0 && <span className="nav-badge">{item.badge}</span>}
             </NavLink>
           ))}
+          <a
+            href={USER_GUIDE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sidebar-nav-item"
+          >
+            <span className="sidebar-nav-icon"><HelpCircle size={18} /></span>
+            <span style={{ flex: 1 }}>Help &amp; Guide</span>
+            <ExternalLink size={13} style={{ opacity: 0.5 }} />
+          </a>
         </nav>
 
         {/* Footer */}
