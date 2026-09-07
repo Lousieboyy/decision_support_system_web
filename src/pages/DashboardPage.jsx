@@ -591,11 +591,15 @@ export function DashboardPage() {
             </div>
             <div className="p-5 space-y-3">
               {[
-                { label: 'Pending',      value: stats.pending || 0,       color: '#d97757', bg: 'rgba(217,119,87,0.12)', text: '#b45309' },
+                // Same colors as the status badges in the Recent Reports list
+                // below (and ReportsPage's StatusBadge) — this used to run its
+                // own palette, so the same status could show one color here and
+                // a different one two inches down the page.
+                { label: 'Pending',      value: stats.pending || 0,       color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', text: '#b45309' },
                 { label: 'In Review',    value: stats.in_review || 0,     color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', text: '#1d4ed8' },
                 { label: 'In Process',   value: stats.in_process || 0,    color: '#6366f1', bg: 'rgba(99,102,241,0.12)', text: '#4338ca' },
                 { label: 'In Maint.',    value: stats.in_maintenance || 0,color: '#a855f7', bg: 'rgba(168,85,247,0.12)', text: '#7e22ce' },
-                { label: 'Resolved',     value: stats.resolved || 0,      color: '#4a5d3f', bg: 'rgba(74,93,63,0.12)', text: '#3d4d34' },
+                { label: 'Resolved',     value: stats.resolved || 0,      color: '#10b981', bg: 'rgba(16,185,129,0.12)', text: '#047857' },
                 { label: 'Rejected',     value: stats.rejected || 0,      color: '#ef4444', bg: 'rgba(239,68,68,0.12)', text: '#b91c1c' },
               ].map(({ label, value, color, bg, text }) => {
                 const pct = stats.total ? Math.round((value / stats.total) * 100) : 0;
@@ -650,7 +654,7 @@ export function DashboardPage() {
                     <div
                       key={report.id}
                       className={`flex items-center gap-4 px-5 py-3 transition-colors ${
-                        isMyDept ? 'hover:bg-[#4a5d3f]/5' : 'hover:bg-[#4a5d3f]/5'
+                        isMyDept ? 'hover:bg-[#4a5d3f]/8' : 'hover:bg-[#4a5d3f]/5'
                       }`}
                     >
                       <span className="text-xs font-mono w-12 shrink-0" style={{ color: 'rgba(138,132,119,0.85)' }}>#{report.id}</span>

@@ -53,12 +53,20 @@ function StatTile({ icon, label, value, sub }) {
   );
 }
 
+// fetchDatasetSamples defaults to the first 100 rows. Past that, nothing on
+// this page could reach the rest — no page numbers, no "load more", just a
+// "Showing 100 of 137" label with no way to act on the other 37. Refetching
+// with a growing limit each time "Load more" is clicked is simpler than real
+// offset pagination and plenty for a queue this size.
+const SAMPLE_PAGE_SIZE = 100;
+
 export function AiDatasetPage() {
   const [tab, setTab] = useState('pending');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [relabel, setRelabel] = useState({});
+  const [sampleLimit, setSampleLimit] = useState(SAMPLE_PAGE_SIZE);
 
   // One state object tagged with the tab it belongs to. Loading is then derived
   // rather than stored, which keeps the fetch effect free of synchronous
@@ -76,7 +84,7 @@ export function AiDatasetPage() {
       const isQueue = tab !== 'health';
       const [statsData, sampleData] = await Promise.all([
         fetchDatasetStats(),
-        isQueue ? fetchDatasetSamples(tab) : Promise.resolve({ samples: [], total: 0 }),
+        isQueue ? fetchDatasetSamples(tab, sampleLimit) : Promise.resolve({ samples: [], total: 0 }),
       ]);
       setView({
         tab,
@@ -90,9 +98,13 @@ export function AiDatasetPage() {
       setView(prev => ({ tab, stats: prev?.stats ?? null, samples: [], total: 0 }));
       setError(e.message || 'Could not load the dataset. Is the backend running?');
     }
-  }, [tab]);
+  }, [tab, sampleLimit]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Switching tabs starts each queue back at the first page rather than
+  // carrying over however far "Load more" had gone in the last one.
+  useEffect(() => { setSampleLimit(SAMPLE_PAGE_SIZE); }, [tab]);
 
   const handleApprove = async (sample) => {
     setBusyId(sample.id);
@@ -447,8 +459,17 @@ python retrain_model.py --pull
           )}
 
           {samples.length > 0 && (
-            <div className="px-6 py-3 text-xs" style={{ borderTop: '1px solid rgba(31,30,26,0.06)', color: '#8a8477' }}>
-              Showing {samples.length} of {total}
+            <div className="px-6 py-3 flex items-center gap-3 text-xs" style={{ borderTop: '1px solid rgba(31,30,26,0.06)', color: '#8a8477' }}>
+              <span>Showing {samples.length} of {total}</span>
+              {samples.length < total && (
+                <button
+                  onClick={() => setSampleLimit(l => l + SAMPLE_PAGE_SIZE)}
+                  className="font-bold"
+                  style={{ color: '#3d4d34' }}
+                >
+                  Load {Math.min(SAMPLE_PAGE_SIZE, total - samples.length)} more →
+                </button>
+              )}
             </div>
           )}
         </div>

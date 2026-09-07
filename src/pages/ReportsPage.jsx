@@ -261,10 +261,14 @@ export function ReportsPage() {
     }
   };
 
+  // "My Dept Only" is deliberately not counted here — it's its own
+  // always-visible toggle (already shown pressed/highlighted when on), not
+  // part of the Advanced Filters panel this count badges. Counting it made
+  // the Filters button show "1" and "Reset Filters" appear even when the
+  // panel itself had nothing set, and Reset Filters doesn't touch it anyway.
   const activeFilterCount = [
     datePreset !== 'all',
     minConfidence > 0,
-    myDeptOnly,
   ].filter(Boolean).length;
 
   // Column visibility by role — the same "only what you'd act on" logic as
