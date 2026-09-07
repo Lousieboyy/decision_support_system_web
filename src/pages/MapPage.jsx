@@ -430,10 +430,10 @@ export function MapPage() {
     }
 
     if (currentRole?.startsWith('authority')) {
-      const deptId = getDeptId(currentRole, user?.username);
+      const deptId = getDeptId(currentRole, user?.username, user?.agency);
       result = result.filter(r => r.status !== 'Pending' && reportMatchesDeptId(r, deptId));
     } else if (currentRole?.startsWith('worker')) {
-      const deptId = getDeptId(currentRole, user?.username);
+      const deptId = getDeptId(currentRole, user?.username, user?.agency);
       result = result.filter(r =>
         r.status && r.status !== 'Pending' && r.status !== 'In Review' && reportMatchesDeptId(r, deptId)
       );

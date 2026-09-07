@@ -1,15 +1,11 @@
-// The real backend returns a plain role ("worker", "authority") with the
-// department living in a separate `agency` field that /login doesn't send
-// back — so there's no clean way to know a staff member's department from
-// the session alone. This guesses from the username as a fallback, matching
-// the handful of demo accounts seeded on the backend (worker1/worker2, and
-// authority usernames that are themselves the department id).
-//
-// This was previously copy-pasted identically into DashboardPage, ReportsPage,
-// MapPage and Sidebar — one shared copy so a new alias only needs adding once.
-// The real fix is still /login returning a real agency id; this only patches
-// what's visible until that happens.
-export function getDeptId(role, username) {
+// /login now returns a real `agency` field resolved server-side from the
+// staff member's Agency foreign key, so pass it in as `agency` and it's used
+// directly — no guessing needed for anyone who has logged in since that
+// shipped. The role/username guess below only remains as a fallback for a
+// session already in localStorage from before this field existed; it self-heals
+// the next time that person logs in.
+export function getDeptId(role, username, agency) {
+  if (agency) return agency;
   if (!role) return null;
   if (role.includes('_')) {
     return role.split('_').slice(1).join('_');

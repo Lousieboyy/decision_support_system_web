@@ -240,7 +240,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
     
     // Handle both formats: "authority_mbmb" (demo) and "authority" (backend)
     if (role === 'authority' || role?.startsWith('authority_')) {
-      const deptId = getDeptId(role, user?.username);
+      const deptId = getDeptId(role, user?.username, user?.agency);
       const dept = deptId ? AUTHORITIES.find(a => a.id === deptId) : null;
       return { 
         title: user?.displayName || `${dept?.abbr || 'Local'} Authority`, 
@@ -252,7 +252,7 @@ export function Sidebar({ isOpen, setIsOpen }) {
 
     // Handle both formats: "worker_mbmb" (demo) and "worker" (backend)
     if (role === 'worker' || role?.startsWith('worker_')) {
-      const deptId = getDeptId(role, user?.username);
+      const deptId = getDeptId(role, user?.username, user?.agency);
       const dept = deptId ? AUTHORITIES.find(a => a.id === deptId) : null;
       return { 
         title: user?.displayName || `Worker${dept ? ` (${dept.abbr})` : ''}`, 

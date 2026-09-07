@@ -147,7 +147,7 @@ export function ReportsPage() {
   // Role
   const { role: currentRole, user } = useAuth();
 
-  const deptId = getDeptId(currentRole, user?.username);
+  const deptId = getDeptId(currentRole, user?.username, user?.agency);
   const isWorker = currentRole === 'worker' || currentRole?.startsWith('worker_');
   const isAuthority = currentRole === 'authority' || currentRole?.startsWith('authority_');
   // Drives which status tabs and table columns show — see WORKER_TABS/

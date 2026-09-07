@@ -72,7 +72,7 @@ export function DashboardPage() {
   const [teamLoad, setTeamLoad] = useState([]);
   const [pendingTransfers, setPendingTransfers] = useState(0);
 
-  const deptId = getDeptId(role, user?.username);
+  const deptId = getDeptId(role, user?.username, user?.agency);
   const canSeeTeams = role === 'admin' || role === 'authority' || role?.startsWith('authority_');
   const isWorker = role === 'worker' || role?.startsWith('worker_');
   const [allReports, setAllReports] = useState([]);

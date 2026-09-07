@@ -95,6 +95,7 @@ export function AuthProvider({ children }) {
           role: backendData.role,
           displayName: backendData.username,
           user_id: backendData.user_id,
+          agency: backendData.agency ?? null,
         };
         localStorage.setItem('smart_city_session', JSON.stringify(session));
         setUser(session);
