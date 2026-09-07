@@ -15,7 +15,7 @@ import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, Download, Info, MapPin, RefreshCw,
   CheckCircle2, ChevronRight, ChevronLeft, ChevronDown, Heart, Activity,
-  Search, X,
+  Search, X, FlaskConical,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
@@ -37,6 +37,7 @@ import { RepairReliabilityModal } from '../components/RepairReliabilityModal';
 import { ReportExplorerModal } from '../components/ReportExplorerModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 import { NotifyTeamAction } from '../components/NotifyTeamAction';
+import { WhatIfSimulator } from '../components/WhatIfSimulator';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
@@ -355,7 +356,7 @@ export function AnalyticsPage() {
   const [auditActions, setAuditActions] = useState(null);
   const [activeTab, setActiveTab] = useState('single');
   const [hotspotSearch, setHotspotSearch] = useState('');
-  const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'cityhealth'
+  const [activeViewTab, setActiveViewTab] = useState('overview'); // 'overview' | 'hotspots' | 'cityhealth' | 'whatif'
   const [showReliabilityModal, setShowReliabilityModal] = useState(false);
   // Predictive Hotspots (the tab) moved to resolved-only clustering, so it no
   // longer shows active-report clusters or their map — this KPI card still
@@ -2155,6 +2156,17 @@ export function AnalyticsPage() {
         >
           Predictive Hotspots ({recurringHotspots.length + resolvedSystemicAdvisories.length})
         </button>
+        <button
+          onClick={() => setActiveViewTab('whatif')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+            activeViewTab === 'whatif'
+              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
+              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
+          }`}
+        >
+          <FlaskConical size={15} />
+          What-If Simulator
+        </button>
       </div>
 
       {/* Main page content wrapper for PDF capture */}
@@ -3615,6 +3627,14 @@ export function AnalyticsPage() {
             })()}
 
           </div>
+        )}
+
+        {/* ==================== WHAT-IF SIMULATOR TAB ==================== */}
+        {activeViewTab === 'whatif' && (
+          <WhatIfSimulator
+            filteredReports={filteredReports}
+            current={{ spi: servicePerformance, uci: urbanCondition, ifi: infrastructureFragility }}
+          />
         )}
 
       </div>

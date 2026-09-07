@@ -444,13 +444,13 @@ export function weightedIndex(scoresByKey, weights) {
  * Derives from the same buildFunnel output the funnel chart renders, so the two
  * panels cannot disagree about how long a stage takes.
  */
-export function buildServicePerformance(reports) {
+export function buildServicePerformance(reports, { slaTargets = SLA_TARGET_DAYS, weights = SPI_WEIGHTS } = {}) {
   const funnel = buildFunnel(reports, { cohort: 'all', minN: MIN_N_FOR_STAGE });
   const byKey = Object.fromEntries(funnel.stages.map((s) => [s.key, s]));
 
   const attainment = (key) => {
     const stage = byKey[key];
-    const target = SLA_TARGET_DAYS[key];
+    const target = slaTargets[key];
     if (!stage?.sufficient || stage.median == null || target == null) return null;
     // A zero-budget stage (rework) scores 100 only when it actually took no time.
     if (target === 0) return stage.median <= 0 ? 100 : 0;
@@ -458,11 +458,11 @@ export function buildServicePerformance(reports) {
   };
 
   const domains = {
-    triage: { key: 'triage', name: 'Triage', score: attainment('triage'), n: byKey.triage?.n ?? 0, medianDays: byKey.triage?.median ?? null, targetDays: SLA_TARGET_DAYS.triage },
-    dispatch: { key: 'dispatch', name: 'Dispatch decision', score: attainment('dispatch'), n: byKey.dispatch?.n ?? 0, medianDays: byKey.dispatch?.median ?? null, targetDays: SLA_TARGET_DAYS.dispatch },
-    poolWait: { key: 'poolWait', name: 'Pool wait', score: attainment('poolWait'), n: byKey.poolWait?.n ?? 0, medianDays: byKey.poolWait?.median ?? null, targetDays: SLA_TARGET_DAYS.poolWait },
-    work: { key: 'work', name: 'Work', score: attainment('work'), n: byKey.work?.n ?? 0, medianDays: byKey.work?.median ?? null, targetDays: SLA_TARGET_DAYS.work },
-    verify: { key: 'verify', name: 'Verification', score: attainment('verify'), n: byKey.verify?.n ?? 0, medianDays: byKey.verify?.median ?? null, targetDays: SLA_TARGET_DAYS.verify },
+    triage: { key: 'triage', name: 'Triage', score: attainment('triage'), n: byKey.triage?.n ?? 0, medianDays: byKey.triage?.median ?? null, targetDays: slaTargets.triage },
+    dispatch: { key: 'dispatch', name: 'Dispatch decision', score: attainment('dispatch'), n: byKey.dispatch?.n ?? 0, medianDays: byKey.dispatch?.median ?? null, targetDays: slaTargets.dispatch },
+    poolWait: { key: 'poolWait', name: 'Pool wait', score: attainment('poolWait'), n: byKey.poolWait?.n ?? 0, medianDays: byKey.poolWait?.median ?? null, targetDays: slaTargets.poolWait },
+    work: { key: 'work', name: 'Work', score: attainment('work'), n: byKey.work?.n ?? 0, medianDays: byKey.work?.median ?? null, targetDays: slaTargets.work },
+    verify: { key: 'verify', name: 'Verification', score: attainment('verify'), n: byKey.verify?.n ?? 0, medianDays: byKey.verify?.median ?? null, targetDays: slaTargets.verify },
     firstPass: {
       key: 'firstPass',
       name: 'Right First Time',
@@ -475,7 +475,7 @@ export function buildServicePerformance(reports) {
   };
 
   const scores = Object.fromEntries(Object.entries(domains).map(([k, d]) => [k, d.score]));
-  const index = weightedIndex(scores, SPI_WEIGHTS);
+  const index = weightedIndex(scores, weights);
 
   return { index: index.value, excluded: index.excluded, domains, funnel };
 }
@@ -492,12 +492,17 @@ export function buildServicePerformance(reports) {
  * defect by how long it has stayed open, against a tolerance the council sets
  * (UCI_BURDEN_TARGETS — a policy input, not a measurement).
  */
-export function buildUrbanCondition(reports, now = Date.now()) {
+export function buildUrbanCondition(reports, {
+  now = Date.now(),
+  weights = UCI_WEIGHTS,
+  burdenTargets = UCI_BURDEN_TARGETS,
+  ageWeightDays = AGE_WEIGHT_DAYS,
+} = {}) {
   const open = (reports || []).filter(
     (r) => r?.status !== 'Resolved' && r?.status !== 'Rejected'
   );
 
-  const categories = Object.keys(UCI_WEIGHTS);
+  const categories = Object.keys(weights);
   const domains = {};
 
   for (const cat of categories) {
@@ -508,7 +513,7 @@ export function buildUrbanCondition(reports, now = Date.now()) {
 
     // A category nobody has ever reported is unmeasured, not perfect.
     if (allInCat.length === 0) {
-      domains[cat] = { key: cat, name: cat, score: null, openCount: 0, burden: null, medianAgeDays: null, target: UCI_BURDEN_TARGETS[cat] };
+      domains[cat] = { key: cat, name: cat, score: null, openCount: 0, burden: null, medianAgeDays: null, target: burdenTargets[cat] };
       continue;
     }
 
@@ -518,10 +523,10 @@ export function buildUrbanCondition(reports, now = Date.now()) {
       const submitted = toDate(r.timestamp);
       const ageDays = submitted == null ? 0 : Math.max(0, (now - submitted) / MS_PER_DAY);
       ages.push(ageDays);
-      burden += 1 + ageDays / AGE_WEIGHT_DAYS;
+      burden += 1 + ageDays / ageWeightDays;
     }
 
-    const target = UCI_BURDEN_TARGETS[cat];
+    const target = burdenTargets[cat];
     domains[cat] = {
       key: cat,
       name: cat,
@@ -534,7 +539,7 @@ export function buildUrbanCondition(reports, now = Date.now()) {
   }
 
   const scores = Object.fromEntries(Object.entries(domains).map(([k, d]) => [k, d.score]));
-  const index = weightedIndex(scores, UCI_WEIGHTS);
+  const index = weightedIndex(scores, weights);
 
   return { index: index.value, excluded: index.excluded, domains };
 }
@@ -797,7 +802,7 @@ const IFI_DRIVER_LABEL = {
  * unknown, or with fewer than MIN_N_FOR_INDEX reports, is reported as
  * unmeasured rather than scored on too little data.
  */
-export function buildInfrastructureFragility(reports, { minN = MIN_N_FOR_INDEX } = {}) {
+export function buildInfrastructureFragility(reports, { minN = MIN_N_FOR_INDEX, weights = IFI_WEIGHTS } = {}) {
   const qualifying = (reports || []).filter((r) => r?.status !== 'Rejected');
 
   const raw = new Map(); // zone -> { reportCount, timestamps, resolvedCount, reIncidenceCount }
@@ -887,7 +892,7 @@ export function buildInfrastructureFragility(reports, { minN = MIN_N_FOR_INDEX }
       mtbf: relativeFragility(z.mtbfDays, cityAvgMtbfDays, { higherIsWorse: false }),
     };
 
-    const composite = weightedIndex(components, IFI_WEIGHTS);
+    const composite = weightedIndex(components, weights);
     const score = composite.value != null ? 100 - composite.value : null;
 
     const driver = Object.entries(components)
