@@ -5,6 +5,7 @@ import { fetchDatasetStats } from "../api/datasetApi";
 import { fetchTransfers, fetchReports, fetchTeamNotifications, markTeamNotificationRead } from "../api/reportsApi";
 import { AUTHORITIES } from '../utils/authorities';
 import { getReportPriority } from '../utils/reportPriority';
+import { getDeptId } from '../utils/deptId';
 import { useState, useEffect, useRef } from "react";
 import { formatDistanceToNow, parseISO } from "date-fns";
 
@@ -15,30 +16,6 @@ const NOTIF_STYLE = {
   urgent:  { bg: 'rgba(185,28,28,0.12)',  color: '#b91c1c', icon: <AlertTriangle size={14} /> },
   flag:    { bg: 'rgba(180,83,9,0.12)',   color: '#b45309', icon: <Flag size={14} /> },
 };
-
-// The real backend returns a plain role ("worker", "authority") with the
-// department in a separate field /login doesn't send back, so there's no
-// clean way to know it here. Same username-guessing fallback Dashboard/
-// Reports/MapPage already use — without it, this card fell back to generic
-// "Field Operator"/"Local Authority" for every real (non-demo) account while
-// the rest of the page correctly showed their department.
-function getDeptId(role, username) {
-  if (!role) return null;
-  if (role.includes('_')) {
-    return role.split('_').slice(1).join('_');
-  }
-  if (role === 'authority' && username) {
-    return username.toLowerCase();
-  }
-  if (role === 'worker' && username) {
-    const name = username.toLowerCase();
-    if (name.includes('mbmb') || name === 'worker1' || name === 'worker') return 'mbmb';
-    if (name.includes('jkr') || name === 'worker2') return 'jkr';
-    if (name.includes('swcorp')) return 'swcorp';
-    if (name.includes('mphtj')) return 'mphtj';
-  }
-  return null;
-}
 
 export function Sidebar({ isOpen, setIsOpen }) {
   const { user, role, logout, getPendingRequests } = useAuth();

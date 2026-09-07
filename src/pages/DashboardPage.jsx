@@ -11,26 +11,9 @@ import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import { ReportExplorerModal } from '../components/ReportExplorerModal';
 import { deriveZone, reportDurationDays, deriveDepartmentOptions } from '../utils/analyticsMetrics';
+import { getDeptId } from '../utils/deptId';
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'];
-
-function getDeptId(role, username) {
-  if (!role) return null;
-  if (role.includes('_')) {
-    return role.split('_').slice(1).join('_');
-  }
-  if (role === 'authority' && username) {
-    return username.toLowerCase();
-  }
-  if (role === 'worker' && username) {
-    const name = username.toLowerCase();
-    if (name.includes('mbmb') || name === 'worker1' || name === 'worker') return 'mbmb';
-    if (name.includes('jkr') || name === 'worker2') return 'jkr';
-    if (name.includes('swcorp')) return 'swcorp';
-    if (name.includes('mphtj')) return 'mphtj';
-  }
-  return null;
-}
 
 function reportMatchesDept(report, deptId) {
   if (!deptId) return true;

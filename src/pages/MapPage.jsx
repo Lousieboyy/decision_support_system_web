@@ -10,6 +10,7 @@ import { MapPin, Image as ImageIcon, Filter, ChevronLeft, ChevronRight, Layers, 
 import { canonicalizeCategory } from '../utils/analyticsMetrics';
 import { MELAKA_BOUNDS } from '../utils/analyticsConstants';
 import { getReportPriority as getPriority, PRIORITY_TONE } from '../utils/reportPriority';
+import { getDeptId } from '../utils/deptId';
 
 function HeatmapLayer({ points }) {
   const map = useMap();
@@ -88,22 +89,25 @@ function MapExtentLimiter({ bounds }) {
   return null;
 }
 
-function getDeptId(role, username) {
-  if (!role) return null;
-  if (role.includes('_')) {
-    return role.split('_').slice(1).join('_');
-  }
-  if (role === 'authority' && username) {
-    return username.toLowerCase();
-  }
-  if (role === 'worker' && username) {
-    const name = username.toLowerCase();
-    if (name.includes('mbmb') || name === 'worker1' || name === 'worker') return 'mbmb';
-    if (name.includes('jkr') || name === 'worker2') return 'jkr';
-    if (name.includes('swcorp')) return 'swcorp';
-    if (name.includes('mphtj')) return 'mphtj';
-  }
-  return null;
+// A report's assigned_department is a free-text string ("Majlis Bandaraya
+// Melaka Bersejarah", "Jabatan Pengairan dan Saliran"...), not the short
+// deptId getDeptId() returns, so this bridges the two with each department's
+// known name fragments. Was duplicated identically for the authority and
+// worker filters below; extracted once so the alias list only needs
+// maintaining in one place.
+function reportMatchesDeptId(report, deptId) {
+  if (!deptId) return true;
+  const assigned = (report.assigned_department || '').toLowerCase();
+  if (deptId === 'mbmb' && (assigned.includes('mbmb') || assigned.includes('bersejarah'))) return true;
+  if (deptId === 'samb' && (assigned.includes('samb') || assigned.includes('air'))) return true;
+  if (assigned.includes(deptId.toLowerCase())) return true;
+  if (deptId === 'jkr' && (assigned.includes('jkr') || assigned.includes('kerja raya'))) return true;
+  if (deptId === 'jps' && (assigned.includes('jps') || assigned.includes('pengairan'))) return true;
+  if (deptId === 'mphtj' && assigned.includes('tuah jaya')) return true;
+  if (deptId === 'mpag' && assigned.includes('alor gajah')) return true;
+  if (deptId === 'mpj' && assigned.includes('jasin')) return true;
+  if (deptId === 'jas' && assigned.includes('alam sekitar')) return true;
+  return false;
 }
 
 // Matches canonicalizeCategory's real 6-bucket taxonomy (the same one every
@@ -427,40 +431,12 @@ export function MapPage() {
 
     if (currentRole?.startsWith('authority')) {
       const deptId = getDeptId(currentRole, user?.username);
-      result = result.filter(r => {
-        if (r.status === 'Pending') return false;
-        if (!deptId) return true;
-        const assigned = (r.assigned_department || '').toLowerCase();
-        if (deptId === 'mbmb' && (assigned.includes('mbmb') || assigned.includes('bersejarah'))) return true;
-        if (deptId === 'samb' && (assigned.includes('samb') || assigned.includes('air'))) return true;
-        const deptAbbr = deptId.toLowerCase();
-        if (assigned.includes(deptAbbr)) return true;
-        if (deptId === 'jkr' && (assigned.includes('jkr') || assigned.includes('kerja raya'))) return true;
-        if (deptId === 'jps' && (assigned.includes('jps') || assigned.includes('pengairan'))) return true;
-        if (deptId === 'mphtj' && assigned.includes('tuah jaya')) return true;
-        if (deptId === 'mpag' && assigned.includes('alor gajah')) return true;
-        if (deptId === 'mpj' && assigned.includes('jasin')) return true;
-        if (deptId === 'jas' && assigned.includes('alam sekitar')) return true;
-        return false;
-      });
+      result = result.filter(r => r.status !== 'Pending' && reportMatchesDeptId(r, deptId));
     } else if (currentRole?.startsWith('worker')) {
       const deptId = getDeptId(currentRole, user?.username);
-      result = result.filter(r => {
-        if (!r.status || r.status === 'Pending' || r.status === 'In Review') return false;
-        if (!deptId) return true;
-        const assigned = (r.assigned_department || '').toLowerCase();
-        if (deptId === 'mbmb' && (assigned.includes('mbmb') || assigned.includes('bersejarah'))) return true;
-        if (deptId === 'samb' && (assigned.includes('samb') || assigned.includes('air'))) return true;
-        const deptAbbr = deptId.toLowerCase();
-        if (assigned.includes(deptAbbr)) return true;
-        if (deptId === 'jkr' && (assigned.includes('jkr') || assigned.includes('kerja raya'))) return true;
-        if (deptId === 'jps' && (assigned.includes('jps') || assigned.includes('pengairan'))) return true;
-        if (deptId === 'mphtj' && assigned.includes('tuah jaya')) return true;
-        if (deptId === 'mpag' && assigned.includes('alor gajah')) return true;
-        if (deptId === 'mpj' && assigned.includes('jasin')) return true;
-        if (deptId === 'jas' && assigned.includes('alam sekitar')) return true;
-        return false;
-      });
+      result = result.filter(r =>
+        r.status && r.status !== 'Pending' && r.status !== 'In Review' && reportMatchesDeptId(r, deptId)
+      );
     }
 
     return result;

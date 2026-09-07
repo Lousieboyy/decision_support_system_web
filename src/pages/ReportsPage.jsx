@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { ReportDetailModal } from '../components/ReportDetailModal';
 import { AUTHORITIES } from '../utils/authorities';
 import { getReportPriority, priorityRank, PRIORITY_TONE } from '../utils/reportPriority';
+import { getDeptId } from '../utils/deptId';
 import { format, formatDistanceToNowStrict, isWithinInterval, parseISO, startOfDay, endOfDay, subDays } from 'date-fns';
 import jsPDF from 'jspdf';
 import {
@@ -12,25 +13,6 @@ import {
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Calendar, SlidersHorizontal, X, Building2, Download, FileText,
   Check, Loader2,
 } from 'lucide-react';
-
-// Get dept id from role
-function getDeptId(role, username) {
-  if (!role) return null;
-  if (role.includes('_')) {
-    return role.split('_').slice(1).join('_');
-  }
-  if (role === 'authority' && username) {
-    return username.toLowerCase();
-  }
-  if (role === 'worker' && username) {
-    const name = username.toLowerCase();
-    if (name.includes('mbmb') || name === 'worker1' || name === 'worker') return 'mbmb';
-    if (name.includes('jkr') || name === 'worker2') return 'jkr';
-    if (name.includes('swcorp')) return 'swcorp';
-    if (name.includes('mphtj')) return 'mphtj';
-  }
-  return null;
-}
 
 // Check if a report belongs to a dept
 function reportMatchesDept(report, deptId) {
