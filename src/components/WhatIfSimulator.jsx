@@ -64,6 +64,13 @@ function WeightSlider({ label, value, onChange, effectivePct }) {
   );
 }
 
+// A day-based target under ~1 isn't something people naturally picture —
+// "0.25 days" reads as an abstract fraction, "6h" reads as a workday chunk.
+function fmtHours(days) {
+  const hours = Math.round(days * 24 * 10) / 10;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
+}
+
 function TargetInput({ label, value, onChange, unit }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -75,7 +82,12 @@ function TargetInput({ label, value, onChange, unit }) {
           className="w-20 px-2 py-1 rounded-lg text-xs font-semibold text-right custom-select"
           style={{ backgroundColor: 'var(--cream-200)', border: '1px solid rgba(31,30,26,0.10)', color: '#201f1b' }}
         />
-        <span className="text-[10px] text-[#8a8477] w-8">{unit === 'days' ? 'days' : 'cap'}</span>
+        <div className="w-14 leading-tight shrink-0">
+          <div className="text-[10px] text-[#8a8477]">{unit === 'days' ? 'days' : 'cap'}</div>
+          {unit === 'days' && (
+            <div className="text-[9px] font-bold text-[#4a5d3f]">{fmtHours(value)}</div>
+          )}
+        </div>
       </div>
     </div>
   );
