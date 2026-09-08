@@ -2456,7 +2456,10 @@ export function AnalyticsPage() {
                         data={trendChartData}
                         margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                         onClick={(e) => {
-                          const point = e?.activePayload?.[0]?.payload;
+                          // AreaChart's onClick doesn't reliably populate activePayload on
+                          // this Recharts version — activeIndex is the field that always
+                          // fires (see the same fix on the backlog-flow chart in CityHealthBands.jsx).
+                          const point = e?.activeIndex != null ? trendChartData[e.activeIndex] : null;
                           if (point && point.Reports > 0) {
                             openExplore({ dateFrom: `${point.rawDate}T00:00`, dateTo: `${point.rawDate}T23:59` });
                           }
