@@ -7,9 +7,10 @@ import {
   fetchTeamWorkload, fetchTeamWorkers, fetchTransfers,
   approveTransfer, denyTransfer,
   fetchCrews, fetchCrewWorkload, createCrew, updateCrew, deleteCrew,
-  addCrewMember, removeCrewMember, setStaffLeave,
+  addCrewMember, removeCrewMember, setStaffLeave, fetchAllReports,
 } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
+import { ReportDetailModal } from '../components/ReportDetailModal';
 
 // One place decides what a team's colour means; the backend hands us the
 // derived status so the panel and the app never drift apart on thresholds.
@@ -288,6 +289,11 @@ export function TeamsPage() {
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [decisionTeam, setDecisionTeam] = useState({});
+  // Lets a release request's "Report #123" open the real report before an
+  // authority approves or denies handing it to another team — previously
+  // that decision had to be made from the category label alone.
+  const [reports, setReports] = useState([]);
+  const [detailReport, setDetailReport] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -298,12 +304,13 @@ export function TeamsPage() {
       ]);
       setData(workload);
       setTransfers(pending);
+      fetchAllReports(role).then(setReports).catch(() => setReports([]));
     } catch (e) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [role]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -413,7 +420,20 @@ export function TeamsPage() {
               {transfers.map(t => (
                 <div key={t.id} className="rounded-xl p-4" style={{ background: 'var(--cream-100)' }}>
                   <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="text-sm font-bold" style={{ color: '#201f1b' }}>Report #{t.report_id}</span>
+                    {(() => {
+                      const fullReport = reports.find(r => r.id === t.report_id);
+                      return (
+                        <button
+                          onClick={() => fullReport && setDetailReport(fullReport)}
+                          disabled={!fullReport}
+                          className="text-sm font-bold cursor-pointer disabled:cursor-default hover:underline disabled:no-underline disabled:opacity-60"
+                          style={{ color: '#201f1b' }}
+                          title={fullReport ? 'Open the full report' : 'Report no longer in view'}
+                        >
+                          Report #{t.report_id}
+                        </button>
+                      );
+                    })()}
                     <span className="text-xs px-2 py-0.5 rounded-lg" style={{ background: 'var(--cream-200)', color: '#4b473d' }}>
                       {t.report_title || 'Uncategorised'}
                     </span>
@@ -546,6 +566,15 @@ export function TeamsPage() {
           );
         })}
       </div>
+
+      {detailReport && (
+        <ReportDetailModal
+          report={detailReport}
+          onClose={() => setDetailReport(null)}
+          onUpdate={load}
+          currentRole={role}
+        />
+      )}
     </div>
   );
 }
