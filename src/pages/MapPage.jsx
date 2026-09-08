@@ -11,6 +11,7 @@ import { canonicalizeCategory } from '../utils/analyticsMetrics';
 import { MELAKA_BOUNDS } from '../utils/analyticsConstants';
 import { getReportPriority as getPriority, PRIORITY_TONE } from '../utils/reportPriority';
 import { getDeptId } from '../utils/deptId';
+import { ReportDetailModal } from '../components/ReportDetailModal';
 
 function HeatmapLayer({ points }) {
   const map = useMap();
@@ -222,7 +223,7 @@ const createClusterCustomIcon = (cluster) => {
   });
 };
 
-function PopupContent({ reports, setFullScreenImage }) {
+function PopupContent({ reports, setFullScreenImage, onOpenReport }) {
   const [index, setIndex] = useState(0);
   const [showAfter, setShowAfter] = useState(true); // true = show completion/after, false = show original/before
   const report = reports[index];
@@ -312,9 +313,12 @@ function PopupContent({ reports, setFullScreenImage }) {
       {/* Info card */}
       <div className="p-3">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-[#201f1b] text-sm line-clamp-1">{report.categories || 'Unknown Issue'}</h3>
+          <div className="min-w-0">
+            <h3 className="font-bold text-[#201f1b] text-sm line-clamp-1">{report.categories || 'Unknown Issue'}</h3>
+            <span className="text-[9px] font-mono text-[#8a8477]">#{report.id}</span>
+          </div>
           <span
-            className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
+            className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full shrink-0"
             style={{ backgroundColor: `${reportColor}20`, color: reportColor }}
           >
             {priority}
@@ -355,6 +359,26 @@ function PopupContent({ reports, setFullScreenImage }) {
             {report.status || 'Pending'}
           </span>
         </div>
+
+        <div className="flex items-center gap-1.5 mt-2.5 pt-2.5 border-t border-[#1f1e1a]/8">
+          <button
+            onClick={(e) => { e.stopPropagation(); onOpenReport(report); }}
+            className="flex-1 text-center text-[10px] font-bold py-1.5 rounded-lg transition-colors hover:opacity-80"
+            style={{ background: 'var(--cream-200)', color: '#201f1b' }}
+          >
+            View Full Report
+          </button>
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${report.latitude},${report.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 text-center text-[10px] font-bold py-1.5 rounded-lg transition-colors hover:opacity-80"
+            style={{ background: '#1d4ed8', color: '#fff' }}
+          >
+            Open in Google Maps
+          </a>
+        </div>
       </div>
     </div>
   );
@@ -365,6 +389,7 @@ export function MapPage() {
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
+  const [detailReport, setDetailReport] = useState(null);
   const { role: currentRole, user } = useAuth();
   const [fullScreenImage, setFullScreenImage] = useState(null);
   const [showHeatmap, setShowHeatmap] = useState(false);
@@ -586,7 +611,7 @@ export function MapPage() {
                     priority={priority}
                   >
                     <Popup className="custom-popup">
-                      <PopupContent reports={group} setFullScreenImage={setFullScreenImage} />
+                      <PopupContent reports={group} setFullScreenImage={setFullScreenImage} onOpenReport={setDetailReport} />
                     </Popup>
                   </Marker>
                 );
@@ -643,6 +668,15 @@ export function MapPage() {
             onClick={(e) => e.stopPropagation()}
           />
         </div>
+      )}
+
+      {detailReport && (
+        <ReportDetailModal
+          report={detailReport}
+          onClose={() => setDetailReport(null)}
+          onUpdate={loadReports}
+          currentRole={currentRole}
+        />
       )}
     </div>
   );
