@@ -1,16 +1,12 @@
 import { useMemo, useState } from 'react';
-import { RotateCcw, FlaskConical, Users, User, Minus, Plus } from 'lucide-react';
-import {
-  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-} from 'recharts';
+import { RotateCcw, FlaskConical, Users, User, Minus, Plus, AlertTriangle } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, IFI_WEIGHTS, SLA_TARGET_DAYS,
   gradeFor, GRADE_COLOR,
 } from '../utils/analyticsConstants';
-import { buildServicePerformance, buildUrbanCondition, buildInfrastructureFragility, toDate } from '../utils/analyticsMetrics';
+import { buildServicePerformance, buildUrbanCondition, buildInfrastructureFragility } from '../utils/analyticsMetrics';
 import { AUTHORITIES } from '../utils/authorities';
-
-const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 // Every domain buildServicePerformance actually scores against a day budget —
 // firstPass is a rate, not a duration, so it has no target to tune here.
@@ -90,17 +86,15 @@ function effectivePercents(weights) {
   return Object.fromEntries(Object.entries(weights).map(([k, v]) => [k, sum > 0 ? Math.round((v / sum) * 100) : 0]));
 }
 
-// ── Staffing / capacity model ────────────────────────────────────────────────
-// A deliberately simple fluid model, not a stochastic queue simulation: over
-// the lookback window, how many reports arrived per day and how many this
-// department resolved per day, per worker. Projecting forward assumes both
-// rates hold — true only as a first approximation, which is exactly what a
-// capacity conversation needs (is this roughly a 1-worker gap or a 5-worker
-// gap), not a precise forecast.
-const WINDOW_OPTIONS = [14, 30, 60, 90];
-const MIN_RESOLUTIONS_FOR_RATE = 5;
-const PROJECTION_DAYS = 60;
-
+// ── Rebalance model ──────────────────────────────────────────────────────────
+// Deliberately not a hiring/growth forecast: this system's report volume is
+// too thin for a reliable historical throughput rate for most departments,
+// and "0.34 reports/day" isn't a number anyone acts on anyway. Backlog count
+// and worker count, on the other hand, are always known exactly, right now,
+// for every department — no minimum-sample gate needed. So the question
+// becomes "how well is the staff we already have distributed", answered with
+// backlog-per-worker, and it's immediately actionable: moving someone
+// between teams is a real button elsewhere in this app, unlike hiring.
 function matchAuthority(text) {
   const lower = (text || '').toLowerCase();
   if (!lower) return null;
@@ -109,102 +103,80 @@ function matchAuthority(text) {
   ) || null;
 }
 
-function buildDepartmentRoster(teams) {
+function buildRebalanceRoster(allReports, teams) {
   const roster = new Map();
   for (const t of teams || []) {
     const auth = matchAuthority(t.name);
     const key = auth ? auth.abbr : t.name;
     if (!roster.has(key)) {
-      roster.set(key, { key, label: auth ? `${auth.abbr} — ${auth.name}` : t.name, workerCount: t.worker_count ?? 0 });
+      roster.set(key, { key, label: auth ? `${auth.abbr} — ${auth.name}` : t.name, workerCount: t.worker_count ?? 0, backlog: 0 });
     }
+  }
+  for (const r of allReports || []) {
+    if (r?.status === 'Resolved' || r?.status === 'Rejected') continue;
+    const auth = matchAuthority(r?.assigned_department);
+    const key = auth?.abbr;
+    if (key && roster.has(key)) roster.get(key).backlog += 1;
   }
   return [...roster.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
-function buildCapacityStats(allReports, deptKey, windowDays, workerCount) {
-  const now = Date.now();
-  const windowStart = now - windowDays * MS_PER_DAY;
-
-  const inDept = (r) => matchAuthority(r?.assigned_department)?.abbr === deptKey;
-
-  const backlogNow = (allReports || []).filter(
-    (r) => inDept(r) && r.status !== 'Resolved' && r.status !== 'Rejected'
-  ).length;
-
-  const arrivals = (allReports || []).filter((r) => {
-    if (!inDept(r)) return false;
-    const t = toDate(r.timestamp);
-    return t != null && t >= windowStart;
-  }).length;
-
-  const resolutions = (allReports || []).filter((r) => {
-    if (!inDept(r) || r.status !== 'Resolved') return false;
-    const t = toDate(r.resolved_at);
-    return t != null && t >= windowStart;
-  }).length;
-
-  const arrivalRate = arrivals / windowDays;
-  const throughputRate = resolutions / windowDays;
-  const sufficient = resolutions >= MIN_RESOLUTIONS_FOR_RATE && workerCount > 0;
-  const perWorkerThroughput = sufficient ? throughputRate / workerCount : null;
-
-  return { backlogNow, arrivalRate, throughputRate, perWorkerThroughput, sufficient, resolutions };
+function loadPerWorker(backlog, workers) {
+  return workers > 0 ? backlog / workers : null;
 }
 
-function projectBacklog(startBacklog, netFlowPerDay, days, points = 20) {
-  const step = Math.max(1, Math.round(days / points));
-  const series = [];
-  for (let d = 0; d <= days; d += step) {
-    series.push({ day: d, backlog: Math.max(0, Math.round(startBacklog + netFlowPerDay * d)) });
-  }
-  return series;
+function spreadOf(values) {
+  const valid = values.filter((v) => v != null);
+  if (valid.length < 2) return null;
+  return Math.max(...valid) - Math.min(...valid);
 }
 
-function StaffingVerdict({ arrivalRate, netFlowPerDay, daysToClear, workersToBreakEven, simulatedWorkers }) {
-  if (netFlowPerDay == null) {
-    return (
-      <p className="text-xs text-[#8a8477] leading-relaxed">
-        Not enough resolved reports in this window to estimate a reliable per-worker rate for this
-        department — try a longer lookback window.
-      </p>
-    );
+function rebalanceVerdict(currentSpread, simulatedSpread, strandedCount) {
+  if (strandedCount > 0) {
+    return {
+      tone: '#b91c1c',
+      text: `${strandedCount} department${strandedCount > 1 ? 's have' : ' has'} open reports and nobody
+      assigned to work them right now.`,
+    };
   }
-  if (netFlowPerDay <= 0) {
-    return (
-      <p className="text-xs leading-relaxed" style={{ color: '#15803d' }}>
-        At <b>{simulatedWorkers}</b> worker{simulatedWorkers === 1 ? '' : 's'}, this department's backlog
-        would shrink by ~<b>{Math.abs(netFlowPerDay).toFixed(2)}</b> reports/day and fully clear in about{' '}
-        <b>{Math.ceil(daysToClear)}</b> day{Math.ceil(daysToClear) === 1 ? '' : 's'}, assuming arrivals stay
-        steady at ~{arrivalRate.toFixed(2)}/day.
-      </p>
-    );
+  if (currentSpread == null || simulatedSpread == null) {
+    return { tone: '#8a8477', text: 'Need at least two staffed departments to compare balance.' };
   }
-  return (
-    <p className="text-xs leading-relaxed" style={{ color: '#b91c1c' }}>
-      At <b>{simulatedWorkers}</b> worker{simulatedWorkers === 1 ? '' : 's'}, this department can't keep up —
-      the backlog would keep growing by ~<b>{netFlowPerDay.toFixed(2)}</b> reports/day. At least{' '}
-      <b>{workersToBreakEven}</b> worker{workersToBreakEven === 1 ? '' : 's'} would be needed just to stop it
-      growing.
-    </p>
-  );
+  const diff = currentSpread - simulatedSpread;
+  if (Math.abs(diff) < 0.5) {
+    return {
+      tone: '#8a8477',
+      text: `About as balanced as today's split — a gap of ~${simulatedSpread.toFixed(1)} reports per worker between the busiest and quietest team.`,
+    };
+  }
+  if (diff > 0) {
+    return {
+      tone: '#15803d',
+      text: `More balanced than today — the gap between the busiest and quietest team drops from ~${currentSpread.toFixed(1)} to ~${simulatedSpread.toFixed(1)} reports per worker.`,
+    };
+  }
+  return {
+    tone: '#b91c1c',
+    text: `Less balanced than today — the gap between the busiest and quietest team grows from ~${currentSpread.toFixed(1)} to ~${simulatedSpread.toFixed(1)} reports per worker.`,
+  };
 }
 
 // A row of person icons instead of a bare range track — clicking icon i sets
 // the count to i+1 (a star-rating pattern), and +/- handle 0 and going past
 // the drawn row. Small integer counts (a handful of workers per department)
 // are exactly the case this reads better than a slider for.
-function WorkerPicker({ workers, onChange, minIcons = 10 }) {
+function WorkerPicker({ workers, onChange, minIcons = 8 }) {
   const iconCount = Math.max(minIcons, workers + 2);
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <button
         onClick={() => onChange(Math.max(0, workers - 1))}
-        className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#f5f1e6] text-[#4a5d3f] hover:bg-[#4a5d3f]/15 cursor-pointer shrink-0 transition-colors"
+        className="w-6 h-6 rounded-md flex items-center justify-center bg-[#f5f1e6] text-[#4a5d3f] hover:bg-[#4a5d3f]/15 cursor-pointer shrink-0 transition-colors"
         aria-label="Remove a worker"
       >
-        <Minus size={14} />
+        <Minus size={12} />
       </button>
-      <div className="flex flex-wrap gap-1 flex-1">
+      <div className="flex flex-wrap gap-0.5 flex-1">
         {Array.from({ length: iconCount }).map((_, i) => (
           <button
             key={i}
@@ -213,7 +185,7 @@ function WorkerPicker({ workers, onChange, minIcons = 10 }) {
             className="cursor-pointer transition-transform hover:scale-110"
           >
             <User
-              size={22}
+              size={18}
               fill={i < workers ? '#4a5d3f' : 'none'}
               stroke={i < workers ? '#4a5d3f' : '#c9c3b4'}
               strokeWidth={1.6}
@@ -223,40 +195,11 @@ function WorkerPicker({ workers, onChange, minIcons = 10 }) {
       </div>
       <button
         onClick={() => onChange(workers + 1)}
-        className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#f5f1e6] text-[#4a5d3f] hover:bg-[#4a5d3f]/15 cursor-pointer shrink-0 transition-colors"
+        className="w-6 h-6 rounded-md flex items-center justify-center bg-[#f5f1e6] text-[#4a5d3f] hover:bg-[#4a5d3f]/15 cursor-pointer shrink-0 transition-colors"
         aria-label="Add a worker"
       >
-        <Plus size={14} />
+        <Plus size={12} />
       </button>
-    </div>
-  );
-}
-
-// Arrivals vs. capacity as two bars on a shared scale — whether the green bar
-// reaches the terracotta one is the entire question this simulator answers,
-// visible before reading a single number.
-function CapacityBars({ arrivalRate, simulatedThroughputRate }) {
-  const max = Math.max(arrivalRate, simulatedThroughputRate || 0, 0.1) * 1.15;
-  const arrivalPct = Math.min(100, (arrivalRate / max) * 100);
-  const capacityPct = simulatedThroughputRate != null ? Math.min(100, (simulatedThroughputRate / max) * 100) : 0;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-[#8a8477] w-16 shrink-0">Arrivals</span>
-        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.06)' }}>
-          <div className="h-full rounded-full" style={{ width: `${arrivalPct}%`, background: '#c1613f' }} />
-        </div>
-        <span className="text-[11px] font-bold text-[#201f1b] w-14 text-right shrink-0">{arrivalRate.toFixed(2)}/d</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[10px] font-bold text-[#8a8477] w-16 shrink-0">Capacity</span>
-        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.06)' }}>
-          <div className="h-full rounded-full transition-all duration-300" style={{ width: `${capacityPct}%`, background: '#4a5d3f' }} />
-        </div>
-        <span className="text-[11px] font-bold text-[#201f1b] w-14 text-right shrink-0">
-          {simulatedThroughputRate != null ? `${simulatedThroughputRate.toFixed(2)}/d` : '—'}
-        </span>
-      </div>
     </div>
   );
 }
@@ -274,46 +217,33 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
 
   const [ifiWeights, setIfiWeights] = useState(() => effectivePercents(IFI_WEIGHTS));
 
-  // Staffing state
-  const roster = useMemo(() => buildDepartmentRoster(teams), [teams]);
-  const [selectedDept, setSelectedDept] = useState(null);
-  const [windowDays, setWindowDays] = useState(30);
-  const [simulatedWorkers, setSimulatedWorkers] = useState(null);
-  const activeDept = selectedDept || roster[0]?.key || null;
-  const activeTeam = roster.find((r) => r.key === activeDept);
+  // Rebalance state — only departments the user has actually touched get an
+  // entry; everyone else stays at their real current worker count.
+  const rebalanceRoster = useMemo(() => buildRebalanceRoster(allReports, teams), [allReports, teams]);
+  const [allocationOverrides, setAllocationOverrides] = useState({});
 
-  const capacity = useMemo(() => {
-    if (!activeDept || !activeTeam) return null;
-    return buildCapacityStats(allReports, activeDept, windowDays, activeTeam.workerCount);
-  }, [allReports, activeDept, activeTeam, windowDays]);
+  const rebalanceRows = useMemo(() => rebalanceRoster.map((r) => {
+    const simWorkers = allocationOverrides[r.key] ?? r.workerCount;
+    return {
+      ...r,
+      simWorkers,
+      currentLoad: loadPerWorker(r.backlog, r.workerCount),
+      simulatedLoad: loadPerWorker(r.backlog, simWorkers),
+    };
+  }), [rebalanceRoster, allocationOverrides]);
 
-  const workers = simulatedWorkers ?? activeTeam?.workerCount ?? 0;
+  const totalPool = rebalanceRoster.reduce((s, r) => s + r.workerCount, 0);
+  const totalAssigned = rebalanceRows.reduce((s, r) => s + r.simWorkers, 0);
+  const currentSpread = spreadOf(rebalanceRows.map((r) => r.currentLoad));
+  const simulatedSpread = spreadOf(rebalanceRows.map((r) => r.simulatedLoad));
+  const strandedCount = rebalanceRows.filter((r) => r.simWorkers === 0 && r.backlog > 0).length;
+  const verdict = rebalanceVerdict(currentSpread, simulatedSpread, strandedCount);
 
-  const simulatedCapacity = useMemo(() => {
-    if (!capacity) return null;
-    const simulatedThroughputRate = capacity.perWorkerThroughput != null ? capacity.perWorkerThroughput * workers : null;
-    const netFlowPerDay = simulatedThroughputRate != null ? capacity.arrivalRate - simulatedThroughputRate : null;
-    const daysToClear = netFlowPerDay != null && netFlowPerDay < 0 ? capacity.backlogNow / -netFlowPerDay : null;
-    const workersToBreakEven = capacity.perWorkerThroughput > 0
-      ? Math.ceil(capacity.arrivalRate / capacity.perWorkerThroughput)
-      : null;
-    return { simulatedThroughputRate, netFlowPerDay, daysToClear, workersToBreakEven };
-  }, [capacity, workers]);
-
-  const currentNetFlow = capacity ? capacity.arrivalRate - capacity.throughputRate : null;
-
-  const chartData = useMemo(() => {
-    if (!capacity || currentNetFlow == null) return [];
-    const currentSeries = projectBacklog(capacity.backlogNow, currentNetFlow, PROJECTION_DAYS);
-    const simSeries = simulatedCapacity?.netFlowPerDay != null
-      ? projectBacklog(capacity.backlogNow, simulatedCapacity.netFlowPerDay, PROJECTION_DAYS)
-      : [];
-    return currentSeries.map((pt, i) => ({
-      day: pt.day,
-      'Current staffing': pt.backlog,
-      'Simulated staffing': simSeries[i]?.backlog ?? null,
-    }));
-  }, [capacity, currentNetFlow, simulatedCapacity]);
+  const chartRows = useMemo(() => rebalanceRows.map((r) => ({
+    name: r.key,
+    'Current backlog/worker': r.currentLoad != null ? Math.round(r.currentLoad * 10) / 10 : 0,
+    'Simulated backlog/worker': r.simulatedLoad != null ? Math.round(r.simulatedLoad * 10) / 10 : 0,
+  })), [rebalanceRows]);
 
   const simulated = useMemo(() => {
     if (mode === 'spi') {
@@ -343,7 +273,7 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
     } else if (mode === 'ifi') {
       setIfiWeights(effectivePercents(IFI_WEIGHTS));
     } else {
-      setSimulatedWorkers(null);
+      setAllocationOverrides({});
     }
   };
 
@@ -360,7 +290,7 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
   };
 
   const introText = mode === 'staffing'
-    ? "Adjust a department's worker count and see whether its backlog would grow, shrink, or hold steady — estimated from its own recent arrival and resolution rates. Nothing here changes any real assignment."
+    ? "Move workers between departments and see backlog-per-worker rebalance live — this is about using who you already have, not hiring. Nothing here changes any real assignment."
     : 'Adjust the policy inputs behind each index — how much weight a domain carries, or what target counts as acceptable — and see how the grade would respond, using the reports currently in view. Nothing here changes real data, saved settings, or any live report.';
 
   return (
@@ -526,7 +456,7 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
       )}
 
       {mode === 'staffing' && (
-        roster.length === 0 ? (
+        rebalanceRoster.length === 0 ? (
           <div className="content-card p-6 text-center text-sm text-[#8a8477]">
             No team data available yet — this needs at least one department with staff on record.
           </div>
@@ -534,141 +464,82 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="content-card">
               <div className="content-card-header">
-                <div className="content-card-title">Department &amp; capacity</div>
+                <div className="content-card-title">Reallocate workers</div>
                 <button
                   onClick={resetActive}
                   className="flex items-center gap-1.5 text-[11px] font-bold text-[#8a8477] hover:text-[#4a5d3f] cursor-pointer"
                 >
                   <RotateCcw size={12} />
-                  Reset workers
+                  Reset
                 </button>
               </div>
-              <div className="p-5 space-y-5">
-                <div className="flex flex-wrap gap-1.5">
-                  {roster.map((r) => (
-                    <button
-                      key={r.key}
-                      onClick={() => { setSelectedDept(r.key); setSimulatedWorkers(null); }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        activeDept === r.key
-                          ? 'bg-[#4a5d3f] text-white'
-                          : 'bg-[#f5f1e6] text-[#8a8477] hover:text-[#201f1b]'
-                      }`}
-                    >
-                      {r.key}
-                    </button>
-                  ))}
+              <div className="p-5 space-y-4">
+                <div
+                  className="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold"
+                  style={{
+                    background: totalAssigned === totalPool ? 'rgba(21,128,61,0.08)' : 'rgba(180,83,9,0.08)',
+                    color: totalAssigned === totalPool ? '#15803d' : '#b45309',
+                  }}
+                >
+                  <span>{totalAssigned} of {totalPool} real workers assigned</span>
+                  {totalAssigned !== totalPool && (
+                    <span>{totalAssigned > totalPool ? `+${totalAssigned - totalPool} modeled as new hires` : `${totalPool - totalAssigned} left unassigned`}</span>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">Lookback window</span>
-                  <div className="flex gap-1">
-                    {WINDOW_OPTIONS.map((w) => (
-                      <button
-                        key={w}
-                        onClick={() => setWindowDays(w)}
-                        className={`px-2 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
-                          windowDays === w ? 'bg-[#4a5d3f] text-white' : 'bg-[#f5f1e6] text-[#8a8477]'
-                        }`}
-                      >
-                        {w}d
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {capacity && (
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="rounded-lg p-3" style={{ background: 'rgba(31,30,26,0.03)' }}>
-                      <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-1">Open backlog now</div>
-                      <div className="text-lg font-bold text-[#201f1b]">{capacity.backlogNow}</div>
-                    </div>
-                    <div className="rounded-lg p-3" style={{ background: 'rgba(31,30,26,0.03)' }}>
-                      <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-1">Arrivals / day</div>
-                      <div className="text-lg font-bold text-[#201f1b]">{capacity.arrivalRate.toFixed(2)}</div>
-                    </div>
-                    <div className="rounded-lg p-3 col-span-2" style={{ background: 'rgba(31,30,26,0.03)' }}>
-                      <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-1">
-                        Current resolution rate
+                <div className="space-y-3">
+                  {rebalanceRows.map((r) => (
+                    <div key={r.key} className="rounded-xl p-3" style={{ background: 'rgba(31,30,26,0.03)' }}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-[#201f1b]">{r.key}</span>
+                        <span className="text-[11px] font-semibold text-[#8a8477]">
+                          {r.backlog} open report{r.backlog === 1 ? '' : 's'}
+                        </span>
                       </div>
-                      <div className="text-lg font-bold text-[#201f1b]">
-                        {capacity.throughputRate.toFixed(2)} reports/day
-                        {activeTeam?.workerCount > 0 && (
-                          <span className="text-xs font-semibold text-[#8a8477]">
-                            {' '}across {activeTeam.workerCount} worker{activeTeam.workerCount === 1 ? '' : 's'}
+                      <WorkerPicker
+                        workers={r.simWorkers}
+                        onChange={(v) => setAllocationOverrides((prev) => ({ ...prev, [r.key]: v }))}
+                      />
+                      <div className="flex items-center justify-between mt-1.5 text-[11px]">
+                        <span className="text-[#8a8477]">Currently {r.workerCount} worker{r.workerCount === 1 ? '' : 's'}</span>
+                        {r.simWorkers === 0 && r.backlog > 0 ? (
+                          <span className="flex items-center gap-1 font-bold" style={{ color: '#b91c1c' }}>
+                            <AlertTriangle size={11} /> nobody assigned
+                          </span>
+                        ) : (
+                          <span className="font-bold text-[#4a5d3f]">
+                            {r.simulatedLoad != null ? `${r.simulatedLoad.toFixed(1)} / worker` : '—'}
                           </span>
                         )}
                       </div>
                     </div>
-                  </div>
-                )}
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">
-                      Workers assigned
-                    </span>
-                    <span className="text-lg font-bold text-[#4a5d3f]">{workers}</span>
-                  </div>
-                  <WorkerPicker workers={workers} onChange={setSimulatedWorkers} />
-                  <div className="text-[10px] text-[#8a8477] mt-1.5">
-                    Currently {activeTeam?.workerCount ?? 0} worker{(activeTeam?.workerCount ?? 0) === 1 ? '' : 's'}
-                  </div>
+                  ))}
                 </div>
-
-                {capacity?.sufficient && (
-                  <div>
-                    <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2.5">
-                      Demand vs. capacity at {workers} worker{workers === 1 ? '' : 's'}
-                    </div>
-                    <CapacityBars
-                      arrivalRate={capacity.arrivalRate}
-                      simulatedThroughputRate={simulatedCapacity?.simulatedThroughputRate}
-                    />
-                  </div>
-                )}
               </div>
             </div>
 
             <div className="content-card">
               <div className="content-card-header">
-                <div className="content-card-title">Projected backlog</div>
-                <div className="text-[10px] font-semibold text-[#8a8477]">next {PROJECTION_DAYS} days</div>
+                <div className="content-card-title">Balance, before vs. after</div>
               </div>
               <div className="p-5 space-y-4">
-                {!capacity?.sufficient ? (
-                  <StaffingVerdict arrivalRate={capacity?.arrivalRate} netFlowPerDay={null} />
-                ) : (
-                  <>
-                    <StaffingVerdict
-                      arrivalRate={capacity.arrivalRate}
-                      netFlowPerDay={simulatedCapacity?.netFlowPerDay}
-                      daysToClear={simulatedCapacity?.daysToClear}
-                      workersToBreakEven={simulatedCapacity?.workersToBreakEven}
-                      simulatedWorkers={workers}
-                    />
-                    <div style={{ width: '100%', height: 220 }}>
-                      <ResponsiveContainer>
-                        <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="whatif-sim-fill" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#4a5d3f" stopOpacity={0.32} />
-                              <stop offset="95%" stopColor="#4a5d3f" stopOpacity={0.02} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
-                          <XAxis dataKey="day" stroke="#8a8477" fontSize={10} tickLine={false}
-                            label={{ value: 'Days from now', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#8a8477' }} />
-                          <YAxis stroke="#8a8477" fontSize={10} tickLine={false} allowDecimals={false} />
-                          <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                          <ReferenceLine y={0} stroke="rgba(31,30,26,0.15)" />
-                          <Line type="monotone" dataKey="Current staffing" stroke="#8a8477" strokeWidth={2} dot={false} strokeDasharray="4 3" />
-                          <Area type="monotone" dataKey="Simulated staffing" stroke="#4a5d3f" strokeWidth={2.5} fill="url(#whatif-sim-fill)" dot={false} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </>
-                )}
+                <p className="text-xs leading-relaxed font-semibold" style={{ color: verdict.tone }}>
+                  {verdict.text}
+                </p>
+                <div style={{ width: '100%', height: 220 }}>
+                  <ResponsiveContainer>
+                    <BarChart data={chartRows} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
+                      <XAxis dataKey="name" stroke="#8a8477" fontSize={11} tickLine={false} />
+                      <YAxis stroke="#8a8477" fontSize={10} tickLine={false} allowDecimals={false}
+                        label={{ value: 'Backlog / worker', angle: -90, position: 'insideLeft', fontSize: 10, fill: '#8a8477' }} />
+                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="Current backlog/worker" fill="#c9c3b4" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+                      <Bar dataKey="Simulated backlog/worker" fill="#4a5d3f" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
