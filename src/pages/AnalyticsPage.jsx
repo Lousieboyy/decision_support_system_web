@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, Fragment } from 'react';
-import { fetchAllReports, fetchAuthorityActions, getImageUrl } from '../api/reportsApi';
+import { fetchAllReports, fetchAuthorityActions, fetchTeams, getImageUrl } from '../api/reportsApi';
 import { useAuth } from '../context/AuthContext';
 import { AUTHORITIES } from '../utils/authorities';
 import {
@@ -278,6 +278,7 @@ const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9'
 export function AnalyticsPage() {
   const { role, user } = useAuth();
   const [reports, setReports] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pdfGenerating, setPdfGenerating] = useState(false);
   const [error, setError] = useState(null);
@@ -399,6 +400,11 @@ export function AnalyticsPage() {
       fetchAuthorityActions({ since: subDays(new Date(), 90).toISOString() })
         .then(setAuditActions)
         .catch(() => setAuditActions(null));
+
+      // Real per-department worker counts for the What-If Staffing simulator.
+      // Optional enrichment like the audit actions above — never blocks the
+      // rest of the page if it fails.
+      fetchTeams().then(setTeams).catch(() => setTeams([]));
 
       const reportsWithPriority = data.map(r => ({
         ...r,
@@ -3634,6 +3640,8 @@ export function AnalyticsPage() {
           <WhatIfSimulator
             filteredReports={filteredReports}
             current={{ spi: servicePerformance, uci: urbanCondition, ifi: infrastructureFragility }}
+            allReports={reports}
+            teams={teams}
           />
         )}
 
