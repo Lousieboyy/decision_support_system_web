@@ -38,6 +38,7 @@ import { ReportExplorerModal } from '../components/ReportExplorerModal';
 import { ClusterDispatchAction } from '../components/ClusterDispatchAction';
 import { NotifyTeamAction } from '../components/NotifyTeamAction';
 import { WhatIfSimulator } from '../components/WhatIfSimulator';
+import { ReportDetailModal } from '../components/ReportDetailModal';
 import { getReportPriority as getPriority } from '../utils/reportPriority';
 
 const HOTSPOT_OVERRIDES_KEY = 'analytics_hotspot_overrides_v1';
@@ -227,7 +228,7 @@ function MethodNote({ label = 'How this is calculated', children }) {
 // Renders nothing when there's no photo, rather than a placeholder box —
 // most reports won't have one, and an empty frame on every card just adds
 // visual noise without telling the admin anything.
-function CardThumb({ path, alt }) {
+function CardThumb({ path, alt, size = 36 }) {
   const url = getImageUrl(path);
   if (!url) return null;
   return (
@@ -235,7 +236,8 @@ function CardThumb({ path, alt }) {
       src={url}
       alt={alt || ''}
       loading="lazy"
-      className="w-9 h-9 rounded-lg object-cover shrink-0 border border-[#1f1e1a]/10"
+      className="rounded-lg object-cover shrink-0 border border-[#1f1e1a]/10"
+      style={{ width: size, height: size }}
     />
   );
 }
@@ -341,6 +343,10 @@ export function AnalyticsPage() {
   }, [customOverrides]);
   const [activeClusterId, setActiveClusterId] = useState(null);
   const [activeRecurringId, setActiveRecurringId] = useState(null);
+  // Opens the real report record (with its own before/after photos) behind
+  // a recurring-failure's original or reappeared ticket, so a reader can
+  // verify the pair is real rather than trusting the distance/date labels.
+  const [evidenceReport, setEvidenceReport] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   // The Overview charts used to each pop their own single-dimension "reports
   // matching this one click" panel — date OR category OR department, never
@@ -3195,6 +3201,10 @@ export function AnalyticsPage() {
                           <MapResizer />
                         </MapContainer>
                       </div>
+                      <p className="text-[10px] text-[#8a8477] -mt-2">
+                        Click either photo below to open that report's full record — its own photos, timestamps and
+                        category — rather than just trusting this summary.
+                      </p>
                       <div className="space-y-2">
                         {activeRecurring.items
                           .slice()
@@ -3205,18 +3215,56 @@ export function AnalyticsPage() {
                             }, 0);
                             return latest(b) - latest(a);
                           })
-                          .map((ticket) => (
-                          <div key={ticket.id} className="rounded-xl p-3 border border-[#1f1e1a]/8 flex items-start gap-2.5" style={{ background: 'var(--cream-100)' }}>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-bold text-[#201f1b]">{ticket.address}</div>
-                              <div className="text-[10px] text-[#8a8477] mt-0.5">
-                                Resolved {fmtRecurDate(ticket.resolvedAt)} — reappeared {ticket.reappearances.length} time{ticket.reappearances.length === 1 ? '' : 's'},
-                                most recently {fmtRecurDate(ticket.reappearances[ticket.reappearances.length - 1]?.at)} ({ticket.reappearances[ticket.reappearances.length - 1]?.distanceM}m away)
+                          .map((ticket) => {
+                            const fullOriginal = reports.find((r) => r.id === ticket.id);
+                            return (
+                              <div key={ticket.id} className="rounded-xl p-3 border border-[#1f1e1a]/8" style={{ background: 'var(--cream-100)' }}>
+                                <div className="flex items-start gap-2.5">
+                                  <button
+                                    onClick={() => fullOriginal && setEvidenceReport(fullOriginal)}
+                                    disabled={!fullOriginal}
+                                    className="shrink-0 cursor-pointer disabled:cursor-default rounded-lg transition-transform hover:scale-105 disabled:hover:scale-100"
+                                    title={fullOriginal ? 'Open the full report' : 'Report no longer in view'}
+                                  >
+                                    <CardThumb path={ticket.imagePath} alt={`${ticket.category} — original repair`} size={52} />
+                                  </button>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-[#201f1b] truncate">{ticket.address}</span>
+                                      <span className="text-[9px] font-mono text-[#8a8477] shrink-0">#{ticket.id}</span>
+                                    </div>
+                                    <div className="text-[10px] text-[#8a8477] mt-0.5">
+                                      Resolved {fmtRecurDate(ticket.resolvedAt)}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="mt-2.5 pl-2 space-y-2 border-l-2" style={{ borderColor: 'rgba(185,28,28,0.25)' }}>
+                                  {ticket.reappearances.map((rep) => {
+                                    const fullRep = reports.find((r) => r.id === rep.id);
+                                    return (
+                                      <div key={rep.id} className="flex items-center gap-2.5 pl-2">
+                                        <button
+                                          onClick={() => fullRep && setEvidenceReport(fullRep)}
+                                          disabled={!fullRep}
+                                          className="shrink-0 cursor-pointer disabled:cursor-default rounded-lg transition-transform hover:scale-105 disabled:hover:scale-100"
+                                          title={fullRep ? 'Open the full report' : 'Report no longer in view'}
+                                        >
+                                          <CardThumb path={rep.imagePath} alt={`${ticket.category} — reappeared`} size={52} />
+                                        </button>
+                                        <div className="flex-1 min-w-0 text-[10px]">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="font-bold" style={{ color: '#b91c1c' }}>Reappeared</span>
+                                            <span className="font-mono text-[#8a8477]">#{rep.id}</span>
+                                          </div>
+                                          <div className="text-[#8a8477]">{fmtRecurDate(rep.at)} — {rep.distanceM}m away</div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                            <CardThumb path={ticket.imagePath} alt={ticket.category} />
-                          </div>
-                        ))}
+                            );
+                          })}
                       </div>
                     </div>
                   </div>
@@ -3800,6 +3848,15 @@ export function AnalyticsPage() {
           zones={exploreZones}
           results={exploreResults}
           onClose={() => setExploreFilters(null)}
+        />
+      )}
+
+      {evidenceReport && (
+        <ReportDetailModal
+          report={evidenceReport}
+          onClose={() => setEvidenceReport(null)}
+          onUpdate={loadData}
+          currentRole={role}
         />
       )}
     </div>
