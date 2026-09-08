@@ -11,25 +11,10 @@ import { AUTHORITIES } from '../utils/authorities';
 
 // Every domain buildServicePerformance actually scores against a day budget —
 // firstPass is a rate, not a duration, so it has no target to tune here.
-// Order matches the real pipeline (triage -> dispatch -> pool wait ->
-// mobilise -> work -> verify).
-const SPI_TARGET_KEYS = ['triage', 'dispatch', 'poolWait', 'mobilise', 'work', 'verify'];
+const SPI_TARGET_KEYS = ['triage', 'dispatch', 'poolWait', 'work', 'verify'];
 const SPI_LABELS = {
-  triage: 'Triage', dispatch: 'Dispatch decision', poolWait: 'Pool wait', mobilise: 'Mobilisation',
+  triage: 'Triage', dispatch: 'Dispatch decision', poolWait: 'Pool wait',
   work: 'Work', verify: 'Verification', firstPass: 'Right First Time',
-};
-// Mobilisation is a real, measured stage that the production SPI has never
-// weighted (SPI_WEIGHTS has no `mobilise` key) — starting it at 0 here means
-// opening this tab shows a slider for it with zero influence, mathematically
-// identical to today's real score, until the weight is deliberately raised.
-const SPI_WEIGHTS_WITH_MOBILISE = {
-  triage: SPI_WEIGHTS.triage,
-  dispatch: SPI_WEIGHTS.dispatch,
-  poolWait: SPI_WEIGHTS.poolWait,
-  mobilise: 0,
-  work: SPI_WEIGHTS.work,
-  verify: SPI_WEIGHTS.verify,
-  firstPass: SPI_WEIGHTS.firstPass,
 };
 const IFI_LABELS = {
   failureRate: 'Repeat-failure rate', reportRate: 'Report rate vs. city average', mtbf: 'Time between failures',
@@ -241,7 +226,7 @@ function WorkerPicker({ workers, onChange, minIcons = 8 }) {
 export function WhatIfSimulator({ filteredReports, current, allReports, teams }) {
   const [mode, setMode] = useState('spi'); // 'spi' | 'uci' | 'ifi' | 'staffing'
 
-  const [spiWeights, setSpiWeights] = useState(() => effectivePercents(SPI_WEIGHTS_WITH_MOBILISE));
+  const [spiWeights, setSpiWeights] = useState(() => effectivePercents(SPI_WEIGHTS));
   const [spiTargets, setSpiTargets] = useState(() =>
     Object.fromEntries(SPI_TARGET_KEYS.map((k) => [k, SLA_TARGET_DAYS[k]]))
   );
@@ -284,7 +269,6 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
       return buildServicePerformance(filteredReports, {
         weights: spiWeights,
         slaTargets: { ...SLA_TARGET_DAYS, ...spiTargets },
-        includeMobilise: true,
       });
     }
     if (mode === 'uci') {
@@ -335,7 +319,6 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
           ? buildServicePerformance(zoneReports, {
               weights: spiWeights,
               slaTargets: { ...SLA_TARGET_DAYS, ...spiTargets },
-              includeMobilise: true,
             })
           : buildUrbanCondition(zoneReports, { weights: uciWeights, burdenTargets: uciTargets });
         out[z.name] = { score: computed.index, n: zoneReports.length };
@@ -347,7 +330,7 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
 
   const resetActive = () => {
     if (mode === 'spi') {
-      setSpiWeights(effectivePercents(SPI_WEIGHTS_WITH_MOBILISE));
+      setSpiWeights(effectivePercents(SPI_WEIGHTS));
       setSpiTargets(Object.fromEntries(SPI_TARGET_KEYS.map((k) => [k, SLA_TARGET_DAYS[k]])));
     } else if (mode === 'uci') {
       setUciWeights(effectivePercents(UCI_WEIGHTS));
