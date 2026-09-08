@@ -3108,16 +3108,22 @@ export function AnalyticsPage() {
                                 className="mt-0.5 cursor-pointer accent-[#4a5d3f] rounded border-[#1f1e1a]/15"
                                 title="Exclude this report from cluster"
                               />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[11px] leading-relaxed text-[#4b473d] truncate font-semibold">
+                              <button
+                                onClick={() => setEvidenceReport(item)}
+                                className="min-w-0 flex-1 text-left cursor-pointer group"
+                                title="Open the full report"
+                              >
+                                <p className="text-[11px] leading-relaxed text-[#4b473d] truncate font-semibold group-hover:underline">
                                   {item.description || 'No description'}
                                 </p>
                                 <p className="text-[9px] text-[#8a8477] font-medium mt-0.5">
                                   Report #{item.id} | {item.status} | {item.upvotes || 0} Upvotes
                                   {item.resolved_at ? ` | Resolved ${fmtRecurDate(item.resolved_at)}` : ''}
                                 </p>
-                              </div>
-                              <CardThumb path={item.completion_image_path || item.image_path} alt={item.categories} />
+                              </button>
+                              <button onClick={() => setEvidenceReport(item)} className="shrink-0 cursor-pointer transition-transform hover:scale-105" title="Open the full report">
+                                <CardThumb path={item.completion_image_path || item.image_path} alt={item.categories} size={44} />
+                              </button>
                             </div>
                           ))}
                         </div>
