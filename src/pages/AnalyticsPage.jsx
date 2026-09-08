@@ -15,7 +15,7 @@ import { jsPDF } from 'jspdf';
 import {
   AlertTriangle, Download, Info, MapPin, RefreshCw,
   CheckCircle2, ChevronRight, ChevronLeft, ChevronDown, Heart, Activity,
-  Search, X, FlaskConical,
+  Search, X,
 } from 'lucide-react';
 import { format, parseISO, subDays, endOfDay } from 'date-fns';
 import {
@@ -2168,17 +2168,9 @@ export function AnalyticsPage() {
         >
           Predictive Hotspots ({recurringHotspots.length + resolvedSystemicAdvisories.length})
         </button>
-        <button
-          onClick={() => setActiveViewTab('whatif')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-            activeViewTab === 'whatif'
-              ? 'bg-[#4a5d3f] text-white shadow-lg shadow-[#4a5d3f]/20 border border-[#4a5d3f]'
-              : 'text-[#8a8477] hover:text-[#201f1b] hover:bg-[#4a5d3f]/8 border border-transparent'
-          }`}
-        >
-          <FlaskConical size={15} />
-          What-If Simulator
-        </button>
+        {/* What-If Simulator tab hidden per supervisor scope cut — the tab
+            button that makes 'whatif' reachable is removed; the render
+            block below and WhatIfSimulator.jsx itself stay in place. */}
       </div>
 
       {/* Main page content wrapper for PDF capture */}
