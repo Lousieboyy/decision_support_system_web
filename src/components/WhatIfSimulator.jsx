@@ -347,10 +347,12 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
   const weightPct = effectivePercents(weights);
   const labels = mode === 'spi' ? SPI_LABELS : mode === 'ifi' ? IFI_LABELS : null; // UCI labels are the category names themselves
 
+  // IFI mode hidden per supervisor scope cut — its logic above (buildInfrastructureFragility
+  // calls, zoneResults, weight reset) stays in place in case scope comes back; only the
+  // mode button that makes it reachable is removed.
   const MODE_META = {
     spi: { short: 'SPI' },
     uci: { short: 'UCI' },
-    ifi: { short: 'IFI' },
     staffing: { short: 'Staffing', icon: Users },
   };
 

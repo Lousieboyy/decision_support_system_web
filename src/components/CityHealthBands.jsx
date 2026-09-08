@@ -449,7 +449,9 @@ export function CityHealthBands({ servicePerformance, urbanCondition, infrastruc
   const BAND_TABS = [
     { key: 'spi', label: 'Service Performance', score: servicePerformance.index },
     { key: 'uci', label: 'Urban Condition', score: urbanCondition.index },
-    { key: 'ifi', label: 'Infrastructure Fragility', score: infrastructureFragility.index },
+    // IFI tab hidden per supervisor scope cut — buildInfrastructureFragility
+    // and this component's IFI rendering stay in place in case scope comes
+    // back; only the tab entry that surfaces it is removed.
   ];
 
   return (

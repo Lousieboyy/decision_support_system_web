@@ -3671,8 +3671,8 @@ export function AnalyticsPage() {
                         <p className="text-[10px] text-[#8a8477] mt-2">Click a bar to see those reports.</p>
                         <MethodNote>
                           Open issues currently unresolved (not rejected) in each zone, right now — not weighted by
-                          population or age (see Infrastructure Fragility for that). Bars aren't a pass/fail grade,
-                          since there's no per-zone target to compare against, only a city-wide one.
+                          population or age. Bars aren't a pass/fail grade, since there's no per-zone target to
+                          compare against, only a city-wide one.
                         </MethodNote>
                         <div className="mt-3 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: 'rgba(185,28,28,0.06)', color: '#b91c1c' }}>
                           {chartData[0].name} carries {chartData[0].active} open issue{chartData[0].active === 1 ? '' : 's'} —
