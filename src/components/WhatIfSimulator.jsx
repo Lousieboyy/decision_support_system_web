@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { RotateCcw, FlaskConical, Users } from 'lucide-react';
+import { RotateCcw, FlaskConical, Users, User, Minus, Plus } from 'lucide-react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, IFI_WEIGHTS, SLA_TARGET_DAYS,
@@ -186,6 +186,78 @@ function StaffingVerdict({ arrivalRate, netFlowPerDay, daysToClear, workersToBre
       <b>{workersToBreakEven}</b> worker{workersToBreakEven === 1 ? '' : 's'} would be needed just to stop it
       growing.
     </p>
+  );
+}
+
+// A row of person icons instead of a bare range track — clicking icon i sets
+// the count to i+1 (a star-rating pattern), and +/- handle 0 and going past
+// the drawn row. Small integer counts (a handful of workers per department)
+// are exactly the case this reads better than a slider for.
+function WorkerPicker({ workers, onChange, minIcons = 10 }) {
+  const iconCount = Math.max(minIcons, workers + 2);
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => onChange(Math.max(0, workers - 1))}
+        className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#f5f1e6] text-[#4a5d3f] hover:bg-[#4a5d3f]/15 cursor-pointer shrink-0 transition-colors"
+        aria-label="Remove a worker"
+      >
+        <Minus size={14} />
+      </button>
+      <div className="flex flex-wrap gap-1 flex-1">
+        {Array.from({ length: iconCount }).map((_, i) => (
+          <button
+            key={i}
+            onClick={() => onChange(i + 1)}
+            title={`Set to ${i + 1} worker${i === 0 ? '' : 's'}`}
+            className="cursor-pointer transition-transform hover:scale-110"
+          >
+            <User
+              size={22}
+              fill={i < workers ? '#4a5d3f' : 'none'}
+              stroke={i < workers ? '#4a5d3f' : '#c9c3b4'}
+              strokeWidth={1.6}
+            />
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => onChange(workers + 1)}
+        className="w-7 h-7 rounded-lg flex items-center justify-center bg-[#f5f1e6] text-[#4a5d3f] hover:bg-[#4a5d3f]/15 cursor-pointer shrink-0 transition-colors"
+        aria-label="Add a worker"
+      >
+        <Plus size={14} />
+      </button>
+    </div>
+  );
+}
+
+// Arrivals vs. capacity as two bars on a shared scale — whether the green bar
+// reaches the terracotta one is the entire question this simulator answers,
+// visible before reading a single number.
+function CapacityBars({ arrivalRate, simulatedThroughputRate }) {
+  const max = Math.max(arrivalRate, simulatedThroughputRate || 0, 0.1) * 1.15;
+  const arrivalPct = Math.min(100, (arrivalRate / max) * 100);
+  const capacityPct = simulatedThroughputRate != null ? Math.min(100, (simulatedThroughputRate / max) * 100) : 0;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold text-[#8a8477] w-16 shrink-0">Arrivals</span>
+        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.06)' }}>
+          <div className="h-full rounded-full" style={{ width: `${arrivalPct}%`, background: '#c1613f' }} />
+        </div>
+        <span className="text-[11px] font-bold text-[#201f1b] w-14 text-right shrink-0">{arrivalRate.toFixed(2)}/d</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-bold text-[#8a8477] w-16 shrink-0">Capacity</span>
+        <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(31,30,26,0.06)' }}>
+          <div className="h-full rounded-full transition-all duration-300" style={{ width: `${capacityPct}%`, background: '#4a5d3f' }} />
+        </div>
+        <span className="text-[11px] font-bold text-[#201f1b] w-14 text-right shrink-0">
+          {simulatedThroughputRate != null ? `${simulatedThroughputRate.toFixed(2)}/d` : '—'}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -536,18 +608,25 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
                     <span className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider">
                       Workers assigned
                     </span>
-                    <span className="text-sm font-bold text-[#4a5d3f]">{workers}</span>
+                    <span className="text-lg font-bold text-[#4a5d3f]">{workers}</span>
                   </div>
-                  <input
-                    type="range" min={0} max={Math.max(10, (activeTeam?.workerCount ?? 0) + 5)} step={1}
-                    value={workers}
-                    onChange={(e) => setSimulatedWorkers(Number(e.target.value))}
-                    className="w-full accent-[#4a5d3f]"
-                  />
-                  <div className="text-[10px] text-[#8a8477] mt-1">
+                  <WorkerPicker workers={workers} onChange={setSimulatedWorkers} />
+                  <div className="text-[10px] text-[#8a8477] mt-1.5">
                     Currently {activeTeam?.workerCount ?? 0} worker{(activeTeam?.workerCount ?? 0) === 1 ? '' : 's'}
                   </div>
                 </div>
+
+                {capacity?.sufficient && (
+                  <div>
+                    <div className="text-[10px] font-bold text-[#8a8477] uppercase tracking-wider mb-2.5">
+                      Demand vs. capacity at {workers} worker{workers === 1 ? '' : 's'}
+                    </div>
+                    <CapacityBars
+                      arrivalRate={capacity.arrivalRate}
+                      simulatedThroughputRate={simulatedCapacity?.simulatedThroughputRate}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -568,9 +647,15 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
                       workersToBreakEven={simulatedCapacity?.workersToBreakEven}
                       simulatedWorkers={workers}
                     />
-                    <div style={{ width: '100%', height: 200 }}>
+                    <div style={{ width: '100%', height: 220 }}>
                       <ResponsiveContainer>
-                        <LineChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                        <ComposedChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="whatif-sim-fill" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#4a5d3f" stopOpacity={0.32} />
+                              <stop offset="95%" stopColor="#4a5d3f" stopOpacity={0.02} />
+                            </linearGradient>
+                          </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(31,30,26,0.08)" />
                           <XAxis dataKey="day" stroke="#8a8477" fontSize={10} tickLine={false}
                             label={{ value: 'Days from now', position: 'insideBottom', offset: -2, fontSize: 10, fill: '#8a8477' }} />
@@ -578,8 +663,8 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
                           <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
                           <ReferenceLine y={0} stroke="rgba(31,30,26,0.15)" />
                           <Line type="monotone" dataKey="Current staffing" stroke="#8a8477" strokeWidth={2} dot={false} strokeDasharray="4 3" />
-                          <Line type="monotone" dataKey="Simulated staffing" stroke="#4a5d3f" strokeWidth={2.5} dot={false} />
-                        </LineChart>
+                          <Area type="monotone" dataKey="Simulated staffing" stroke="#4a5d3f" strokeWidth={2.5} fill="url(#whatif-sim-fill)" dot={false} />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   </>
