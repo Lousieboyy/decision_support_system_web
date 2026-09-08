@@ -444,7 +444,7 @@ export function weightedIndex(scoresByKey, weights) {
  * Derives from the same buildFunnel output the funnel chart renders, so the two
  * panels cannot disagree about how long a stage takes.
  */
-export function buildServicePerformance(reports, { slaTargets = SLA_TARGET_DAYS, weights = SPI_WEIGHTS } = {}) {
+export function buildServicePerformance(reports, { slaTargets = SLA_TARGET_DAYS, weights = SPI_WEIGHTS, includeMobilise = false } = {}) {
   const funnel = buildFunnel(reports, { cohort: 'all', minN: MIN_N_FOR_STAGE });
   const byKey = Object.fromEntries(funnel.stages.map((s) => [s.key, s]));
 
@@ -461,6 +461,15 @@ export function buildServicePerformance(reports, { slaTargets = SLA_TARGET_DAYS,
     triage: { key: 'triage', name: 'Triage', score: attainment('triage'), n: byKey.triage?.n ?? 0, medianDays: byKey.triage?.median ?? null, targetDays: slaTargets.triage },
     dispatch: { key: 'dispatch', name: 'Dispatch decision', score: attainment('dispatch'), n: byKey.dispatch?.n ?? 0, medianDays: byKey.dispatch?.median ?? null, targetDays: slaTargets.dispatch },
     poolWait: { key: 'poolWait', name: 'Pool wait', score: attainment('poolWait'), n: byKey.poolWait?.n ?? 0, medianDays: byKey.poolWait?.median ?? null, targetDays: slaTargets.poolWait },
+    // Real, measurable stage (claimed_at -> in_maintenance_at) that the
+    // production SPI has never scored — SPI_WEIGHTS has no `mobilise` key, so
+    // weightedIndex() below ignores it regardless of whether it's present
+    // here. Only computed when a caller opts in (the What-If Simulator), so
+    // the real index and CityHealthBands' domain list are byte-for-byte
+    // unaffected by this branch existing.
+    ...(includeMobilise ? {
+      mobilise: { key: 'mobilise', name: 'Mobilisation', score: attainment('mobilise'), n: byKey.mobilise?.n ?? 0, medianDays: byKey.mobilise?.median ?? null, targetDays: slaTargets.mobilise },
+    } : {}),
     work: { key: 'work', name: 'Work', score: attainment('work'), n: byKey.work?.n ?? 0, medianDays: byKey.work?.median ?? null, targetDays: slaTargets.work },
     verify: { key: 'verify', name: 'Verification', score: attainment('verify'), n: byKey.verify?.n ?? 0, medianDays: byKey.verify?.median ?? null, targetDays: slaTargets.verify },
     firstPass: {
