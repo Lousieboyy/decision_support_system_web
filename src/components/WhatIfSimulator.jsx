@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { RotateCcw, FlaskConical, Users, User, Minus, Plus, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import {
   SPI_WEIGHTS, UCI_WEIGHTS, UCI_BURDEN_TARGETS, IFI_WEIGHTS, SLA_TARGET_DAYS,
-  gradeFor, GRADE_COLOR,
+  gradeFor, GRADE_COLOR, GRADE_SCALE, MELAKA_ZONES, MELAKA_BOUNDS, ZONE_UNMAPPED,
 } from '../utils/analyticsConstants';
-import { buildServicePerformance, buildUrbanCondition, buildInfrastructureFragility } from '../utils/analyticsMetrics';
+import { buildServicePerformance, buildUrbanCondition, buildInfrastructureFragility, deriveZone } from '../utils/analyticsMetrics';
 import { AUTHORITIES } from '../utils/authorities';
 
 // Every domain buildServicePerformance actually scores against a day budget —
@@ -111,6 +112,12 @@ function TargetInput({ label, value, onChange, unit }) {
 function effectivePercents(weights) {
   const sum = Object.values(weights).reduce((s, v) => s + v, 0);
   return Object.fromEntries(Object.entries(weights).map(([k, v]) => [k, sum > 0 ? Math.round((v / sum) * 100) : 0]));
+}
+
+const ZONE_INSUFFICIENT_COLOR = '#8a8477';
+function zoneMarkerColor(score) {
+  const grade = gradeFor(score);
+  return grade ? GRADE_COLOR[grade.grade] : ZONE_INSUFFICIENT_COLOR;
 }
 
 // ── Rebalance model ──────────────────────────────────────────────────────────
@@ -291,6 +298,53 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
 
   const currentResult = mode === 'spi' ? current.spi : mode === 'uci' ? current.uci : mode === 'ifi' ? current.ifi : null;
 
+  // Zone map — IFI already scores per zone (its domains ARE zones), so that
+  // one is reused directly. SPI and UCI don't have a per-zone breakdown
+  // anywhere in the real app, so for those this re-runs the exact same
+  // scoring function used above, scoped to just that zone's own reports,
+  // with the exact same simulated weights/targets — the real formula, not an
+  // approximation, just computed on a smaller slice of the same data.
+  const zoneReportGroups = useMemo(() => {
+    const groups = {};
+    for (const r of filteredReports) {
+      const zone = deriveZone(r);
+      if (zone === ZONE_UNMAPPED) continue;
+      if (!groups[zone]) groups[zone] = [];
+      groups[zone].push(r);
+    }
+    return groups;
+  }, [filteredReports]);
+
+  const zoneResults = useMemo(() => {
+    if (mode === 'ifi') {
+      const out = {};
+      for (const [zoneName, d] of Object.entries(simulated?.domains || {})) {
+        out[zoneName] = { score: d.score, n: d.reportCount ?? 0 };
+      }
+      return out;
+    }
+    if (mode === 'spi' || mode === 'uci') {
+      const out = {};
+      for (const z of MELAKA_ZONES) {
+        const zoneReports = zoneReportGroups[z.name] || [];
+        if (zoneReports.length === 0) {
+          out[z.name] = { score: null, n: 0 };
+          continue;
+        }
+        const computed = mode === 'spi'
+          ? buildServicePerformance(zoneReports, {
+              weights: spiWeights,
+              slaTargets: { ...SLA_TARGET_DAYS, ...spiTargets },
+              includeMobilise: true,
+            })
+          : buildUrbanCondition(zoneReports, { weights: uciWeights, burdenTargets: uciTargets });
+        out[z.name] = { score: computed.index, n: zoneReports.length };
+      }
+      return out;
+    }
+    return {};
+  }, [mode, zoneReportGroups, simulated, spiWeights, spiTargets, uciWeights, uciTargets]);
+
   const resetActive = () => {
     if (mode === 'spi') {
       setSpiWeights(effectivePercents(SPI_WEIGHTS_WITH_MOBILISE));
@@ -353,6 +407,7 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
       </div>
 
       {mode !== 'staffing' && (
+        <>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Policy inputs */}
           <div className="content-card">
@@ -481,6 +536,68 @@ export function WhatIfSimulator({ filteredReports, current, allReports, teams })
             </div>
           </div>
         </div>
+
+        <div className="content-card">
+          <div className="content-card-header">
+            <div className="content-card-title">Zone-by-zone under this policy</div>
+            <div className="text-[10px] font-semibold text-[#8a8477]">
+              Starts matching today — drag a slider above and watch zones shift
+            </div>
+          </div>
+          <div className="p-5">
+            <div className="rounded-xl overflow-hidden border border-[#1f1e1a]/8" style={{ height: 320 }}>
+              <MapContainer
+                center={[2.1896, 102.2501]}
+                zoom={11}
+                maxBounds={MELAKA_BOUNDS}
+                maxBoundsViscosity={1.0}
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                {MELAKA_ZONES.map((z) => {
+                  const result = zoneResults[z.name];
+                  const color = zoneMarkerColor(result?.score);
+                  const n = result?.n ?? 0;
+                  return (
+                    <CircleMarker
+                      key={z.name}
+                      center={[z.lat, z.lng]}
+                      radius={n > 0 ? Math.min(18, 8 + Math.sqrt(n) * 2) : 5}
+                      pathOptions={{ color, fillColor: color, fillOpacity: result?.score != null ? 0.75 : 0.2, weight: 2 }}
+                    >
+                      <Popup>
+                        <div style={{ fontSize: 12, minWidth: 140 }}>
+                          <div style={{ fontWeight: 700 }}>{z.name}</div>
+                          {result?.score != null ? (
+                            <div style={{ color, fontWeight: 700 }}>{result.score} · {gradeFor(result.score)?.grade} — {gradeFor(result.score)?.label}</div>
+                          ) : (
+                            <div style={{ color: '#8a8477' }}>Not enough data ({n} report{n === 1 ? '' : 's'})</div>
+                          )}
+                        </div>
+                      </Popup>
+                    </CircleMarker>
+                  );
+                })}
+              </MapContainer>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1.5 mt-3">
+              {GRADE_SCALE.map((g) => (
+                <span key={g.grade} className="flex items-center gap-1.5 text-[10px] font-bold" style={{ color: GRADE_COLOR[g.grade] }}>
+                  <span className="w-2 h-2 rounded-full inline-block" style={{ background: GRADE_COLOR[g.grade] }} />
+                  {g.grade} {g.label}
+                </span>
+              ))}
+              <span className="flex items-center gap-1.5 text-[10px] font-bold" style={{ color: ZONE_INSUFFICIENT_COLOR }}>
+                <span className="w-2 h-2 rounded-full inline-block" style={{ background: ZONE_INSUFFICIENT_COLOR }} />
+                Not enough data
+              </span>
+            </div>
+          </div>
+        </div>
+        </>
       )}
 
       {mode === 'staffing' && (
